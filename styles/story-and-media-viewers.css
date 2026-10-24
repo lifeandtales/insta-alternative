@@ -795,3 +795,22 @@ body.video-fullscreen-open {
 .story-inline-format input[type="range"] { flex: 1 0 100%; width: 100%!important; max-width: none; }
 .story-inline-format button { flex: 1; min-width: 85px; }
 .story-filter-strip { padding-inline: calc(50% - 34px); }
+
+/* Translucent stage-center guides appear only while approaching an axis. */
+.story-selected-preview.story-center-x::before { content: ''; position: absolute; z-index: 6; top: 0; bottom: 0; left: 50%; width: 1px; background: #a8ffe5a6; box-shadow: 0 0 4px #b7ffe87a; pointer-events: none; }
+.story-selected-preview.story-center-y::after { content: ''; position: absolute; z-index: 6; left: 0; right: 0; top: 50%; height: 1px; background: #a8ffe5a6; box-shadow: 0 0 4px #b7ffe87a; pointer-events: none; }
+.story-overlay-angle-snapped { outline: 1px solid #a8ffe5b3; outline-offset: 5px; }
+
+.story-preview-sound { position: absolute; z-index: 5; right: 18px; top: calc(174px + env(safe-area-inset-top)); width: 44px; height: 44px; border: 1px solid #ffffff70; border-radius: 50%; background: #17131de6; color: white; font-size: 1.2rem; }
+.story-preview-sound[hidden], .story-mode-active .story-preview-sound, .story-location-editing .story-preview-sound { display: none; }
+
+.story-export-backdrop { position: fixed; inset: 0; z-index: 180; display: grid; place-items: center; padding: 18px; background: #0b0815bb; }
+.story-export-backdrop[hidden] { display: none; }
+.story-export-dialog { width: min(100%,430px); max-height: calc(100dvh - 36px); overflow: auto; padding: 20px; border-radius: 22px; background: white; color: var(--text); }
+.story-export-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.story-export-dialog h2 { margin: 0; font-size: 1.1rem; }
+.story-export-close { width: 44px; height: 44px; border-radius: 50%; background: #f2eef8; font-size: 1.5rem; }
+.story-export-dialog p { line-height: 1.5; }
+.story-export-hint { font-size: .8rem; color: #68616f; }
+.story-export-dialog > button { width: 100%; min-height: 44px; padding: 10px; margin-top: 8px; border-radius: 12px; background: #8538d5; color: white; }
+.story-export-dialog > button[hidden] { display: none; }

@@ -1,3 +1,4 @@
+import { registerStoryExportEvents } from './src/features/story-export.js';
 import { registerHomeControlEvents } from './src/features/home-controls.js';
 import { registerAccountSettingsEvents, openAccountSettings } from './src/features/account-settings.js';
 import { loadSession, persistSession } from './src/storage/local-session.js';
@@ -255,6 +256,7 @@ registerHighlightEvents();
 registerProfileGridEvents();
 registerStoryUploadEvents();
 registerStoryToolEvents();
+registerStoryExportEvents();
 registerStoryOptionEvents();
 registerMediaUploadEvents();
 registerMediaLikeEvents();

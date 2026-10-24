@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=71" />
+    <link rel="stylesheet" href="styles.css?v=77" />
   </head>
   <body>
     <main id="deletion-lock" class="welcome-screen" hidden aria-labelledby="deletion-lock-title">
@@ -332,7 +332,7 @@
           <div class="story-media-step">
           <label class="story-upload-label" for="story-upload">Choose a photo or video</label>
           <input id="story-upload" type="file" accept=".jpg,.jpeg,.png,.gif,.webp,.avif,.heic,.heif,.bmp,.mp4,.webm,.mov,.m4v,.3gp,.ogv,image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif,image/bmp,video/mp4,video/webm,video/quicktime,video/x-m4v,video/3gpp,video/ogg" />
-          <p class="story-picker-hint">Your device will ask you to choose photos or videos. insta can access only the item you select.</p>
+          <p class="story-picker-hint">Your device will ask you to choose photos or videos. insta can access only the item you select. Video Stories use only the first 4 minutes.</p>
           <button type="button" class="story-choose-drafts" aria-expanded="false" aria-controls="story-draft-picker">Choose from drafts</button>
           <div class="story-draft-list" id="story-draft-picker" hidden></div>
           </div>
@@ -344,6 +344,7 @@
           <div class="story-editor-toolbar"><button type="button" class="story-create-back" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4m7-7-7 7 7 7" /></svg></button></div>
           <div class="story-history-controls" aria-label="Edit history"><button class="story-undo" type="button" aria-label="Undo Story edit" disabled>↶</button><button class="story-redo" type="button" aria-label="Redo Story edit" disabled>↷</button></div>
           <button class="story-tools-open" type="button" aria-haspopup="dialog" aria-controls="story-tools-dialog">⚒ Tools</button>
+          <button class="story-preview-sound" type="button" hidden aria-label="Mute video sound" aria-pressed="false">🔊</button>
           <button class="story-draw-done" type="button" hidden>Done positioning / drawing</button>
           <button type="button" class="story-preview-play" aria-label="Play video preview" hidden>▶</button>
           <div class="story-editor-controls" role="group" aria-label="Story options">
@@ -399,9 +400,19 @@
           <button type="button" data-story-tool="sticker">Stickers / Emojis</button>
           <button type="button" data-story-tool="labels">Location</button>
           <button type="button" data-story-tool="music">Music / Segment</button>
-          <button type="button" data-story-tool="video">Video / Original sound</button>
+          <button type="button" data-story-tool="video">Video trim</button>
+          <button type="button" class="story-export-open">Save to gallery</button>
         </div>
         <div class="story-tool-options"></div>
+      </section>
+    </div>
+    <div class="story-export-backdrop" hidden>
+      <section class="story-export-dialog" role="dialog" aria-modal="true" aria-labelledby="story-export-title">
+        <header><h2 id="story-export-title">Save edited media</h2><button type="button" class="story-export-close" aria-label="Close export">×</button></header>
+        <p class="story-export-message" role="status"></p>
+        <p class="story-export-hint">Includes saved edits and overlays, without Story background bars. Source resolution is preserved; videos use only the first 4 minutes. Export support depends on your browser. Rotation may crop edges to keep the original-size output free of background borders. Your phone decides where a downloaded/shared file is saved.</p>
+        <button type="button" class="story-export-download" hidden>Download edited file</button>
+        <button type="button" class="story-export-share" hidden>Share / Save to phone</button>
       </section>
     </div>
     <div class="create-menu-backdrop" hidden>
@@ -531,64 +542,65 @@
     <script type="importmap">
 {
   "imports": {
-    "./src/components/feedback.js": "./src/components/feedback.js?v=71",
-    "./src/components/post-card.js": "./src/components/post-card.js?v=71",
-    "./src/core/account-lock.js": "./src/core/account-lock.js?v=71",
-    "./src/core/dom.js": "./src/core/dom.js?v=71",
-    "./src/core/events.js": "./src/core/events.js?v=71",
-    "./src/core/local-preview.js": "./src/core/local-preview.js?v=71",
-    "./src/core/media-links.js": "./src/core/media-links.js?v=71",
-    "./src/core/navigation.events.js": "./src/core/navigation.events.js?v=71",
-    "./src/core/navigation.js": "./src/core/navigation.js?v=71",
-    "./src/core/social.js": "./src/core/social.js?v=71",
-    "./src/core/state.js": "./src/core/state.js?v=71",
-    "./src/core/utils.js": "./src/core/utils.js?v=71",
-    "./src/data/entities.js": "./src/data/entities.js?v=71",
-    "./src/data/sample-data.js": "./src/data/sample-data.js?v=71",
-    "./src/features/account-model.js": "./src/features/account-model.js?v=71",
-    "./src/features/account-settings.js": "./src/features/account-settings.js?v=71",
-    "./src/features/comments.events.js": "./src/features/comments.events.js?v=71",
-    "./src/features/comments.js": "./src/features/comments.js?v=71",
-    "./src/features/create.events.js": "./src/features/create.events.js?v=71",
-    "./src/features/create.js": "./src/features/create.js?v=71",
-    "./src/features/explore.events.js": "./src/features/explore.events.js?v=71",
-    "./src/features/explore.js": "./src/features/explore.js?v=71",
-    "./src/features/follows.events.js": "./src/features/follows.events.js?v=71",
-    "./src/features/follows.js": "./src/features/follows.js?v=71",
-    "./src/features/highlights.events.js": "./src/features/highlights.events.js?v=71",
-    "./src/features/highlights.js": "./src/features/highlights.js?v=71",
-    "./src/features/home-controls.js": "./src/features/home-controls.js?v=71",
-    "./src/features/home.js": "./src/features/home.js?v=71",
-    "./src/features/likes.events.js": "./src/features/likes.events.js?v=71",
-    "./src/features/likes.js": "./src/features/likes.js?v=71",
-    "./src/features/media-options.events.js": "./src/features/media-options.events.js?v=71",
-    "./src/features/media-options.js": "./src/features/media-options.js?v=71",
-    "./src/features/message-access.js": "./src/features/message-access.js?v=71",
-    "./src/features/messages.events.js": "./src/features/messages.events.js?v=71",
-    "./src/features/messages.js": "./src/features/messages.js?v=71",
-    "./src/features/notifications.js": "./src/features/notifications.js?v=71",
-    "./src/features/profile.events.js": "./src/features/profile.events.js?v=71",
-    "./src/features/profile.js": "./src/features/profile.js?v=71",
-    "./src/features/reels.js": "./src/features/reels.js?v=71",
-    "./src/features/saved.events.js": "./src/features/saved.events.js?v=71",
-    "./src/features/sharing.events.js": "./src/features/sharing.events.js?v=71",
-    "./src/features/sharing.js": "./src/features/sharing.js?v=71",
-    "./src/features/stories.events.js": "./src/features/stories.events.js?v=71",
-    "./src/features/stories.js": "./src/features/stories.js?v=71",
-    "./src/features/story-composition.js": "./src/features/story-composition.js?v=71",
-    "./src/features/story-drafts.js": "./src/features/story-drafts.js?v=71",
-    "./src/features/story-edit-session.js": "./src/features/story-edit-session.js?v=71",
-    "./src/features/story-options.js": "./src/features/story-options.js?v=71",
-    "./src/features/story-tools.js": "./src/features/story-tools.js?v=71",
-    "./src/media/demo-sources.js": "./src/media/demo-sources.js?v=71",
-    "./src/media/video.events.js": "./src/media/video.events.js?v=71",
-    "./src/media/video.js": "./src/media/video.js?v=71",
-    "./src/storage/browser-storage.js": "./src/storage/browser-storage.js?v=71",
-    "./src/storage/local-session.js": "./src/storage/local-session.js?v=71",
-    "./src/storage/preferences.js": "./src/storage/preferences.js?v=71"
+    "./src/components/feedback.js": "./src/components/feedback.js?v=77",
+    "./src/components/post-card.js": "./src/components/post-card.js?v=77",
+    "./src/core/account-lock.js": "./src/core/account-lock.js?v=77",
+    "./src/core/dom.js": "./src/core/dom.js?v=77",
+    "./src/core/events.js": "./src/core/events.js?v=77",
+    "./src/core/local-preview.js": "./src/core/local-preview.js?v=77",
+    "./src/core/media-links.js": "./src/core/media-links.js?v=77",
+    "./src/core/navigation.events.js": "./src/core/navigation.events.js?v=77",
+    "./src/core/navigation.js": "./src/core/navigation.js?v=77",
+    "./src/core/social.js": "./src/core/social.js?v=77",
+    "./src/core/state.js": "./src/core/state.js?v=77",
+    "./src/core/utils.js": "./src/core/utils.js?v=77",
+    "./src/data/entities.js": "./src/data/entities.js?v=77",
+    "./src/data/sample-data.js": "./src/data/sample-data.js?v=77",
+    "./src/features/account-model.js": "./src/features/account-model.js?v=77",
+    "./src/features/account-settings.js": "./src/features/account-settings.js?v=77",
+    "./src/features/comments.events.js": "./src/features/comments.events.js?v=77",
+    "./src/features/comments.js": "./src/features/comments.js?v=77",
+    "./src/features/create.events.js": "./src/features/create.events.js?v=77",
+    "./src/features/create.js": "./src/features/create.js?v=77",
+    "./src/features/explore.events.js": "./src/features/explore.events.js?v=77",
+    "./src/features/explore.js": "./src/features/explore.js?v=77",
+    "./src/features/follows.events.js": "./src/features/follows.events.js?v=77",
+    "./src/features/follows.js": "./src/features/follows.js?v=77",
+    "./src/features/highlights.events.js": "./src/features/highlights.events.js?v=77",
+    "./src/features/highlights.js": "./src/features/highlights.js?v=77",
+    "./src/features/home-controls.js": "./src/features/home-controls.js?v=77",
+    "./src/features/home.js": "./src/features/home.js?v=77",
+    "./src/features/likes.events.js": "./src/features/likes.events.js?v=77",
+    "./src/features/likes.js": "./src/features/likes.js?v=77",
+    "./src/features/media-options.events.js": "./src/features/media-options.events.js?v=77",
+    "./src/features/media-options.js": "./src/features/media-options.js?v=77",
+    "./src/features/message-access.js": "./src/features/message-access.js?v=77",
+    "./src/features/messages.events.js": "./src/features/messages.events.js?v=77",
+    "./src/features/messages.js": "./src/features/messages.js?v=77",
+    "./src/features/notifications.js": "./src/features/notifications.js?v=77",
+    "./src/features/profile.events.js": "./src/features/profile.events.js?v=77",
+    "./src/features/profile.js": "./src/features/profile.js?v=77",
+    "./src/features/reels.js": "./src/features/reels.js?v=77",
+    "./src/features/saved.events.js": "./src/features/saved.events.js?v=77",
+    "./src/features/sharing.events.js": "./src/features/sharing.events.js?v=77",
+    "./src/features/sharing.js": "./src/features/sharing.js?v=77",
+    "./src/features/stories.events.js": "./src/features/stories.events.js?v=77",
+    "./src/features/stories.js": "./src/features/stories.js?v=77",
+    "./src/features/story-composition.js": "./src/features/story-composition.js?v=77",
+    "./src/features/story-drafts.js": "./src/features/story-drafts.js?v=77",
+    "./src/features/story-edit-session.js": "./src/features/story-edit-session.js?v=77",
+    "./src/features/story-export.js": "./src/features/story-export.js?v=77",
+    "./src/features/story-options.js": "./src/features/story-options.js?v=77",
+    "./src/features/story-tools.js": "./src/features/story-tools.js?v=77",
+    "./src/media/demo-sources.js": "./src/media/demo-sources.js?v=77",
+    "./src/media/video.events.js": "./src/media/video.events.js?v=77",
+    "./src/media/video.js": "./src/media/video.js?v=77",
+    "./src/storage/browser-storage.js": "./src/storage/browser-storage.js?v=77",
+    "./src/storage/local-session.js": "./src/storage/local-session.js?v=77",
+    "./src/storage/preferences.js": "./src/storage/preferences.js?v=77"
   }
 }
     </script>
-    <script type="module" src="app.js?v=71"></script>
+    <script type="module" src="app.js?v=77"></script>
   </body>
 </html>

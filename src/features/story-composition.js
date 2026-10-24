@@ -1,5 +1,6 @@
 import { state } from '../core/state.js';
 
+export const STORY_VIDEO_LIMIT_SECONDS=240;
 export const cloneComposition = value => JSON.parse(JSON.stringify(value));
 const number = (value, fallback, min, max) => Math.max(min, Math.min(max, Number.isFinite(Number(value)) ? Number(value) : fallback));
 export function storyComposition(value = {}) {
@@ -10,7 +11,7 @@ export function storyComposition(value = {}) {
         filter: { brightness:number(filter.brightness,1,.2,2), contrast:number(filter.contrast,1,.2,2), warmth:number(filter.warmth,0,-1,1), tint:number(filter.tint,0,-1,1), hue:number(filter.hue,0,-180,180), saturation:number(filter.saturation,1,0,2), preset:['none','mono','vivid','sepia','soft','golden','cool','fade','dramatic','rose'].includes(filter.preset) ? filter.preset : 'none' },
         layers: Array.isArray(value.layers) ? cloneComposition(value.layers) : [],
         music: value.music?.src ? cloneComposition(value.music) : null,
-        video: { start:number(video.start,0,0,86400), end:video.end == null ? null : number(video.end,0,0,86400), muted:Boolean(video.muted), volume:number(video.volume,1,0,1) }
+        video: { start:number(video.start,0,0,STORY_VIDEO_LIMIT_SECONDS-.05), end:video.end == null ? null : number(video.end,0,0,STORY_VIDEO_LIMIT_SECONDS), muted:Boolean(video.muted), volume:number(video.volume,1,0,1) }
     };
 }
 
@@ -33,7 +34,7 @@ export function compositionHistory(initial = {}) {
 
 export function storyVideoRange(story, duration) {
     const edit=storyComposition(story.edits).video;
-    const full=Number.isFinite(duration) && duration>0 ? duration : 15;
+    const full=Math.min(STORY_VIDEO_LIMIT_SECONDS,Number.isFinite(duration) && duration>0 ? duration : 15);
     const start=Math.min(edit.start,Math.max(0,full-.05));
     const end=edit.end == null ? full : Math.max(start+.05,Math.min(edit.end,full));
     return {start,end,duration:end-start};
@@ -130,7 +131,8 @@ export function applyStoryComposition(stage, story, {editing=false}={}) {
         if(!media.dataset.compositionBound){
             media.dataset.compositionBound='true';
             media.addEventListener('loadedmetadata',()=>{const range=storyVideoRange(stage.__compositionStory,media.duration);media.currentTime=range.start;});
-            media.addEventListener('timeupdate',()=>{const range=storyVideoRange(stage.__compositionStory,media.duration);if(media.currentTime>=range.end-.03 && range.end<media.duration-.03)media.pause();});
+            media.addEventListener('timeupdate',()=>{const range=storyVideoRange(stage.__compositionStory,media.duration);if(media.currentTime>=range.end-.03 && range.end<media.duration-.03){media.pause();if(media.currentTime>range.end)media.currentTime=range.end;}});
+            media.addEventListener('seeking',()=>{const range=storyVideoRange(stage.__compositionStory,media.duration);if(media.currentTime<range.start)media.currentTime=range.start;else if(media.currentTime>range.end)media.currentTime=range.end;});
             media.addEventListener('play',()=>{const range=storyVideoRange(stage.__compositionStory,media.duration);if(media.currentTime<range.start || media.currentTime>=range.end-.05)media.currentTime=range.start;const audio=stage.querySelector('audio');if(audio)audio.play().catch(()=>{});});
             media.addEventListener('pause',()=>stage.querySelector('audio')?.pause());
         }

@@ -3,7 +3,7 @@ import { state } from '../core/state.js';
 import { mayInteract } from '../core/social.js';
 import { escapeHtml } from '../core/utils.js';
 import { showShareFeedback } from '../components/feedback.js';
-import { applyStoryComposition, storyComposition, compositionHistory } from './story-composition.js';
+import { applyStoryComposition, storyComposition, compositionHistory, STORY_VIDEO_LIMIT_SECONDS } from './story-composition.js';
 
 let storyRef, history, selectedLayer, gesture, drawMode, toolSession, activeAdjustment='brightness', moveMode=false;
 const currentComposition=()=>toolSession?toolSession.current():storyComposition(pending()?.edits);
@@ -18,17 +18,26 @@ const input=(name,label,value,type='number',extra='')=>`<label>${label}<input na
 const range=(name,label,value,min,max,step)=>input(name,label,value,'range',`min="${min}" max="${max}" step="${step}"`);
 
 // Small capture zones give quarter turns a detent without preventing free rotation.
-export function snapStoryMedia(media) {
-    const normalized=((media.rotation+180)%360+360)%360-180;
+export function snapStoryRotation(rotation){
+    const normalized=((rotation+180)%360+360)%360-180;
     const nearest=Math.round(normalized/90)*90;
-    const rotationSnap=Math.abs(normalized-nearest)<=4;
-    const sizeSnap=Math.abs(media.zoom-1)<=.035;
-    return {rotation:rotationSnap?(nearest||0):normalized,zoom:sizeSnap?1:media.zoom,rotationSnap,sizeSnap};
+    const snapped=Math.abs(normalized-nearest)<=4;
+    return {rotation:snapped?(nearest||0):normalized,snapped};
+}
+export function snapStoryCenter(x,y,media=false){
+    const center=media?0:.5,tolerance=media?2:.02;
+    const xSnap=Math.abs(x-center)<=tolerance,ySnap=Math.abs(y-center)<=tolerance;
+    return {x:xSnap?center:x,y:ySnap?center:y,xSnap,ySnap};
+}
+export function snapStoryMedia(media) {
+    const angle=snapStoryRotation(media.rotation),sizeSnap=Math.abs(media.zoom-1)<=.035;
+    return {rotation:angle.rotation,zoom:sizeSnap?1:media.zoom,rotationSnap:angle.snapped,sizeSnap};
 }
 let guideRevision=0;
 function clearAlignmentGuides(){
     guideRevision++;
-    const stage=preview();stage.classList.remove('story-angle-snapped','story-size-snapped');
+    const stage=preview();stage.classList.remove('story-angle-snapped','story-size-snapped','story-center-x','story-center-y');
+    stage.querySelectorAll('.story-overlay-angle-snapped').forEach(layer=>layer.classList.remove('story-overlay-angle-snapped'));
     stage.removeAttribute('data-alignment-hint');
 }
 function showAlignmentGuides(snap){
@@ -38,6 +47,7 @@ function showAlignmentGuides(snap){
     stage.classList.toggle('story-size-snapped',snap.sizeSnap);
     stage.removeAttribute('data-alignment-hint');
 }
+function showCenterGuides(snap){guideRevision++;preview().classList.toggle('story-center-x',snap.xSnap);preview().classList.toggle('story-center-y',snap.ySnap);}
 function fadeAlignmentGuides(){const revision=guideRevision;setTimeout(()=>{if(revision===guideRevision)clearAlignmentGuides();},650);}
 
 
@@ -55,6 +65,9 @@ function repaint(){
     document.querySelector('.story-redo').disabled=!activeHistory()?.canRedo();
     document.querySelector('.story-draw-done').hidden=Boolean(toolSession)||(!drawMode && !moveMode);
     preview().classList.toggle('story-drawing-mode',Boolean(drawMode||moveMode));
+    const sound=document.querySelector('.story-preview-sound'),muted=currentComposition().video.muted;
+    sound.hidden=pending().type!=='video';sound.textContent=muted?'🔇':'🔊';
+    sound.setAttribute('aria-label',muted?'Unmute video sound':'Mute video sound');sound.setAttribute('aria-pressed',String(muted));
 }
 export function prepareStoryTools(){ensureHistory();repaint();}
 export function commitStoryEdit(next){
@@ -116,7 +129,7 @@ function openInlineLocation(){
     ensureHistory();selectedLayer=null;closeTools();closeInlineText();
     const box=document.querySelector('.story-inline-text');box.hidden=false;
     Object.assign(box.style,{left:'50%',top:'40%',width:'80%'});
-    box.innerHTML=`<form class="story-tool-form story-inline-location-form" data-tool="labels"><input type="hidden" name="kind" value="location" /><label>📍 Location<input name="text" type="text" placeholder="Enter a location" maxlength="100" required aria-label="Location" /></label><button type="button" data-story-text-cancel>Cancel</button><button type="submit">Apply changes</button></form>`;
+    box.innerHTML=`<form class="story-tool-form story-inline-location-form" data-tool="labels"><input type="hidden" name="kind" value="location" /><label>📍 Location<input name="text" type="text" placeholder="Enter a location" maxlength="100" required aria-label="Location" /></label><button type="button" data-story-text-cancel>Cancel</button><button type="submit">Done</button></form>`;
     document.querySelector('.story-create-dialog').classList.add('story-location-editing');
     box.querySelector('input[name="text"]').focus();
 }
@@ -159,7 +172,7 @@ function toolForm(tool){
     if(tool==='sticker')fields=`${input('text','Sticker / emoji','🙂','text','maxlength="40" required')}${range('size','Size (% of Story width)',15,4,25,.5)}<p>Drag the sticker to place it anywhere on the Story.</p>`;
     if(tool==='labels')fields=`<input type="hidden" name="kind" value="location" />${input('text','Location','','text','maxlength="100" required')}<p>Enter a location label.</p>`;
     if(tool==='music')fields=`<p>User-selected audio only. No commercial music catalogue or licence is provided.</p><label>Choose audio<input id="story-music-file" type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg" /></label><p>${escapeHtml(e.music?.title||'No audio selected.')}</p>${input('start','Segment start (seconds)',e.music?.start||0,'number','min="0" step="0.1"')}${input('end','Segment end (blank = full track)',e.music?.end??'','number','min="0" step="0.1"')}${range('volume','Music volume',e.music?.volume??1,0,1,.05)}<button type="button" data-story-remove-music>Remove music</button>`;
-    if(tool==='video')fields=`<p>Leave end blank to keep the full video after the chosen start.</p>${input('start','Trim start (seconds)',e.video.start,'number','min="0" step="0.1"')}${input('end','Trim end (blank = full length)',e.video.end??'','number','min="0" step="0.1"')}<label><input name="muted" type="checkbox" ${e.video.muted?'checked':''} /> Mute original sound</label>${range('volume','Original sound volume',e.video.volume,0,1,.05)}`;
+    if(tool==='video')fields=`<p>Stories use only the first 4 minutes. Leave end blank to use the remaining allowed video.</p>${input('start','Trim start (seconds)',e.video.start,'number','min="0" max="239.9" step="0.1"')}${input('end','Trim end (blank = full length)',e.video.end??'','number','min="0" max="240" step="0.1"')}`;
     document.querySelector('.story-tool-options').innerHTML=`<form class="story-tool-form" data-tool="${tool}">${fields}<p class="story-tool-error" role="alert"></p><button type="submit" class="primary-btn">Apply ${tool==='draw'?'and draw':'changes'}</button>${layer?'<button type="button" data-story-remove-layer>Remove selected overlay</button>':''}</form>`;
 }
 function openTools(){
@@ -194,9 +207,10 @@ function applyTool(form){
         const start=numeric(form,'start'), end=val(form,'end')===''?null:numeric(form,'end');
         if(!Number.isFinite(start) || start<0 || (end!=null && (!Number.isFinite(end)||end<=start))){form.querySelector('.story-tool-error').textContent='End must be after start, in seconds.';return;}
         if(tool==='video'){
-            const duration=preview().querySelector('video')?.duration;
-            if(Number.isFinite(duration) && (start>=duration || (end!=null && end>duration))){form.querySelector('.story-tool-error').textContent=`Choose a segment within ${duration.toFixed(1)} seconds.`;return;}
-            Object.assign(e.video,{start,end,muted:form.elements.muted.checked,volume:numeric(form,'volume')});
+            const sourceDuration=preview().querySelector('video')?.duration;
+            const duration=Number.isFinite(sourceDuration)?Math.min(sourceDuration,STORY_VIDEO_LIMIT_SECONDS):STORY_VIDEO_LIMIT_SECONDS;
+            if(Number.isFinite(duration) && (start>=duration || (end!=null && end>duration))){form.querySelector('.story-tool-error').textContent=`Choose a segment within the first ${duration.toFixed(1)} seconds (maximum 4 minutes).`;return;}
+            Object.assign(e.video,{start,end});
         }else if(e.music)Object.assign(e.music,{start,end,volume:numeric(form,'volume')});
         else{form.querySelector('.story-tool-error').textContent='Choose an audio file first.';return;}
     }
@@ -228,6 +242,7 @@ export function registerStoryToolEvents(){
         if(target.closest('.story-tools-open')){closeInlineText();openTools();return;}
         if(target.closest('.story-tools-close') || target===document.querySelector('.story-tools-backdrop')){closeTools();return;}
         if(!pending() || !mayInteract())return;
+        if(target.closest('.story-preview-sound')){if(pending().type!=='video')return;const next=currentComposition();next.video.muted=!next.video.muted;commitStoryEdit(next);return;}
         if(target.closest('.story-undo') || target.closest('.story-redo')){
             ensureHistory();const next=target.closest('.story-undo')?activeHistory().undo():activeHistory().redo();if(!toolSession)pending().edits=next;repaint();return;
         }
@@ -277,6 +292,7 @@ export function registerStoryToolEvents(){
         if((toolSession&&toolSession.kind!=='draw')||!pending() || !mayInteract() || event.target.closest('audio, .story-music-toggle, button') || !document.querySelector('.story-inline-text').hidden)return;
         if(pointers.size>=2)return;
         ensureHistory();
+        if(pointers.size===0)clearAlignmentGuides();
         pointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
         stage.setPointerCapture(event.pointerId);event.preventDefault();
         if(pointers.size===2 && !drawMode){
@@ -311,8 +327,19 @@ export function registerStoryToolEvents(){
             }else if(gesture.mode==='media'){e.media.x=clamp(e.media.x+dx*100,-100,100);e.media.y=clamp(e.media.y+dy*100,-100,100);}
             else{const item=e.layers.find(layer=>layer.id===gesture.layer);if(item){item.x=clamp(item.x+dx,0,1);item.y=clamp(item.y+dy,0,1);}}
         }
-        if(gesture.mode==='layer'||(gesture.mode==='pinch'&&gesture.layer))gesture.deleteDrop=updateDeleteTarget(event);
+        if(gesture.mode!=='draw'){
+            const layer=gesture.layer?e.layers.find(item=>item.id===gesture.layer):null;
+            const position=snapStoryCenter(layer?layer.x:e.media.x,layer?layer.y:e.media.y,!layer);
+            Object.assign(layer||e.media,{x:position.x,y:position.y});showCenterGuides(position);
+            if(layer){
+                const angle=snapStoryRotation(layer.rotation||0);layer.rotation=angle.rotation;
+                gesture.overlayAngleSnapped=gesture.mode==='pinch'&&angle.snapped;
+                preview().classList.remove('story-angle-snapped','story-size-snapped');
+                gesture.deleteDrop=updateDeleteTarget(event);
+            }
+        }
         gesture.next=e;applyStoryComposition(stage,{...pending(),edits:e},{editing:true});
+        if(gesture.overlayAngleSnapped)stage.querySelector(`[data-layer-id="${gesture.layer}"]`)?.classList.add('story-overlay-angle-snapped');
     });
     stage.addEventListener('pointerup',event=>{
         pointers.delete(event.pointerId);
