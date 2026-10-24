@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>insta</title>
+    <script>
+      if (window.matchMedia("(max-width: 860px)").matches) {
+        document.documentElement.classList.add("mobile-splash-pending");
+      }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css?v=62" />
+  </head>
+  <body>
+    <main id="deletion-lock" class="welcome-screen" hidden aria-labelledby="deletion-lock-title">
+      <section class="welcome-entry">
+        <h1 id="deletion-lock-title" tabindex="-1">Deletion request pending</h1>
+        <p data-deletion-status></p>
+        <p>This is a local demo. No server account is deleted and no real password is verified.</p>
+        <form id="deletion-cancel-form">
+          <label for="deletion-cancel-password">Demo password</label>
+          <input id="deletion-cancel-password" name="password" type="password" required autocomplete="off" />
+          <p>Enter <strong>demo-password</strong> to cancel this local request. Never enter a real password.</p>
+          <p role="alert"></p>
+          <button type="submit">Cancel deletion request</button>
+        </form>
+      </section>
+    </main>
+    <main class="welcome-screen" id="welcome-screen" aria-labelledby="welcome-title">
+      <div class="welcome-shell">
+        <section class="welcome-copy" aria-label="Welcome">
+          <a class="welcome-brand" href="#welcome" aria-label="insta home"><span class="welcome-brand-mark">i</span><span>insta</span></a>
+          <div class="welcome-message" id="welcome-message">
+            <p class="welcome-eyebrow">A little closer, every day</p>
+            <h1 id="welcome-title">Your people.<br /><span>Your moments.</span></h1>
+            <p class="welcome-description">Share what matters, find new inspiration, and keep up with the people you care about.</p>
+            <div class="welcome-actions">
+              <button class="welcome-primary" type="button" data-welcome-action="signup">Create account</button>
+              <button class="welcome-secondary" type="button" data-welcome-action="login">Log in</button>
+            </div>
+            <p class="welcome-note">A local preview of insta</p>
+          </div>
+          <section class="welcome-entry" id="welcome-entry" aria-live="polite" hidden>
+            <p class="welcome-eyebrow" id="welcome-entry-eyebrow"></p>
+            <h1 id="welcome-entry-title" tabindex="-1"></h1>
+            <p class="welcome-description" id="welcome-entry-description"></p>
+            <p class="welcome-local-note">Local preview only. Submitting does not create or verify an account. Your entries are cleared and never saved.</p>
+            <form class="welcome-form" id="login-form" data-entry-form="login" autocomplete="off" novalidate hidden>
+              <label for="login-username">Username</label>
+              <input id="login-username" name="username" type="text" minlength="8" maxlength="20" pattern="[a-zA-Z0-9._]{8,20}" autocomplete="username" autocapitalize="none" spellcheck="false" required aria-describedby="login-error" />
+              <label for="login-password">Password</label>
+              <div class="welcome-password-wrap"><input id="login-password" name="password" type="password" autocomplete="off" required aria-describedby="login-error" /><button type="button" class="welcome-password-toggle" data-toggle-password="login-password" aria-controls="login-password" aria-pressed="false">Show</button></div>
+              <p class="welcome-form-error" id="login-error" role="alert" hidden></p>
+              <div class="welcome-actions"><button class="welcome-primary" type="submit">Enter local demo</button><button class="welcome-secondary" type="button" data-welcome-action="back">Back</button></div>
+            </form>
+            <form class="welcome-form" id="signup-form" data-entry-form="signup" autocomplete="off" novalidate hidden>
+              <label for="signup-full-name">Full name</label>
+              <input id="signup-full-name" type="text" maxlength="120" autocomplete="off" required aria-describedby="signup-error" />
+              <label for="signup-username">Choose a username</label>
+              <input id="signup-username" name="username" type="text" minlength="8" maxlength="20" pattern="[a-zA-Z0-9._]{8,20}" autocomplete="username" autocapitalize="none" spellcheck="false" required aria-describedby="signup-error" />
+              <fieldset class="welcome-age-fieldset" aria-describedby="signup-age-note">
+                <legend>Age band</legend>
+                <label><input type="radio" name="ageBand" value="minor" required /> Under 18</label>
+                <label><input type="radio" name="ageBand" value="adult" required /> 18 or older</label>
+                <p id="signup-age-note">Self-declared, not verified. This choice does not establish legal eligibility to use the service.</p>
+              </fieldset>
+              <label for="signup-password">Create password</label>
+              <div class="welcome-password-wrap"><input id="signup-password" name="password" type="password" autocomplete="off" required aria-describedby="signup-error" /><button type="button" class="welcome-password-toggle" data-toggle-password="signup-password" aria-controls="signup-password" aria-pressed="false">Show</button></div>
+              <label for="signup-password-confirm">Confirm password</label>
+              <div class="welcome-password-wrap"><input id="signup-password-confirm" name="confirmPassword" type="password" autocomplete="off" required aria-describedby="signup-error" /><button type="button" class="welcome-password-toggle" data-toggle-password="signup-password-confirm" aria-controls="signup-password-confirm" aria-pressed="false">Show</button></div>
+              <label for="signup-verification-file">Sample verification attachment <span>(optional)</span></label>
+              <p class="welcome-file-guidance" id="signup-file-note">Choose a sample or redacted image/PDF only (up to 20 MB). This local demo does not upload, read, or verify files.</p>
+              <input id="signup-verification-file" type="file" accept="image/*,application/pdf" aria-describedby="signup-file-note signup-error" />
+              <div class="welcome-file-selection" id="signup-file-selection" role="status" hidden><span id="signup-file-details"></span><button type="button" data-remove-verification-file aria-label="Remove selected verification attachment">Remove</button></div>
+              <p class="welcome-form-error" id="signup-error" role="alert" hidden></p>
+              <div class="welcome-actions"><button class="welcome-primary" type="submit">Enter local demo</button><button class="welcome-secondary" type="button" data-welcome-action="back">Back</button></div>
+            </form>
+          </section>
+        </section>
+        <aside class="welcome-art" aria-hidden="true">
+          <div class="welcome-orbit welcome-orbit-one"></div><div class="welcome-orbit welcome-orbit-two"></div>
+          <div class="welcome-photo-card welcome-photo-main"><div class="welcome-photo welcome-photo-sunrise"></div><span>little moments, big memories</span></div>
+          <div class="welcome-photo-card welcome-photo-small"><div class="welcome-photo welcome-photo-coffee"></div></div>
+          <div class="welcome-photo-card welcome-photo-tall"><div class="welcome-photo welcome-photo-city"></div></div>
+          <div class="welcome-sticker">✦</div>
+        </aside>
+      </div>
+    </main>
+    <div class="splash-screen" role="img" aria-label="insta">
+      <span class="splash-logo">insta</span>
+    </div>
+    <div class="app-shell" hidden>
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="brand-mark">i</div>
+          <h1>insta</h1>
+        </div>
+
+        <nav class="nav-menu" aria-label="Main navigation">
+          <button class="nav-item active" type="button" data-view="home" aria-current="page"><span>🏠</span>Home</button>
+          <button class="nav-item" type="button" data-view="explore"><span>🔎</span>Explore</button>
+          <button class="nav-item" type="button" data-view="reels"><span>📣</span>Reels</button>
+          <button class="nav-item" type="button" data-view="messages"><span>💬</span>Messages</button>
+        </nav>
+
+        <button class="profile-card" type="button" data-view="profile">
+          <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80" alt="Profile" />
+          <div>
+            <strong>@mila_rose</strong>
+            <span>Creator</span>
+          </div>
+        </button>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <div class="search-wrap">
+            <span>⌕</span>
+            <input type="text" aria-label="Search people, hashtags, places, or communities" placeholder="Search people, #hashtags, places, communities..." autocomplete="off" aria-autocomplete="list" aria-controls="explore-search-results" aria-expanded="false" />
+            <div class="search-results" id="explore-search-results" role="listbox" aria-label="Search results" hidden></div>
+          </div>
+
+          <div class="top-actions">
+            <button class="icon-btn desktop-profile-button" type="button" data-view="profile" aria-label="My profile">
+              <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80" alt="" />
+            </button>
+          </div>
+        </header>
+
+        <div id="account-access-notice" class="account-access-notice" role="status" hidden></div>
+        <h2 class="view-heading" id="view-heading" hidden></h2>
+        <header class="home-brand-header"><span class="home-brand-group"><span class="brand-mark" aria-hidden="true">i</span><span class="home-brand" aria-label="insta">insta</span></span>
+        <button class="home-notifications" type="button" aria-label="Notifications" title="Notifications" aria-haspopup="dialog" aria-controls="notifications-dialog" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
+        </button></header>
+
+        <section class="home-stories" aria-label="Stories">
+          <div id="stories-list" class="stories-list"></div>
+        </section>
+        <div class="home-create-row">
+          <button class="primary-btn create-button" type="button"><span aria-hidden="true">+</span> Create</button>
+        </div>
+
+        <section id="feed" class="feed" aria-live="polite"></section>
+        <section id="explore-grid" class="media-grid" aria-label="Explore public posts" hidden></section>
+        <section id="community-view" class="community-view" aria-label="Community" hidden></section>
+        <section id="reels-feed" class="reels-feed" aria-label="Public reels" hidden></section>
+        <section id="messages-list" class="messages-list" aria-label="Recent conversations" hidden></section>
+        <section id="profile-view" class="profile-view" aria-label="Profile" hidden></section>
+      </main>
+
+      <aside class="right-rail">
+        <div class="mini-profile">
+          <div class="mini-avatar-wrap">
+            <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80" alt="Your profile" />
+          </div>
+          <div>
+            <strong>@mila_rose</strong>
+            <span>Design storyteller</span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Suggested for you</h3>
+            <button>See all</button>
+          </div>
+          <div class="suggestion-list">
+            <div class="suggestion-item">
+              <img src="https://images.unsplash.com/photo-1546961329-78bef0414d7c?auto=format&fit=crop&w=200&q=80" alt="Maya" />
+              <div>
+                <strong>Maya</strong>
+                <span>Travel • 3.2k followers</span>
+              </div>
+              <button>Follow</button>
+            </div>
+            <div class="suggestion-item">
+              <img src="https://images.unsplash.com/photo-1504593811423-6dd665756598?auto=format&fit=crop&w=200&q=80" alt="Theo" />
+              <div>
+                <strong>Theo</strong>
+                <span>Photographer</span>
+              </div>
+              <button>Follow</button>
+            </div>
+            <div class="suggestion-item">
+              <img src="https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=200&q=80" alt="Nia" />
+              <div>
+                <strong>Nia</strong>
+                <span>Artist • 1.8k</span>
+              </div>
+              <button>Follow</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Trending now</h3>
+          </div>
+          <ul class="trending-list">
+            <li><span>#designweek</span><strong>24.8k</strong></li>
+            <li><span>#naturecore</span><strong>18.4k</strong></li>
+            <li><span>#citynight</span><strong>12.1k</strong></li>
+            <li><span>#tinywins</span><strong>9.6k</strong></li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+
+    <nav class="mobile-nav" aria-label="Main navigation" hidden>
+      <button class="mobile-nav-item active" type="button" data-view="home" aria-label="Home" aria-current="page">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" /></svg>
+        <span>Home</span>
+      </button>
+      <button class="mobile-nav-item" type="button" data-view="explore" aria-label="Explore">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 5 5" /></svg>
+        <span>Explore</span>
+      </button>
+      <button class="mobile-nav-item" type="button" data-view="reels" aria-label="Reels">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" /><path d="m10 9 5 3-5 3zM3 9h18M8 4l3 5m3-5 3 5" /></svg>
+        <span>Reels</span>
+      </button>
+      <button class="mobile-nav-item" type="button" data-view="messages" aria-label="Messages">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l-2 2v-7.5A7.5 7.5 0 1 1 20 11.5Z" /><path d="M8 11h.01M12 11h.01M16 11h.01" /></svg>
+        <span>Messages</span>
+      </button>
+      <button class="mobile-nav-item profile-nav-button" type="button" data-view="profile" aria-label="Profile">
+        <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80" alt="" />
+        <span>Profile</span>
+      </button>
+    </nav>
+
+    <div class="profile-post-viewer" hidden>
+      <section class="profile-post-viewer-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-post-viewer-title">
+        <header class="profile-post-viewer-header">
+          <h2 id="profile-post-viewer-title">Post</h2>
+          <button class="profile-post-viewer-close" type="button" aria-label="Close post">×</button>
+        </header>
+        <div class="profile-post-viewer-content"></div>
+      </section>
+    </div>
+
+    <div class="media-edit-backdrop" hidden>
+      <section class="media-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="media-edit-title">
+        <header class="share-dialog-header">
+          <h2 id="media-edit-title">Edit post</h2>
+          <button class="media-edit-close" type="button" aria-label="Close media editor">×</button>
+        </header>
+        <form class="media-edit-form">
+          <label for="media-edit-location">Location</label>
+          <input id="media-edit-location" type="text" maxlength="100" placeholder="Add a location" />
+          <label for="media-edit-cover">Change square thumbnail</label>
+          <input id="media-edit-cover" type="file" accept="image/*" />
+          <div class="media-edit-cover-preview" hidden></div>
+          <label for="media-edit-cover-x">Horizontal crop</label><input id="media-edit-cover-x" type="range" min="0" max="100" value="50" />
+          <label for="media-edit-cover-y">Vertical crop</label><input id="media-edit-cover-y" type="range" min="0" max="100" value="50" />
+          <label for="media-edit-caption">Caption</label>
+          <textarea id="media-edit-caption" rows="5" maxlength="500" placeholder="Write a caption..."></textarea>
+          <div class="media-edit-actions">
+            <button class="media-edit-cancel" type="button">Cancel</button>
+            <button class="primary-btn" type="submit">Save changes</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="media-delete-backdrop" hidden>
+      <section class="media-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="media-delete-title" aria-describedby="media-delete-message">
+        <h2 id="media-delete-title">Delete post?</h2>
+        <p id="media-delete-message"></p>
+        <div class="media-delete-actions">
+          <button id="media-delete-cancel" type="button">Cancel</button>
+          <button class="media-delete-confirm" type="button">Delete</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="comments-backdrop" hidden>
+      <section class="comments-dialog" role="dialog" aria-modal="true" aria-labelledby="comments-dialog-title">
+        <header class="comments-dialog-header">
+          <h2 id="comments-dialog-title">Comments</h2>
+          <button class="comments-close" type="button" aria-label="Close comments">×</button>
+        </header>
+        <div class="comments-dialog-list"></div>
+        <form class="comment-form comments-dialog-form">
+          <label class="visually-hidden" for="dialog-comment">Write a comment</label>
+          <input id="dialog-comment" name="comment" type="text" maxlength="500" placeholder="Add a comment..." required />
+          <button type="submit">Post</button>
+        </form>
+      </section>
+    </div>
+    <div class="likers-backdrop" hidden>
+      <section class="likers-dialog" role="dialog" aria-modal="true" aria-labelledby="likers-dialog-title">
+        <header class="comments-dialog-header">
+          <h2 id="likers-dialog-title">People who liked this post</h2>
+          <button class="likers-close" type="button" aria-label="Close likes">×</button>
+        </header>
+        <div class="likers-list"></div>
+      </section>
+    </div>
+    <div class="share-backdrop" hidden>
+      <section class="share-dialog" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title">
+        <header class="share-dialog-header">
+          <h2 id="share-dialog-title">Share with friends</h2>
+          <button class="share-close" type="button" aria-label="Close sharing">×</button>
+        </header>
+        <div class="share-friends-list"></div>
+        <footer class="share-dialog-footer">
+          <button class="share-send-button" type="button" disabled>Send</button>
+        </footer>
+      </section>
+    </div>
+    <div class="video-fullscreen-backdrop" hidden>
+      <section class="video-fullscreen-dialog" role="dialog" aria-modal="true" aria-label="Video player">
+        <div class="video-fullscreen-stage"></div>
+        <button class="video-fullscreen-exit" type="button" aria-label="Exit fullscreen video" title="Exit fullscreen">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /></svg>
+        </button>
+        <p class="video-fullscreen-hint" aria-live="polite">Tap video to pause or play</p>
+      </section>
+    </div>
+    <div class="story-create-backdrop" hidden>
+      <section class="story-create-dialog" role="dialog" aria-modal="true" aria-labelledby="story-create-title">
+        <header class="share-dialog-header">
+          <h2 id="story-create-title">Add to your story</h2>
+          <button class="story-create-close" type="button" aria-label="Close story creator">×</button>
+        </header>
+        <div class="story-create-content">
+          <div class="story-media-step">
+          <label class="story-upload-label" for="story-upload">Choose a photo or video</label>
+          <input id="story-upload" type="file" accept=".jpg,.jpeg,.png,.gif,.webp,.avif,.heic,.heif,.bmp,.mp4,.webm,.mov,.m4v,.3gp,.ogv,image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif,image/bmp,video/mp4,video/webm,video/quicktime,video/x-m4v,video/3gpp,video/ogg" />
+          <p class="story-picker-hint">Your device will ask you to choose photos or videos. insta can access only the item you select.</p>
+          <button type="button" class="story-choose-drafts" aria-expanded="false" aria-controls="story-draft-picker">Choose from drafts</button>
+          <div class="story-draft-list" id="story-draft-picker" hidden></div>
+          </div>
+          <div class="story-editor-step" hidden>
+          <div class="story-selected-preview"></div>
+          <div class="story-editor-toolbar"><button type="button" class="story-create-back" aria-label="Back to media"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4m7-7-7 7 7 7" /></svg></button></div>
+          <div class="story-history-controls" aria-label="Edit history"><button class="story-undo" type="button" aria-label="Undo Story edit" disabled>↶</button><button class="story-redo" type="button" aria-label="Redo Story edit" disabled>↷</button></div>
+          <button class="story-tools-open" type="button" aria-haspopup="dialog" aria-controls="story-tools-dialog">⚒ Tools</button>
+          <button class="story-draw-done" type="button" hidden>Done positioning / drawing</button>
+          <button type="button" class="story-preview-play" aria-label="Play video preview" hidden>▶</button>
+          <div class="story-editor-controls" role="group" aria-label="Story options">
+          <div class="story-option-buttons">
+            <button type="button" class="story-schedule-open" aria-haspopup="dialog" aria-controls="story-options-dialog"><span aria-hidden="true">▦</span><span>Schedule<small class="story-schedule-summary">Share now</small></span></button>
+            <button type="button" class="story-audience-open" aria-haspopup="dialog" aria-controls="story-options-dialog"><span aria-hidden="true">◎</span><span class="story-audience-summary">Normal audience</span></button>
+          </div>
+          <input id="story-audience" type="hidden" value="all" />
+          <!-- Retain captions from older drafts without offering a second text editor. -->
+          <input id="story-caption" type="hidden" value="" />
+          <div class="story-editor-actions"><button type="button" class="story-publish-selected" disabled>Share story</button><button type="button" class="story-save-draft" disabled>Save story draft · 7 days</button></div>
+          <p class="story-editor-footer-title">Edit your story</p>
+          </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div class="story-post-picker" hidden><div class="story-post-list"></div></div>
+    <div class="story-exit-backdrop" hidden>
+      <section class="story-option-dialog" role="dialog" aria-modal="true" aria-labelledby="story-exit-title">
+        <header><h2 id="story-exit-title">Save this Story?</h2><button type="button" class="story-exit-keep" aria-label="Keep editing">×</button></header>
+        <p>Save your media and edits as a draft for 7 days, or discard this editing session.</p>
+        <p class="story-exit-error" role="alert" hidden></p>
+        <div class="story-exit-actions"><button type="button" class="story-save-draft">Save as draft</button><button type="button" class="story-discard">Discard</button></div>
+        <button type="button" class="story-exit-keep story-keep-editing">Keep editing</button>
+      </section>
+    </div>
+    <div class="story-option-backdrop" hidden>
+      <section id="story-options-dialog" class="story-option-dialog" role="dialog" aria-modal="true" aria-labelledby="story-option-title">
+        <header><h2 id="story-option-title">Schedule story</h2><button type="button" class="story-option-close" aria-label="Close Story option">×</button></header>
+        <div class="story-schedule-panel" hidden>
+          <p>Choose when this Story should be shared. Leave it empty to share now.</p>
+          <label for="story-schedule-time">Date and time</label><input id="story-schedule-time" type="datetime-local" />
+          <p class="story-schedule-timezone"></p>
+          <button type="button" class="story-schedule-clear">Share without scheduling</button>
+        </div>
+        <fieldset class="story-audience-panel" hidden><legend>Who can see this Story?</legend>
+          <label><input type="radio" name="story-audience-choice" value="all" /><span><strong>Normal audience</strong><small>Your account’s usual privacy rules apply.</small></span></label>
+          <label><input type="radio" name="story-audience-choice" value="close-friends" /><span><strong>Priority Friends</strong><small>Only people on your Close Friends list.</small></span></label>
+        </fieldset>
+        <p class="story-option-error" role="alert" hidden></p>
+        <footer><button type="button" class="story-option-cancel">Cancel</button><button type="button" class="story-option-save">Save</button></footer>
+      </section>
+    </div>
+    <div class="story-tools-backdrop" hidden>
+      <section id="story-tools-dialog" class="story-tools-dialog" role="dialog" aria-modal="true" aria-labelledby="story-tools-title">
+        <header><h2 id="story-tools-title">Story tools</h2><button class="story-tools-close" type="button" aria-label="Close Story tools">×</button></header>
+        <div class="story-tool-grid">
+          <button type="button" data-story-tool="text">Text / @mentions</button>
+          <button type="button" data-story-tool="move">Move / Zoom</button>
+          <button type="button" data-story-tool="fit">Fit / Fill</button>
+          <button type="button" data-story-tool="rotate">Rotate / Straighten</button>
+          <button type="button" data-story-tool="filters">Filters / Adjustments</button>
+          <button type="button" data-story-tool="draw">Draw</button>
+          <button type="button" data-story-tool="sticker">Stickers / Emojis</button>
+          <button type="button" data-story-tool="labels">Location / Hashtag</button>
+          <button type="button" data-story-tool="music">Music / Segment</button>
+          <button type="button" data-story-tool="video">Video / Original sound</button>
+        </div>
+        <div class="story-tool-options"></div>
+      </section>
+    </div>
+    <div class="create-menu-backdrop" hidden>
+      <section class="create-menu-dialog" role="dialog" aria-modal="true" aria-labelledby="create-menu-title">
+        <header class="share-dialog-header">
+          <h2 id="create-menu-title">Create</h2>
+          <button class="create-menu-close" type="button" aria-label="Close create menu">×</button>
+        </header>
+        <div class="local-draft-list"></div><div class="create-menu-options">
+          <button class="create-menu-option" type="button" data-create-type="post">
+            <span aria-hidden="true">▧</span><strong>Post</strong><small>Share a photo or video</small>
+          </button>
+          <button class="create-menu-option" type="button" data-create-type="reel">
+            <span aria-hidden="true">▶</span><strong>Reel</strong><small>Share a video</small>
+          </button>
+        </div>
+      </section>
+    </div>
+    <div class="create-upload-backdrop" hidden>
+      <section class="create-upload-dialog" role="dialog" aria-modal="true" aria-labelledby="create-upload-title">
+        <header class="share-dialog-header">
+          <h2 id="create-upload-title">New post</h2>
+          <button class="create-upload-close" type="button" aria-label="Close upload">×</button>
+        </header>
+        <div class="create-upload-content">
+          <label class="create-upload-label" for="post-upload">Choose from gallery</label>
+          <input id="post-upload" type="file" multiple accept="image/*,video/*" />
+          <p class="create-upload-hint">Choose a photo or video for a post, or a video for a reel.</p>
+          <div class="create-upload-preview" hidden></div>
+          <div class="create-media-controls" hidden></div>
+          <label for="create-location">Location (optional)</label><input id="create-location" maxlength="100" />
+          <label for="create-tags">Tag people (optional)</label><input id="create-tags" placeholder="@username, @username" />
+          <button type="button" class="create-save-draft">Save draft · 7 days</button>
+          <label class="create-caption-label" for="create-caption">Caption (optional)</label>
+          <textarea id="create-caption" rows="3" maxlength="500" placeholder="Write a caption..."></textarea>
+          <button class="primary-btn create-publish-button" type="button" disabled>Share post</button>
+        </div>
+      </section>
+    </div>
+    <div class="story-settings-backdrop" hidden>
+      <section class="story-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="story-settings-title">
+        <header class="share-dialog-header">
+          <h2 id="story-settings-title">Story settings</h2>
+          <button class="story-settings-close" type="button" aria-label="Close story settings">×</button>
+        </header>
+        <div class="story-settings-content">
+          <label><input id="story-allow-replies" type="checkbox" checked /> Allow replies to your stories</label>
+          <label><input id="story-save-archive" type="checkbox" checked /> Save stories to archive</label>
+          <button class="primary-btn story-settings-save" type="button">Save settings</button>
+        </div>
+      </section>
+    </div>
+    <div class="highlight-create-backdrop" hidden>
+      <section class="highlight-create-dialog" role="dialog" aria-modal="true" aria-labelledby="highlight-create-title">
+        <header class="share-dialog-header">
+          <h2 id="highlight-create-title">New story highlight</h2>
+          <button class="highlight-create-close" type="button" aria-label="Close highlight creator">×</button>
+        </header>
+        <form class="highlight-create-form">
+          <label class="highlight-title-label" for="highlight-title">Highlight name (up to 15 characters)</label>
+          <input id="highlight-title" type="text" maxlength="15" required placeholder="Name this highlight" />
+          <label for="highlight-existing">Save to</label><select id="highlight-existing"><option value="">Create new highlight</option></select>
+          <label for="highlight-audience">Audience</label><select id="highlight-audience"><option value="all">Normal audience</option><option value="close-friends">Close Friends</option></select>
+          <label for="highlight-cover">Cover photo (optional)</label><input id="highlight-cover" type="file" accept="image/*" />
+          <fieldset class="highlight-story-picker">
+            <legend>Choose stories</legend>
+            <div class="highlight-story-list"></div>
+          </fieldset>
+          <button class="primary-btn highlight-create-submit" type="submit">Create highlight</button>
+        </form>
+      </section>
+    </div>
+    <div class="highlight-delete-backdrop" hidden>
+      <section class="highlight-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="highlight-delete-title" aria-describedby="highlight-delete-name">
+        <h2 id="highlight-delete-title">Delete highlight?</h2>
+        <p id="highlight-delete-name"></p>
+        <div class="highlight-delete-actions">
+          <button id="highlight-delete-cancel" type="button">Cancel</button>
+          <button class="highlight-delete-confirm" type="button">Delete</button>
+        </div>
+      </section>
+    </div>
+    <div class="story-viewer-backdrop" hidden>
+      <section class="story-viewer" role="dialog" aria-modal="true" aria-label="Story viewer">
+        <div class="story-progress-list"></div>
+        <header class="story-viewer-header">
+          <img class="story-viewer-avatar" src="" alt="" />
+          <div class="story-viewer-user"></div>
+          <button class="story-sound-toggle" type="button" aria-label="Turn story sound on" aria-pressed="false" hidden>🔇</button>
+          <button class="story-highlight-share" type="button" aria-label="Share highlight" title="Share highlight" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m0 0L7 8m5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" /></svg>
+          </button>
+          <button class="story-viewer-close" type="button" aria-label="Close story">×</button>
+          <button class="story-options-toggle" type="button" aria-label="Story options" aria-expanded="false" hidden>•••</button>
+        </header>
+        <div class="story-options-menu" role="menu" hidden>
+          <button type="button" role="menuitem" data-story-option="remove" hidden>Remove story</button>
+          <button type="button" role="menuitem" data-story-option="schedule" hidden>Schedule story</button>
+          <button type="button" role="menuitem" data-story-option="settings" hidden>Story settings</button>
+          <button type="button" role="menuitem" data-story-option="highlight" hidden>Add to highlight</button>
+          <button type="button" role="menuitem" data-highlight-option="edit" hidden>Edit</button>
+          <button type="button" role="menuitem" data-highlight-option="delete" hidden>Delete from highlights</button>
+          <button type="button" role="menuitem" data-highlight-option="archive" hidden>Archive</button>
+        </div>
+        <div class="story-viewer-stage"></div>
+        <button class="story-nav story-nav-previous" type="button" aria-label="Previous story"></button>
+        <button class="story-nav story-nav-next" type="button" aria-label="Next story"></button>
+        <div class="story-viewer-caption"></div>
+        <div class="story-actions">
+          <form class="story-reply-form"><label class="visually-hidden" for="story-reply">Reply to story</label><input id="story-reply" maxlength="500" placeholder="Reply to story…" required /><button type="submit">Send</button></form>
+          <button type="button" class="story-like-button" aria-label="Like story" aria-pressed="false">♡ <span class="story-like-count"></span></button>
+          <button type="button" class="story-direct-highlight" data-story-option="highlight" hidden>Add to highlight</button>
+          <button type="button" class="story-viewers-button" hidden>Viewers</button>
+        </div>
+      </section>
+    </div>
+    <div class="home-controls-backdrop" hidden><section class="home-panel" role="dialog" aria-modal="true" aria-labelledby="home-panel-title"><header><h2 id="home-panel-title"></h2><button type="button" class="home-panel-close" aria-label="Close settings">×</button></header><div class="home-panel-content"></div></section></div>
+    <div class="notifications-backdrop" hidden>
+      <section id="notifications-dialog" class="home-panel notifications-panel" role="dialog" aria-modal="true" aria-labelledby="notifications-title" aria-describedby="notifications-note">
+        <header><h2 id="notifications-title">Notifications</h2><button type="button" class="notifications-close" aria-label="Close notifications">×</button></header>
+        <p id="notifications-note">Local preview only · no live notification delivery.</p>
+        <div class="notifications-content"></div>
+      </section>
+    </div>
+    <div id="share-feedback" class="share-feedback" role="status" aria-live="polite" hidden></div>
+
+    <script type="importmap">
+{
+  "imports": {
+    "./src/components/feedback.js": "./src/components/feedback.js?v=62",
+    "./src/components/post-card.js": "./src/components/post-card.js?v=62",
+    "./src/core/account-lock.js": "./src/core/account-lock.js?v=62",
+    "./src/core/dom.js": "./src/core/dom.js?v=62",
+    "./src/core/events.js": "./src/core/events.js?v=62",
+    "./src/core/local-preview.js": "./src/core/local-preview.js?v=62",
+    "./src/core/media-links.js": "./src/core/media-links.js?v=62",
+    "./src/core/navigation.events.js": "./src/core/navigation.events.js?v=62",
+    "./src/core/navigation.js": "./src/core/navigation.js?v=62",
+    "./src/core/social.js": "./src/core/social.js?v=62",
+    "./src/core/state.js": "./src/core/state.js?v=62",
+    "./src/core/utils.js": "./src/core/utils.js?v=62",
+    "./src/data/entities.js": "./src/data/entities.js?v=62",
+    "./src/data/sample-data.js": "./src/data/sample-data.js?v=62",
+    "./src/features/account-model.js": "./src/features/account-model.js?v=62",
+    "./src/features/account-settings.js": "./src/features/account-settings.js?v=62",
+    "./src/features/comments.events.js": "./src/features/comments.events.js?v=62",
+    "./src/features/comments.js": "./src/features/comments.js?v=62",
+    "./src/features/create.events.js": "./src/features/create.events.js?v=62",
+    "./src/features/create.js": "./src/features/create.js?v=62",
+    "./src/features/explore.events.js": "./src/features/explore.events.js?v=62",
+    "./src/features/explore.js": "./src/features/explore.js?v=62",
+    "./src/features/follows.events.js": "./src/features/follows.events.js?v=62",
+    "./src/features/follows.js": "./src/features/follows.js?v=62",
+    "./src/features/highlights.events.js": "./src/features/highlights.events.js?v=62",
+    "./src/features/highlights.js": "./src/features/highlights.js?v=62",
+    "./src/features/home-controls.js": "./src/features/home-controls.js?v=62",
+    "./src/features/home.js": "./src/features/home.js?v=62",
+    "./src/features/likes.events.js": "./src/features/likes.events.js?v=62",
+    "./src/features/likes.js": "./src/features/likes.js?v=62",
+    "./src/features/media-options.events.js": "./src/features/media-options.events.js?v=62",
+    "./src/features/media-options.js": "./src/features/media-options.js?v=62",
+    "./src/features/message-access.js": "./src/features/message-access.js?v=62",
+    "./src/features/messages.events.js": "./src/features/messages.events.js?v=62",
+    "./src/features/messages.js": "./src/features/messages.js?v=62",
+    "./src/features/notifications.js": "./src/features/notifications.js?v=62",
+    "./src/features/profile.events.js": "./src/features/profile.events.js?v=62",
+    "./src/features/profile.js": "./src/features/profile.js?v=62",
+    "./src/features/reels.js": "./src/features/reels.js?v=62",
+    "./src/features/saved.events.js": "./src/features/saved.events.js?v=62",
+    "./src/features/sharing.events.js": "./src/features/sharing.events.js?v=62",
+    "./src/features/sharing.js": "./src/features/sharing.js?v=62",
+    "./src/features/stories.events.js": "./src/features/stories.events.js?v=62",
+    "./src/features/stories.js": "./src/features/stories.js?v=62",
+    "./src/features/story-composition.js": "./src/features/story-composition.js?v=62",
+    "./src/features/story-options.js": "./src/features/story-options.js?v=62",
+    "./src/features/story-tools.js": "./src/features/story-tools.js?v=62",
+    "./src/media/demo-sources.js": "./src/media/demo-sources.js?v=62",
+    "./src/media/video.events.js": "./src/media/video.events.js?v=62",
+    "./src/media/video.js": "./src/media/video.js?v=62",
+    "./src/storage/browser-storage.js": "./src/storage/browser-storage.js?v=62",
+    "./src/storage/local-session.js": "./src/storage/local-session.js?v=62",
+    "./src/storage/preferences.js": "./src/storage/preferences.js?v=62"
+  }
+}
+    </script>
+    <script type="module" src="app.js?v=62"></script>
+  </body>
+</html>

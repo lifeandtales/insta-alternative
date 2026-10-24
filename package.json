@@ -1,0 +1,11 @@
+{
+  "name": "insta-alternative",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A browser-based social app prototype, organized by feature.",
+  "scripts": {
+    "start": "python3 -m http.server 8000 --bind 127.0.0.1",
+    "test": "node --experimental-vm-modules --test tests/*.test.js"
+  }
+}

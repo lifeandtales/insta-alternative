@@ -1,0 +1,118 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { loadApp } from './helpers/app-harness.js';
+
+test('welcome pause is reversible and applies only to local development hosts', async () => {
+    const app = await loadApp();
+    const preview = app.exportsOf('src/core/local-preview.js');
+    assert.equal(preview.opensDirectlyToHome('http://127.0.0.1:8000/'),true);
+    assert.equal(preview.opensDirectlyToHome('http://localhost:8000/'),true);
+    assert.equal(preview.opensDirectlyToHome('https://example.com/'),false);
+    assert.equal(preview.opensDirectlyToHome('http://127.0.0.1:8000/?welcome=1'),false);
+    preview.localPreviewSettings.pauseWelcome=false;
+    assert.equal(preview.opensDirectlyToHome('http://127.0.0.1:8000/'),false);
+});
+
+test('Story creation starts with media only and canceled or unsupported selection does not advance', async () => {
+    const app = await loadApp();
+    const {state} = app.exportsOf('src/core/state.js');
+    const stories = app.exportsOf('src/features/stories.js');
+    stories.openStoryCreator();
+    assert.equal(app.element('.story-media-step').hidden, false);
+    assert.equal(app.element('.story-editor-step').hidden, true);
+    assert.equal(state.pendingStoryMedia, null);
+    const change = app.listeners.find(item => item.key === '#story-upload' && item.type === 'change').callback;
+    change({target:{files:[],value:''}});
+    assert.equal(app.element('.story-editor-step').hidden, true);
+    const invalid = {files:[{type:'text/plain',name:'sample.txt'}],value:'sample.txt'};
+    change({target:invalid});
+    assert.equal(invalid.value, '');
+    assert.equal(state.pendingStoryMedia, null);
+    assert.equal(app.element('.story-editor-step').hidden, true);
+});
+
+test('valid Story media reveals editor, Back is reversible, and invalid scheduling retains media', async () => {
+    const app = await loadApp();
+    const {state} = app.exportsOf('src/core/state.js');
+    const stories = app.exportsOf('src/features/stories.js');
+    const events = app.exportsOf('src/features/stories.events.js');
+    app.element('.story-selected-preview').append = () => {};
+    stories.openStoryCreator();
+    const change = app.listeners.find(item => item.key === '#story-upload' && item.type === 'change').callback;
+    const file = new Blob(['fixture'],{type:'image/png'});
+    change({target:{files:[file],value:'fixture.png'}});
+    const media = state.pendingStoryMedia;
+    assert.equal(media.type,'image');
+    assert.equal(app.element('.story-editor-step').hidden,false);
+    assert.equal(app.element('.story-create-dialog').classList.contains('story-editing'),true);
+    assert.equal(app.element('.story-media-step').hidden,true);
+    app.element('#story-caption').value='Retained caption';
+    app.element('#story-audience').value='close-friends';
+    app.element('#story-schedule-time').value='2030-01-01T10:30';
+    events.handleStoryClick({target:{closest: selector => selector === '.story-create-back' ? {} : null}});
+    assert.equal(app.element('.story-editor-step').hidden,true);
+    assert.equal(state.pendingStoryMedia,media);
+    assert.equal(app.element('#story-caption').value,'Retained caption');
+    assert.equal(app.element('#story-audience').value,'close-friends');
+    assert.equal(app.element('#story-schedule-time').value,'2030-01-01T10:30');
+    change({target:{files:[],value:''}});
+    assert.equal(app.element('.story-editor-step').hidden,true);
+    stories.closeStoryCreator();
+    assert.equal(app.element('.story-exit-backdrop').hidden,false);
+    assert.equal(state.pendingStoryMedia,media);
+    app.element('#story-schedule-time').value='invalid';
+    assert.equal(stories.scheduleOrPublishStory(media),false);
+    assert.equal(state.pendingStoryMedia,media);
+    URL.revokeObjectURL(media.media);
+});
+
+test('video Story preview shares viewer sizing classes and exposes reversible playback', async () => {
+    const app = await loadApp();
+    const stories = app.exportsOf('src/features/stories.js');
+    const events = app.exportsOf('src/features/stories.events.js');
+    let renderedMedia;
+    app.element('.story-selected-preview').append = media => { renderedMedia=media; };
+    stories.openStoryCreator();
+    const change=app.listeners.find(item=>item.key==='#story-upload' && item.type==='change').callback;
+    const file=new Blob(['video fixture'],{type:'video/mp4'});
+    change({target:{files:[file],value:'fixture.mp4'}});
+    assert.equal(renderedMedia.className,'story-viewer-video');
+    assert.equal(renderedMedia.controls,true);
+    assert.equal(renderedMedia.playsInline,true);
+    assert.equal(app.element('.story-preview-play').hidden,false);
+    let plays=0, pauses=0;
+    const video=app.element('.story-selected-preview video');
+    video.paused=true;video.play=()=>{plays++;return Promise.resolve();};video.pause=()=>{pauses++;};
+    const event={target:{closest:selector=>selector==='.story-preview-play'?{}:null}};
+    events.handleStoryClick(event);
+    assert.equal(plays,1);
+    video.paused=false;events.handleStoryClick(event);
+    assert.equal(pauses,1);
+    stories.setStoryCreationStep(false);
+    assert.equal(pauses,2);
+    URL.revokeObjectURL(app.exportsOf('src/core/state.js').state.pendingStoryMedia.media);
+});
+
+test('own Story opens creator when inactive while active Story keeps its viewer and separate Add action', async () => {
+    const app = await loadApp();
+    const {state} = app.exportsOf('src/core/state.js');
+    const {currentUser} = app.exportsOf('src/data/sample-data.js');
+    const stories = app.exportsOf('src/features/stories.js');
+    state.stories=[];
+    stories.openStoryGroup(currentUser.handle);
+    assert.equal(app.element('.story-create-backdrop').hidden,false);
+    assert.equal(app.element('.story-editor-step').hidden,true);
+    stories.closeStoryCreator();
+    state.stories=[{id:'active-fixture',handle:currentUser.handle,user:currentUser.name,avatar:currentUser.avatar,mine:true,type:'image',media:'fixture.png',caption:'',expiresAt:Date.now()+86400000}];
+    stories.renderStories();
+    assert.match(app.element('#stories-list').innerHTML,/story-add-control/);
+    assert.match(app.element('#stories-list').innerHTML,/Your story/);
+    app.element('.story-reply-form').reset = () => {};
+    app.element('.story-like-button').firstChild = {textContent:''};
+    stories.openStoryGroup(currentUser.handle);
+    assert.equal(app.element('.story-viewer-backdrop').hidden,false);
+    assert.equal(app.element('.story-create-backdrop').hidden,true);
+    app.exportsOf('src/features/stories.events.js').handleStoryOwnerClick({target:{closest: selector => selector === '.story-add-control' ? {} : null}});
+    assert.equal(app.element('.story-create-backdrop').hidden,false);
+    assert.equal(app.element('.story-editor-step').hidden,true);
+});

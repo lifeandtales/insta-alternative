@@ -1,0 +1,225 @@
+.app-shell:not(.view-home) {
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+
+.app-shell.view-home {
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+
+.app-shell.view-home .topbar,
+.app-shell.view-home .right-rail,
+.app-shell:not(.view-home) .right-rail {
+  display: none;
+}
+
+.app-shell.view-home .brand-block {
+  position: absolute;
+  z-index: 2;
+  top: 18px;
+  left: 50%;
+  gap: 7px;
+  margin: 0;
+  transform: translateX(-50%);
+}
+
+.app-shell.view-home .brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  font-size: 1rem;
+}
+
+.app-shell.view-home .brand-block h1 {
+  font-size: 1.05rem;
+}
+
+.app-shell.view-profile .view-heading {
+  display: none;
+}
+
+.app-shell.view-home .main-area {
+  padding-top: 72px;
+}
+
+.app-shell.view-home .home-stories {
+  display: block;
+}
+
+.app-shell.view-home .home-create-row {
+  display: flex;
+  justify-content: flex-start;
+  margin: 0 0 18px;
+}
+
+.app-shell:not(.view-home):not(.view-profile) .brand-block {
+  display: none;
+}
+
+.app-shell.view-home .search-wrap,
+.app-shell.view-home .desktop-profile-button {
+  display: none;
+}
+
+.app-shell:not(.view-home) .create-button {
+  display: none;
+}
+
+.stories-list {
+  display: flex;
+  gap: 15px;
+  padding: 6px 2px 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.stories-list::-webkit-scrollbar {
+  display: none;
+}
+
+.story-item {
+  min-width: 74px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.76rem;
+}
+
+.story-own-group {
+  position: relative;
+  min-width: 74px;
+  display: flex;
+  justify-content: center;
+}
+
+.story-options-toggle {
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  background: rgba(37, 28, 50, 0.78);
+  color: #fff;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.story-viewer-header .story-options-toggle {
+  position: static;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 0.9rem;
+}
+
+.story-highlight-share {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.3);
+  color: #fff;
+}
+
+.story-highlight-share svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.story-options-menu {
+  position: fixed;
+  z-index: 70;
+  width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 14px 38px rgba(30, 20, 45, 0.22);
+}
+
+.story-options-menu[hidden] {
+  display: none;
+}
+
+.story-options-menu button {
+  padding: 11px 10px;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.story-options-menu button:hover:not(:disabled) {
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.story-options-menu [data-highlight-option="delete"] {
+  color: #c73555;
+}
+
+.story-options-menu button:disabled {
+  color: #aaa4b4;
+  cursor: not-allowed;
+}
+
+.story-ring {
+  position: relative;
+  width: 66px;
+  height: 66px;
+  display: block;
+  padding: 3px;
+  border: 2px solid #d7d2e0;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.story-ring.has-story {
+  border-color: transparent;
+  background: linear-gradient(135deg, #7c3aed, #ec4899, #f59e0b);
+}
+
+.story-ring img {
+  width: 100%;
+  height: 100%;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.story-add-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -1px;
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+
+/* The Home brand belongs to the scroll content, never to a sticky overlay. */
+.home-brand-header { display: none; }
+.app-shell.view-home .home-brand-header { display: flex; align-items: center; justify-content: center; position: relative; min-height: 64px; margin-bottom: 12px; }
+.home-brand { font-size: 34px; font-weight: 800; letter-spacing: -2px; color: var(--text); }
+.app-shell.view-home .home-brand-header .home-notifications { top: 12px; right: 0; }
