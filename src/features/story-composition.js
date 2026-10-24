@@ -67,6 +67,7 @@ function renderLayer(layer, editing) {
     }
     const node=document.createElement('div');node.className=`story-composition-layer story-layer-${layer.type}`;node.dataset.layerId=layer.id;
     node.style.left=`${number(layer.x,.5,0,1)*100}%`;node.style.top=`${number(layer.y,.4,0,1)*100}%`;
+    node.style.rotate=`${number(layer.rotation,0,-360,360)}deg`;
     node.style.fontSize=`${number(layer.size,7,2,25)}cqw`;node.style.color=layer.color||'#ffffff';
     node.style.fontFamily={sans:'Inter, sans-serif',serif:'Georgia, serif',mono:'monospace'}[layer.font]||'Inter, sans-serif';
     const text=String(layer.text||'');

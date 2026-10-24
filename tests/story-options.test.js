@@ -66,3 +66,17 @@ test('closing selected media asks to save or discard, and Keep editing preserves
     assert.equal(app.element('#story-audience').value, 'all');
 });
 
+
+ test('blank Story page clicks do not prompt; explicit Close and Back do',async()=>{
+    const app=await loadApp();const {state}=app.exportsOf('src/core/state.js');
+    const stories=app.exportsOf('src/features/stories.js'),options=app.exportsOf('src/features/story-options.js');
+    const events=app.exportsOf('src/features/stories.events.js');
+    stories.openStoryCreator();state.pendingStoryMedia={type:'image',media:'fixture.png'};
+    events.handleStoryClick({target:app.element('.story-create-backdrop')});
+    assert.equal(app.element('.story-exit-backdrop').hidden,true);
+    for(const selector of ['.story-create-close','.story-create-back']){
+        events.handleStoryClick({target:{closest:s=>s===selector?{}:null}});
+        assert.equal(app.element('.story-exit-backdrop').hidden,false);
+        options.closeStoryExitDialog();
+    }
+});

@@ -97,7 +97,7 @@ export function registerKeyboardEvents() {
             closeCreateMenu();
         if (event.key === "Escape" && !createUploadBackdrop.hidden)
             closeCreateUpload();
-        if (event.key === "Escape" && !document.querySelector(".story-create-backdrop").hidden)
+        if (event.key === "Escape" && !state.pendingStoryMedia && !document.querySelector(".story-create-backdrop").hidden)
             closeStoryCreator();
         if (event.key === "Escape" && !document.querySelector(".story-settings-backdrop").hidden)
             closeStorySettings();

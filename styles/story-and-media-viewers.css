@@ -725,3 +725,11 @@ body.video-fullscreen-open {
 .story-tool-form p { font-size: .8rem; line-height: 1.5; }
 .story-tool-error { color: #a52d46; }
 .story-tools-dialog :is(button,input,select):focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+
+/* Tool subpanels stay over the Story and return directly to its editor. */
+.story-tool-active .story-tool-grid { display: none; }
+.story-tool-mini { background: #0b081544; align-items: start; padding-top: max(80px, env(safe-area-inset-top)); }
+.story-tool-mini .story-tools-dialog { max-width: 390px; }
+.story-sticker-picker { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.story-sticker-picker button { min-height: 58px; font-size: 2rem; border-radius: 12px; background: #f5f1fa; }
+.story-selected-preview { touch-action: none; }

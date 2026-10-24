@@ -1,12 +1,12 @@
 /* Ordered stylesheet entry point. Keep imports in this order to preserve the cascade. */
-@import url("styles/base.css?v=62");
-@import url("styles/posts-and-dialogs.css?v=62");
-@import url("styles/sharing-and-panels.css?v=62");
-@import url("styles/home-and-stories.css?v=62");
-@import url("styles/story-and-media-viewers.css?v=62");
-@import url("styles/explore-and-reels.css?v=62");
-@import url("styles/messages.css?v=62");
-@import url("styles/profile.css?v=62");
-@import url("styles/responsive.css?v=62");
-@import url("styles/viewport.css?v=62");
-@import url("styles/welcome.css?v=62");
+@import url("styles/base.css?v=64");
+@import url("styles/posts-and-dialogs.css?v=64");
+@import url("styles/sharing-and-panels.css?v=64");
+@import url("styles/home-and-stories.css?v=64");
+@import url("styles/story-and-media-viewers.css?v=64");
+@import url("styles/explore-and-reels.css?v=64");
+@import url("styles/messages.css?v=64");
+@import url("styles/profile.css?v=64");
+@import url("styles/responsive.css?v=64");
+@import url("styles/viewport.css?v=64");
+@import url("styles/welcome.css?v=64");

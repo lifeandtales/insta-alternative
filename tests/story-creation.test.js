@@ -50,13 +50,14 @@ test('valid Story media reveals editor, Back is reversible, and invalid scheduli
     app.element('#story-audience').value='close-friends';
     app.element('#story-schedule-time').value='2030-01-01T10:30';
     events.handleStoryClick({target:{closest: selector => selector === '.story-create-back' ? {} : null}});
-    assert.equal(app.element('.story-editor-step').hidden,true);
+    assert.equal(app.element('.story-editor-step').hidden,false);
+    assert.equal(app.element('.story-exit-backdrop').hidden,false);
     assert.equal(state.pendingStoryMedia,media);
     assert.equal(app.element('#story-caption').value,'Retained caption');
     assert.equal(app.element('#story-audience').value,'close-friends');
     assert.equal(app.element('#story-schedule-time').value,'2030-01-01T10:30');
     change({target:{files:[],value:''}});
-    assert.equal(app.element('.story-editor-step').hidden,true);
+    assert.equal(app.element('.story-editor-step').hidden,false);
     stories.closeStoryCreator();
     assert.equal(app.element('.story-exit-backdrop').hidden,false);
     assert.equal(state.pendingStoryMedia,media);

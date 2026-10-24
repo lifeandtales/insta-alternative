@@ -124,8 +124,7 @@ export function handleStoryClick(event) {
         return true;
     }
     if (event.target.closest('.story-create-back')) {
-        setStoryCreationStep(false);
-        document.getElementById('story-upload').focus();
+        closeStoryCreator();
         return true;
     }
     const resumeDraft = event.target.closest('[data-story-draft], [data-resume-story-draft]');
@@ -199,7 +198,7 @@ export function handleStoryClick(event) {
         });
         return true;
     }
-    if (event.target.closest(".story-create-close") || event.target === document.querySelector(".story-create-backdrop")) {
+    if (event.target.closest(".story-create-close")) {
         closeStoryCreator();
         return true;
     }

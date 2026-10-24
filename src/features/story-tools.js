@@ -40,6 +40,13 @@ function closeTools(){
     if(pending() && !state.deletionRequestedAt)document.querySelector('.story-tools-open').focus();
 }
 function toolForm(tool){
+    const popup=document.querySelector('.story-tools-backdrop');
+    popup.classList.add('story-tool-active');
+    popup.classList.toggle('story-tool-mini',tool==='labels');
+    document.getElementById('story-tools-title').textContent=({labels:'Location / Hashtag',sticker:'Stickers / Emojis',text:'Text / @mentions'})[tool]||tool.charAt(0).toUpperCase()+tool.slice(1);
+    if(tool==='sticker'){
+        document.querySelector('.story-tool-options').innerHTML=`<div class="story-sticker-picker">${['🙂','😂','😍','🥳','❤️','✨','🔥','🌈','🌸','☀️','🎉','💯','👏','🙌','🦋','🌿','⭐','💫','🎂','☕','📍','✈️','🏖️','🎵'].map(emoji=>`<button type="button" data-story-sticker="${emoji}" aria-label="Add ${emoji}">${emoji}</button>`).join('')}</div>`;return;
+    }
     const e=storyComposition(pending().edits), layer=e.layers.find(item=>item.id===selectedLayer);
     let fields='';
     if(tool==='text')fields=`<p>Text may include @mentions. Suggestions resolve only local available accounts; no notifications are sent.</p>${input('text','Text',layer?.type==='text'?layer.text:'','text','maxlength="500" list="story-mention-suggestions" required')}<datalist id="story-mention-suggestions"></datalist><label>Font<select name="font">${['sans','serif','mono'].map(v=>`<option ${layer?.font===v?'selected':''}>${v}</option>`).join('')}</select></label>${range('size','Text size (% of Story width)',layer?.size||7,2,20,.5)}${input('color','Color',layer?.color||'#ffffff','color')}`;
@@ -57,6 +64,8 @@ function toolForm(tool){
 function openTools(){
     if(!pending() || !mayInteract())return;
     ensureHistory();
+    document.querySelector('.story-tools-backdrop').classList.remove('story-tool-active','story-tool-mini');
+    document.getElementById('story-tools-title').textContent='Story tools';
     document.querySelector('.story-tool-options').replaceChildren();
     document.querySelector('[data-story-tool="video"]').hidden=pending().type!=='video';
     document.querySelector('.story-tools-backdrop').hidden=false;
@@ -101,6 +110,8 @@ export function registerStoryToolEvents(){
         if(target.closest('.story-undo') || target.closest('.story-redo')){
             ensureHistory();pending().edits=target.closest('.story-undo')?history.undo():history.redo();repaint();return;
         }
+        const sticker=target.closest('[data-story-sticker]');
+        if(sticker){const e=storyComposition(pending().edits);const layer={id:id(),type:'emoji',text:sticker.dataset.storySticker,x:.5,y:.4,size:15};e.layers.push(layer);selectedLayer=layer.id;commitStoryEdit(e);closeTools();return;}
         const tool=target.closest('[data-story-tool]');if(tool){toolForm(tool.dataset.storyTool);return;}
         if(target.closest('.story-draw-done')){drawMode=null;moveMode=false;repaint();return;}
         if(target.closest('[data-story-drag-media]')){moveMode=true;drawMode=null;closeTools();repaint();return;}
@@ -122,27 +133,53 @@ export function registerStoryToolEvents(){
         const e=storyComposition(pending().edits);e.music={src:URL.createObjectURL(file),title:`User-selected: ${file.name.replace(/[\u0000-\u001f\u007f]/g,'').slice(0,90)}`,start:0,end:null,volume:1};commitStoryEdit(e);toolForm('music');
     });
     const stage=preview();
+    const pointers=new Map();
+    const pair=()=>{const [a,b]=[...pointers.values()];return {distance:Math.hypot(b.x-a.x,b.y-a.y),angle:Math.atan2(b.y-a.y,b.x-a.x),x:(a.x+b.x)/2,y:(a.y+b.y)/2};};
     stage.addEventListener('pointerdown',event=>{
-        if(!pending() || !mayInteract() || !event.isPrimary || event.target.closest('audio, .story-music-toggle'))return;
-        const layer=event.target.closest('.story-composition-layer');if(!layer&&!drawMode&&!moveMode)return;
-        ensureHistory();const rect=stage.getBoundingClientRect(), point={x:clamp((event.clientX-rect.left)/rect.width,0,1),y:clamp((event.clientY-rect.top)/rect.height,0,1)};
-        if(layer){selectedLayer=layer.dataset.layerId;layer.classList.add('story-layer-selected');}
-        gesture={e:storyComposition(pending().edits),point,rect,layer:selectedLayer,draw:drawMode?{id:id(),type:'draw',...drawMode,points:[point]}:null,mode:drawMode?'draw':moveMode?'media':'layer'};
+        if(!pending() || !mayInteract() || event.target.closest('audio, .story-music-toggle, button'))return;
+        if(pointers.size>=2)return;
+        ensureHistory();
+        pointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
         stage.setPointerCapture(event.pointerId);event.preventDefault();
+        if(pointers.size===2 && !drawMode){
+            // Start from the on-screen single-finger position without losing that movement.
+            const e=storyComposition(gesture?.next||pending().edits);
+            gesture={e,rect:stage.getBoundingClientRect(),mode:'pinch',layer:gesture?.mode==='layer'?gesture.layer:null,pair:pair()};return;
+        }
+        if(pointers.size===2)return;
+        const layer=event.target.closest('.story-composition-layer');
+        const rect=stage.getBoundingClientRect(),point={x:clamp((event.clientX-rect.left)/rect.width,0,1),y:clamp((event.clientY-rect.top)/rect.height,0,1)};
+        if(layer){selectedLayer=layer.dataset.layerId;layer.classList.add('story-layer-selected');}
+        gesture={e:storyComposition(pending().edits),point,rect,layer:layer?.dataset.layerId,draw:drawMode?{id:id(),type:'draw',...drawMode,points:[point]}:null,mode:drawMode?'draw':layer?'layer':'media'};
     });
     stage.addEventListener('pointermove',event=>{
-        if(!gesture)return;
-        const point={x:clamp((event.clientX-gesture.rect.left)/gesture.rect.width,0,1),y:clamp((event.clientY-gesture.rect.top)/gesture.rect.height,0,1)}, e=storyComposition(gesture.e),dx=point.x-gesture.point.x,dy=point.y-gesture.point.y;
-        if(gesture.mode==='draw'){
-            if(gesture.draw.mode==='line'||gesture.draw.mode==='arrow')gesture.draw.points=[gesture.point,point];
-            else if(gesture.draw.points.length<1000)gesture.draw.points.push(point);
-            e.layers.push(gesture.draw);
-        }else if(gesture.mode==='media'){e.media.x=clamp(e.media.x+dx*100,-100,100);e.media.y=clamp(e.media.y+dy*100,-100,100);}
-        else{const item=e.layers.find(layer=>layer.id===gesture.layer);if(item){item.x=clamp(item.x+dx,0,1);item.y=clamp(item.y+dy,0,1);}}
+        if(!gesture || !pointers.has(event.pointerId))return;
+        pointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+        const e=storyComposition(gesture.e);
+        if(gesture.mode==='pinch'){
+            if(pointers.size!==2)return;
+            const now=pair(),base=gesture.pair,ratio=now.distance/Math.max(1,base.distance);
+            const dx=(now.x-base.x)/gesture.rect.width,dy=(now.y-base.y)/gesture.rect.height;
+            const rotation=Math.atan2(Math.sin(now.angle-base.angle),Math.cos(now.angle-base.angle))*180/Math.PI;
+            const layer=e.layers.find(item=>item.id===gesture.layer);
+            if(layer){layer.size=clamp((layer.size||7)*ratio,2,25);layer.x=clamp(layer.x+dx,0,1);layer.y=clamp(layer.y+dy,0,1);layer.rotation=((layer.rotation||0)+rotation+540)%360-180;}
+            else{e.media.zoom=clamp(e.media.zoom*ratio,.2,4);e.media.x=clamp(e.media.x+dx*100,-100,100);e.media.y=clamp(e.media.y+dy*100,-100,100);e.media.rotation=(e.media.rotation+rotation+540)%360-180;}
+        }else{
+            const point={x:clamp((event.clientX-gesture.rect.left)/gesture.rect.width,0,1),y:clamp((event.clientY-gesture.rect.top)/gesture.rect.height,0,1)},dx=point.x-gesture.point.x,dy=point.y-gesture.point.y;
+            if(gesture.mode==='draw'){
+                if(gesture.draw.mode==='line'||gesture.draw.mode==='arrow')gesture.draw.points=[gesture.point,point];
+                else if(gesture.draw.points.length<1000)gesture.draw.points.push(point);
+                e.layers.push(gesture.draw);
+            }else if(gesture.mode==='media'){e.media.x=clamp(e.media.x+dx*100,-100,100);e.media.y=clamp(e.media.y+dy*100,-100,100);}
+            else{const item=e.layers.find(layer=>layer.id===gesture.layer);if(item){item.x=clamp(item.x+dx,0,1);item.y=clamp(item.y+dy,0,1);}}
+        }
         gesture.next=e;applyStoryComposition(stage,{...pending(),edits:e},{editing:true});
     });
-    stage.addEventListener('pointerup',()=>{if(gesture){const next=gesture.next;gesture=null;if(next)commitStoryEdit(next);}});
-    stage.addEventListener('pointercancel',()=>{gesture=null;repaint();});
+    stage.addEventListener('pointerup',event=>{
+        pointers.delete(event.pointerId);
+        if(gesture){const next=gesture.next;gesture=null;pointers.clear();if(next)commitStoryEdit(next);}
+    });
+    stage.addEventListener('pointercancel',()=>{pointers.clear();gesture=null;repaint();});
     stage.addEventListener('keydown',event=>{
         const target=event.target.closest('.story-composition-layer');if(!target || !['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key) || !mayInteract())return;
         event.preventDefault();const e=storyComposition(pending().edits),layer=e.layers.find(item=>item.id===target.dataset.layerId);if(!layer)return;

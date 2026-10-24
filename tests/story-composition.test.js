@@ -39,3 +39,29 @@ test('pending accounts cannot commit composition changes',async()=>{
     assert.equal(app.exportsOf('src/features/story-tools.js').commitStoryEdit({layers:[{id:'x',text:'Blocked'}]}),false);
     assert.equal(state.pendingStoryMedia.edits,undefined);
 });
+
+test('two-finger media gestures resize and rotate together and undo as one edit',async()=>{
+    const app=await loadApp();const {state}=app.exportsOf('src/core/state.js');
+    state.pendingStoryMedia={type:'image',media:'fixture.png'};
+    const stage=app.element('.story-selected-preview');
+    stage.getBoundingClientRect=()=>({left:0,top:0,width:100,height:100});stage.setPointerCapture=()=>{};
+    const fire=(type,id,x,y)=>app.listeners.find(l=>l.key==='.story-selected-preview'&&l.type===type).callback({pointerId:id,clientX:x,clientY:y,target:{closest:()=>null},preventDefault(){}});
+    fire('pointerdown',1,25,50);fire('pointerdown',2,75,50);
+    fire('pointermove',2,25,100);fire('pointerup',2,25,100);
+    assert.ok(Math.abs(state.pendingStoryMedia.edits.media.rotation-90)<.001);
+    assert.equal(state.pendingStoryMedia.edits.media.y,25);
+    const click=app.listeners.find(l=>l.key==='document'&&l.type==='click'&&l.callback.toString().includes('story-undo')).callback;
+    click({target:{closest:s=>s==='.story-undo'?{}:null}});
+    assert.equal(state.pendingStoryMedia.edits.media.rotation,0);
+    assert.equal(state.pendingStoryMedia.edits.media.y,0);
+    fire('pointerdown',3,25,50);fire('pointerdown',4,75,50);fire('pointermove',4,100,50);fire('pointerup',4,100,50);
+    assert.equal(state.pendingStoryMedia.edits.media.zoom,1.5);
+});
+
+test('cancelling a gesture restores the saved composition',async()=>{
+    const app=await loadApp();const {state}=app.exportsOf('src/core/state.js');state.pendingStoryMedia={type:'image',media:'fixture.png'};
+    const stage=app.element('.story-selected-preview');stage.getBoundingClientRect=()=>({left:0,top:0,width:100,height:100});stage.setPointerCapture=()=>{};
+    const fire=(type,x,y)=>app.listeners.find(l=>l.key==='.story-selected-preview'&&l.type===type).callback({pointerId:1,clientX:x,clientY:y,target:{closest:()=>null},preventDefault(){}});
+    fire('pointerdown',20,20);fire('pointermove',40,40);fire('pointercancel',40,40);
+    assert.equal(state.pendingStoryMedia.edits,undefined);
+});
