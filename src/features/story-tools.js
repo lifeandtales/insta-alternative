@@ -14,9 +14,34 @@ const numeric=(form,name)=>Number(val(form,name));
 const input=(name,label,value,type='number',extra='')=>`<label>${label}<input name="${name}" type="${type}" value="${escapeHtml(String(value??''))}" ${extra} /></label>`;
 const range=(name,label,value,min,max,step)=>input(name,label,value,'range',`min="${min}" max="${max}" step="${step}"`);
 
+// Small capture zones give quarter turns a detent without preventing free rotation.
+export function snapStoryMedia(media) {
+    const normalized=((media.rotation+180)%360+360)%360-180;
+    const nearest=Math.round(normalized/90)*90;
+    const rotationSnap=Math.abs(normalized-nearest)<=4;
+    const sizeSnap=Math.abs(media.zoom-1)<=.035;
+    return {rotation:rotationSnap?(nearest||0):normalized,zoom:sizeSnap?1:media.zoom,rotationSnap,sizeSnap};
+}
+let guideRevision=0;
+function clearAlignmentGuides(){
+    guideRevision++;
+    const stage=preview();stage.classList.remove('story-angle-snapped','story-size-snapped');
+    stage.removeAttribute('data-alignment-hint');
+}
+function showAlignmentGuides(snap){
+    guideRevision++;
+    const stage=preview();
+    stage.classList.toggle('story-angle-snapped',snap.rotationSnap);
+    stage.classList.toggle('story-size-snapped',snap.sizeSnap);
+    const label=[snap.rotationSnap?`${(snap.rotation+360)%360}°`:'',snap.sizeSnap?'Original frame size':''].filter(Boolean).join(' · ');
+    if(label)stage.setAttribute('data-alignment-hint',label);else stage.removeAttribute('data-alignment-hint');
+}
+function fadeAlignmentGuides(){const revision=guideRevision;setTimeout(()=>{if(revision===guideRevision)clearAlignmentGuides();},650);}
+
+
 function ensureHistory(){
     if(storyRef!==pending()){
-        storyRef=pending();history=storyRef?compositionHistory(storyRef.edits):null;selectedLayer=null;drawMode=null;moveMode=false;
+        clearAlignmentGuides();hideDeleteTarget();closeInlineText();storyRef=pending();history=storyRef?compositionHistory(storyRef.edits):null;selectedLayer=null;drawMode=null;moveMode=false;
     }
     return history;
 }
@@ -39,7 +64,26 @@ function closeTools(){
     document.querySelector('.story-create-dialog').inert=false;
     if(pending() && !state.deletionRequestedAt)document.querySelector('.story-tools-open').focus();
 }
+function closeInlineText(){document.querySelector('.story-inline-text').hidden=true;}
+function openInlineText(layerId=null){
+    if(!pending()||!mayInteract())return;
+    ensureHistory();selectedLayer=layerId;
+    const layer=storyComposition(pending().edits).layers.find(item=>item.id===layerId);
+    closeTools();
+    const box=document.querySelector('.story-inline-text');box.hidden=false;
+    box.style.left=`${clamp(layer?.x??.5,.15,.85)*100}%`;box.style.top=`${clamp(layer?.y??.4,.15,.7)*100}%`;box.style.width=`${(layer?.width??.8)*100}%`;
+    box.innerHTML=`<form class="story-tool-form story-inline-form" data-tool="text"><textarea name="text" maxlength="500" placeholder="Write text or @mention" aria-label="Story text">${escapeHtml(layer?.text||'')}</textarea><div id="story-mention-suggestions" class="story-inline-mentions"></div><div class="story-inline-format"><select name="font" aria-label="Font">${['sans','serif','mono'].map(font=>`<option ${layer?.font===font?'selected':''}>${font}</option>`).join('')}</select><input name="color" aria-label="Text color" type="color" value="${escapeHtml(layer?.color||'#ffffff')}" /><input name="size" type="range" aria-label="Text size" min="2" max="20" step=".5" value="${layer?.size||7}" /><button type="button" data-story-text-cancel>Cancel</button><button type="submit">Done</button></div></form>`;
+    box.querySelector('textarea').focus();
+}
+function hideDeleteTarget(){const target=document.querySelector('.story-delete-target');target.hidden=true;target.classList.remove('story-delete-ready');}
+export function isStoryDeleteDrop(rect,x,y){return x>=rect.left&&x<=rect.right&&y>=rect.top&&y<=rect.bottom;}
+function updateDeleteTarget(event){
+    const target=document.querySelector('.story-delete-target');target.hidden=false;
+    const over=isStoryDeleteDrop(target.getBoundingClientRect(),event.clientX,event.clientY);
+    target.classList.toggle('story-delete-ready',over);return over;
+}
 function toolForm(tool){
+    if(tool==='text'){openInlineText();return;}
     const popup=document.querySelector('.story-tools-backdrop');
     popup.classList.add('story-tool-active');
     popup.classList.toggle('story-tool-mini',tool==='labels');
@@ -80,7 +124,8 @@ function applyTool(form){
         if(type==='hashtag')text='#'+text.replace(/^#+/,'').replace(/\s+/g,'');
         const existing=tool==='text' ? e.layers.find(item=>item.id===selectedLayer && item.type==='text') : null;
         const mentions=[...text.matchAll(/@[a-zA-Z0-9._]+/g)].map(match=>state.accountDirectory.find(a=>a.handle.toLowerCase()===match[0].toLowerCase() && !state.blockedHandles.has(a.handle))).filter(Boolean).map(a=>({id:a.id,handle:a.handle}));
-        const layer={id:existing?.id||id(),x:existing?.x??.5,y:existing?.y??.4,type,text,font:val(form,'font')||'sans',color:val(form,'color')||'#ffffff',size:numeric(form,'size')||6,mentions};
+        const layer={...existing,id:existing?.id||id(),x:existing?.x??.5,y:existing?.y??.4,type,text,font:val(form,'font')||'sans',color:val(form,'color')||'#ffffff',size:numeric(form,'size')||6,mentions};
+        if(tool==='text'&&form.matches('.story-inline-form')){const field=form.querySelector('textarea');const width=field.getBoundingClientRect().width/preview().getBoundingClientRect().width;if(Number.isFinite(width))layer.width=clamp(width,.1,.9);}
         e.layers=existing?e.layers.map(item=>item.id===existing.id?layer:item):[...e.layers,layer];selectedLayer=layer.id;
     }
     if(tool==='move')Object.assign(e.media,{x:numeric(form,'x'),y:numeric(form,'y'),zoom:numeric(form,'zoom')});
@@ -98,13 +143,15 @@ function applyTool(form){
         }else if(e.music)Object.assign(e.music,{start,end,volume:numeric(form,'volume')});
         else{form.querySelector('.story-tool-error').textContent='Choose an audio file first.';return;}
     }
-    commitStoryEdit(e);closeTools();
+    commitStoryEdit(e);closeInlineText();closeTools();
 }
 
 export function registerStoryToolEvents(){
     document.addEventListener('click',event=>{
         const target=event.target;
-        if(target.closest('.story-tools-open')){openTools();return;}
+        if(target.closest('[data-story-text-cancel]')){closeInlineText();return;}
+        const mention=target.closest('[data-inline-mention]');if(mention){const field=document.querySelector('.story-inline-text textarea');field.value=field.value.replace(/@[a-zA-Z0-9._]*$/,mention.dataset.inlineMention);document.getElementById('story-mention-suggestions').replaceChildren();field.focus();return;}
+        if(target.closest('.story-tools-open')){closeInlineText();openTools();return;}
         if(target.closest('.story-tools-close') || target===document.querySelector('.story-tools-backdrop')){closeTools();return;}
         if(!pending() || !mayInteract())return;
         if(target.closest('.story-undo') || target.closest('.story-redo')){
@@ -124,7 +171,7 @@ export function registerStoryToolEvents(){
     document.addEventListener('input',event=>{
         const form=event.target.closest('.story-tool-form');if(!form || form.dataset.tool!=='text' || event.target.name!=='text')return;
         const value=event.target.value, match=/@[a-zA-Z0-9._]*$/.exec(value);
-        document.getElementById('story-mention-suggestions').innerHTML=match?state.accountDirectory.filter(a=>!state.blockedHandles.has(a.handle)&&a.handle.toLowerCase().startsWith(match[0].toLowerCase())).slice(0,8).map(a=>`<option value="${escapeHtml(value.slice(0,match.index)+a.handle)}">${escapeHtml(a.name)}</option>`).join(''):'';
+        document.getElementById('story-mention-suggestions').innerHTML=match?state.accountDirectory.filter(a=>!state.blockedHandles.has(a.handle)&&a.handle.toLowerCase().startsWith(match[0].toLowerCase())).slice(0,8).map(a=>`<button type="button" data-inline-mention="${escapeHtml(a.handle)}">${escapeHtml(a.name)} · ${escapeHtml(a.handle)}</button>`).join(''):'';
     });
     document.addEventListener('change',event=>{
         if(event.target.id!=='story-music-file' || !pending() || !mayInteract())return;
@@ -136,7 +183,7 @@ export function registerStoryToolEvents(){
     const pointers=new Map();
     const pair=()=>{const [a,b]=[...pointers.values()];return {distance:Math.hypot(b.x-a.x,b.y-a.y),angle:Math.atan2(b.y-a.y,b.x-a.x),x:(a.x+b.x)/2,y:(a.y+b.y)/2};};
     stage.addEventListener('pointerdown',event=>{
-        if(!pending() || !mayInteract() || event.target.closest('audio, .story-music-toggle, button'))return;
+        if(!pending() || !mayInteract() || event.target.closest('audio, .story-music-toggle, button') || !document.querySelector('.story-inline-text').hidden)return;
         if(pointers.size>=2)return;
         ensureHistory();
         pointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
@@ -163,7 +210,7 @@ export function registerStoryToolEvents(){
             const rotation=Math.atan2(Math.sin(now.angle-base.angle),Math.cos(now.angle-base.angle))*180/Math.PI;
             const layer=e.layers.find(item=>item.id===gesture.layer);
             if(layer){layer.size=clamp((layer.size||7)*ratio,2,25);layer.x=clamp(layer.x+dx,0,1);layer.y=clamp(layer.y+dy,0,1);layer.rotation=((layer.rotation||0)+rotation+540)%360-180;}
-            else{e.media.zoom=clamp(e.media.zoom*ratio,.2,4);e.media.x=clamp(e.media.x+dx*100,-100,100);e.media.y=clamp(e.media.y+dy*100,-100,100);e.media.rotation=(e.media.rotation+rotation+540)%360-180;}
+            else{e.media.zoom=clamp(e.media.zoom*ratio,.2,4);e.media.x=clamp(e.media.x+dx*100,-100,100);e.media.y=clamp(e.media.y+dy*100,-100,100);e.media.rotation=(e.media.rotation+rotation+540)%360-180;const snap=snapStoryMedia(e.media);e.media.rotation=snap.rotation;e.media.zoom=snap.zoom;showAlignmentGuides(snap);}
         }else{
             const point={x:clamp((event.clientX-gesture.rect.left)/gesture.rect.width,0,1),y:clamp((event.clientY-gesture.rect.top)/gesture.rect.height,0,1)},dx=point.x-gesture.point.x,dy=point.y-gesture.point.y;
             if(gesture.mode==='draw'){
@@ -173,13 +220,19 @@ export function registerStoryToolEvents(){
             }else if(gesture.mode==='media'){e.media.x=clamp(e.media.x+dx*100,-100,100);e.media.y=clamp(e.media.y+dy*100,-100,100);}
             else{const item=e.layers.find(layer=>layer.id===gesture.layer);if(item){item.x=clamp(item.x+dx,0,1);item.y=clamp(item.y+dy,0,1);}}
         }
+        if(gesture.mode==='layer'||(gesture.mode==='pinch'&&gesture.layer))gesture.deleteDrop=updateDeleteTarget(event);
         gesture.next=e;applyStoryComposition(stage,{...pending(),edits:e},{editing:true});
     });
     stage.addEventListener('pointerup',event=>{
         pointers.delete(event.pointerId);
-        if(gesture){const next=gesture.next;gesture=null;pointers.clear();if(next)commitStoryEdit(next);}
+        if(gesture){const next=gesture.next,layerId=gesture.layer;
+            if(next&&gesture.deleteDrop&&layerId)next.layers=next.layers.filter(item=>item.id!==layerId);
+            const tappedText=!next&&layerId&&gesture.e.layers.find(item=>item.id===layerId)?.type==='text';
+            gesture=null;pointers.clear();hideDeleteTarget();if(next)commitStoryEdit(next);fadeAlignmentGuides();
+            if(tappedText)openInlineText(layerId);
+        }
     });
-    stage.addEventListener('pointercancel',()=>{pointers.clear();gesture=null;repaint();});
+    stage.addEventListener('pointercancel',()=>{pointers.clear();gesture=null;hideDeleteTarget();clearAlignmentGuides();repaint();});
     stage.addEventListener('keydown',event=>{
         const target=event.target.closest('.story-composition-layer');if(!target || !['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key) || !mayInteract())return;
         event.preventDefault();const e=storyComposition(pending().edits),layer=e.layers.find(item=>item.id===target.dataset.layerId);if(!layer)return;
@@ -195,5 +248,5 @@ export function registerStoryToolEvents(){
             else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
         }
     },true);
-    document.addEventListener('account-deletion-lock',()=>{drawMode=null;moveMode=false;document.querySelector('.story-tools-backdrop').hidden=true;});
+    document.addEventListener('account-deletion-lock',()=>{closeInlineText();hideDeleteTarget();drawMode=null;moveMode=false;document.querySelector('.story-tools-backdrop').hidden=true;});
 }

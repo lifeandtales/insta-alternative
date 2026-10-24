@@ -1,3 +1,4 @@
+import { renderStoryDrafts } from './story-drafts.js';
 import { canViewStory, isFollowing, mayInteract, canViewMedia, mediaNeedsWarning } from '../core/social.js';
 import { showShareFeedback } from '../components/feedback.js';
 import { state } from '../core/state.js';
@@ -91,7 +92,7 @@ export function openStoryCreator() {
     document.getElementById('story-caption').value = '';
     document.querySelector('.story-publish-selected').disabled = true;
     document.querySelector('.story-save-draft').disabled = true;
-    document.querySelector('.story-draft-list').innerHTML = state.draftItems.filter(item => item.type === 'story' && Date.now() - item.savedAt < 7 * 86400000).map(item => `<button type="button" data-story-draft="${escapeHtml(item.id)}">Resume story draft · ${escapeHtml(new Date(item.savedAt).toLocaleDateString())}</button>`).join('') || '<p>No Story drafts yet.</p>';
+    renderStoryDrafts(true);
     renderStoryPostPicker();
     document.querySelector(".story-create-backdrop").hidden = false;
     document.body.classList.add("story-overlay-open");

@@ -1,3 +1,4 @@
+import { handleStoryDraftManagement } from './story-drafts.js';
 import { showHomePanel } from './home-controls.js';
 import { escapeHtml } from '../core/utils.js';
 import { persistSession, unexpiredDrafts } from '../storage/local-session.js';
@@ -108,6 +109,7 @@ export function handleStoryOwnerClick(event) {
 }
 
 export function handleStoryClick(event) {
+    if(handleStoryDraftManagement(event))return true;
     const draftPicker = event.target.closest('.story-choose-drafts');
     if (draftPicker) {
         const list = document.querySelector('.story-draft-list');
