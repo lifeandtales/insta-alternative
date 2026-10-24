@@ -7,7 +7,7 @@ export function storyComposition(value = {}) {
     return {
         version: 1,
         media: { x:number(media.x,0,-100,100), y:number(media.y,0,-100,100), zoom:number(media.zoom,1,.2,4), rotation:number(media.rotation,0,-360,360), straighten:number(media.straighten,0,-15,15), fit:media.fit === 'cover' ? 'cover' : 'contain' },
-        filter: { brightness:number(filter.brightness,1,.2,2), contrast:number(filter.contrast,1,.2,2), warmth:number(filter.warmth,0,-1,1), saturation:number(filter.saturation,1,0,2), preset:['none','mono','vivid','sepia'].includes(filter.preset) ? filter.preset : 'none' },
+        filter: { brightness:number(filter.brightness,1,.2,2), contrast:number(filter.contrast,1,.2,2), warmth:number(filter.warmth,0,-1,1), tint:number(filter.tint,0,-1,1), hue:number(filter.hue,0,-180,180), saturation:number(filter.saturation,1,0,2), preset:['none','mono','vivid','sepia','soft','golden','cool','fade','dramatic','rose'].includes(filter.preset) ? filter.preset : 'none' },
         layers: Array.isArray(value.layers) ? cloneComposition(value.layers) : [],
         music: value.music?.src ? cloneComposition(value.music) : null,
         video: { start:number(video.start,0,0,86400), end:video.end == null ? null : number(video.end,0,0,86400), muted:Boolean(video.muted), volume:number(video.volume,1,0,1) }
@@ -41,9 +41,9 @@ export function storyVideoRange(story, duration) {
 
 export function compositionMediaStyle(value) {
     const {media:m,filter:f}=storyComposition(value);
-    const presets={none:'',mono:' grayscale(1)',vivid:' saturate(1.35)',sepia:' sepia(.65)'};
+    const presets={none:'',mono:' grayscale(1)',vivid:' saturate(1.35)',sepia:' sepia(.65)',soft:' contrast(.9) brightness(1.08)',golden:' sepia(.25) saturate(1.2)',cool:' sepia(.15) hue-rotate(160deg)',fade:' contrast(.8) saturate(.8) brightness(1.1)',dramatic:' contrast(1.3) saturate(.8)',rose:' sepia(.2) hue-rotate(310deg) saturate(1.15)'};
     return {objectFit:m.fit, transform:`translate(${m.x}%, ${m.y}%) scale(${m.zoom}) rotate(${m.rotation+m.straighten}deg)`,
-        filter:`brightness(${f.brightness}) contrast(${f.contrast}) saturate(${f.saturation}) sepia(${Math.abs(f.warmth)*.4}) hue-rotate(${f.warmth<0 ? 180*Math.abs(f.warmth) : 0}deg)${presets[f.preset]}`};
+        filter:`brightness(${f.brightness}) contrast(${f.contrast}) saturate(${f.saturation}) sepia(${Math.abs(f.warmth)*.4}) hue-rotate(${f.warmth<0 ? 180*Math.abs(f.warmth) : 0}deg) hue-rotate(${f.hue}deg) sepia(${Math.abs(f.tint)*.25}) hue-rotate(${f.tint*35}deg)${presets[f.preset]}`};
 }
 
 function renderLayer(layer, editing) {
@@ -84,7 +84,7 @@ function renderLayer(layer, editing) {
             offset=match.index+match[0].length;
         }
         node.append(document.createTextNode(text.slice(offset)));
-    }else node.textContent=text;
+    }else node.textContent=layer.type==='location'?`📍 ${text}`:text;
     if(editing){node.tabIndex=0;node.setAttribute('aria-label',`Move ${layer.type}: ${text}`);}
     return node;
 }
@@ -97,7 +97,19 @@ export function applyStoryComposition(stage, story, {editing=false}={}) {
     stage.querySelectorAll('.story-composition-layer, .story-draw-layer').forEach(node=>node.remove());
     if(!keepMusic)stage.querySelectorAll('.story-composition-audio, .story-music-toggle').forEach(node=>{if(node.tagName==='AUDIO')node.pause();node.remove();});
     stage.dataset.storyMusic=musicKey;
-    if(media){Object.assign(media.style,compositionMediaStyle(edit));media.style.transformOrigin='center';}
+    if(media){
+        Object.assign(media.style,compositionMediaStyle(edit));media.style.transformOrigin='center';
+        if(editing){
+            let guide=stage.querySelector('.story-media-outline');
+            if(!guide){guide=document.createElement('div');guide.className='story-media-outline';guide.setAttribute('aria-hidden','true');stage.append(guide);}
+            const width=media.clientWidth,height=media.clientHeight,nw=media.naturalWidth||media.videoWidth,nh=media.naturalHeight||media.videoHeight;
+            if(width&&height&&nw&&nh){
+                const factor=edit.media.fit==='cover'?Math.max(width/nw,height/nh):Math.min(width/nw,height/nh);
+                const w=nw*factor,h=nh*factor;
+                Object.assign(guide.style,{width:`${w}px`,height:`${h}px`,left:`${media.offsetLeft+(width-w)/2}px`,top:`${media.offsetTop+(height-h)/2}px`,transform:`translate(${edit.media.x*width/100}px, ${edit.media.y*height/100}px) scale(${edit.media.zoom}) rotate(${edit.media.rotation+edit.media.straighten}deg)`});
+            }
+        }
+    }
     for(const layer of edit.layers)stage.append(renderLayer(layer,editing));
     if(edit.music?.src && !keepMusic){
         const audio=document.createElement('audio');audio.className='story-composition-audio';audio.src=edit.music.src;audio.preload='metadata';
