@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=92" />
+    <link rel="stylesheet" href="styles.css?v=97" />
   </head>
   <body>
     <main id="deletion-lock" class="welcome-screen" hidden aria-labelledby="deletion-lock-title">
@@ -330,11 +330,19 @@
         </header>
         <div class="story-create-content">
           <div class="story-media-step">
-          <label class="story-upload-label" for="story-upload">Choose a photo or video</label>
+          <div class="story-media-choices">
+          <button class="story-open-camera" type="button">Open camera</button>
+          <label class="story-upload-label" for="story-upload">Choose from files</label>
           <input id="story-upload" type="file" accept=".jpg,.jpeg,.png,.gif,.webp,.avif,.heic,.heif,.bmp,.mp4,.webm,.mov,.m4v,.3gp,.ogv,image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif,image/bmp,video/mp4,video/webm,video/quicktime,video/x-m4v,video/3gpp,video/ogg" />
           <p class="story-picker-hint">Your device will ask you to choose photos or videos. insta can access only the item you select. Video Stories use only the first 4 minutes.</p>
           <button type="button" class="story-choose-drafts" aria-expanded="false" aria-controls="story-draft-picker">Choose from drafts</button>
           <div class="story-draft-list" id="story-draft-picker" hidden></div>
+          </div>
+          <div class="story-camera-panel" hidden aria-label="Live Story camera">
+            <video class="story-camera-preview" autoplay playsinline muted aria-label="Live camera preview"></video>
+            <p class="story-camera-status" role="status">Photos and videos stay on this device until you choose to share. Video recording may ask for microphone access and is limited to 4 minutes.</p>
+            <div class="story-camera-actions"><button type="button" class="story-camera-cancel">Cancel</button><button type="button" class="story-camera-switch">Switch camera</button><button type="button" class="story-camera-capture">Take photo</button><button type="button" class="story-camera-record">Record video</button></div>
+          </div>
           </div>
           <div class="story-editor-step" hidden>
           <div class="story-selected-preview"></div>
@@ -505,6 +513,9 @@
           <button class="story-highlight-share" type="button" aria-label="Share highlight" title="Share highlight" hidden>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m0 0L7 8m5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" /></svg>
           </button>
+          <button class="story-settings-toggle" type="button" aria-label="Story settings" title="Story settings" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z"/><path d="m19.1 13.6 1.1.9-1.5 2.6-1.4-.6a7.5 7.5 0 0 1-1.5.9l-.2 1.5h-3l-.3-1.5a7.5 7.5 0 0 1-1.5-.9l-1.4.6-1.5-2.6 1.1-.9a7.6 7.6 0 0 1 0-1.8l-1.1-.9 1.5-2.6 1.4.6a7.5 7.5 0 0 1 1.5-.9l.3-1.5h3l.2 1.5a7.5 7.5 0 0 1 1.5.9l1.4-.6 1.5 2.6-1.1.9a7.6 7.6 0 0 1 0 1.8Z"/></svg>
+          </button>
           <button class="story-viewer-close" type="button" aria-label="Close story">×</button>
           <button class="story-options-toggle" type="button" aria-label="Story options" aria-expanded="false" hidden>•••</button>
         </header>
@@ -542,66 +553,67 @@
     <script type="importmap">
 {
   "imports": {
-    "./src/components/feedback.js": "./src/components/feedback.js?v=92",
-    "./src/components/post-card.js": "./src/components/post-card.js?v=92",
-    "./src/core/account-lock.js": "./src/core/account-lock.js?v=92",
-    "./src/core/dom.js": "./src/core/dom.js?v=92",
-    "./src/core/events.js": "./src/core/events.js?v=92",
-    "./src/core/local-preview.js": "./src/core/local-preview.js?v=92",
-    "./src/core/media-links.js": "./src/core/media-links.js?v=92",
-    "./src/core/navigation.events.js": "./src/core/navigation.events.js?v=92",
-    "./src/core/navigation.js": "./src/core/navigation.js?v=92",
-    "./src/core/social.js": "./src/core/social.js?v=92",
-    "./src/core/state.js": "./src/core/state.js?v=92",
-    "./src/core/utils.js": "./src/core/utils.js?v=92",
-    "./src/data/entities.js": "./src/data/entities.js?v=92",
-    "./src/data/sample-data.js": "./src/data/sample-data.js?v=92",
-    "./src/features/account-model.js": "./src/features/account-model.js?v=92",
-    "./src/features/account-settings.js": "./src/features/account-settings.js?v=92",
-    "./src/features/comments.events.js": "./src/features/comments.events.js?v=92",
-    "./src/features/comments.js": "./src/features/comments.js?v=92",
-    "./src/features/create.events.js": "./src/features/create.events.js?v=92",
-    "./src/features/create.js": "./src/features/create.js?v=92",
-    "./src/features/explore.events.js": "./src/features/explore.events.js?v=92",
-    "./src/features/explore.js": "./src/features/explore.js?v=92",
-    "./src/features/follows.events.js": "./src/features/follows.events.js?v=92",
-    "./src/features/follows.js": "./src/features/follows.js?v=92",
-    "./src/features/highlights.events.js": "./src/features/highlights.events.js?v=92",
-    "./src/features/highlights.js": "./src/features/highlights.js?v=92",
-    "./src/features/home-controls.js": "./src/features/home-controls.js?v=92",
-    "./src/features/home.js": "./src/features/home.js?v=92",
-    "./src/features/likes.events.js": "./src/features/likes.events.js?v=92",
-    "./src/features/likes.js": "./src/features/likes.js?v=92",
-    "./src/features/media-options.events.js": "./src/features/media-options.events.js?v=92",
-    "./src/features/media-options.js": "./src/features/media-options.js?v=92",
-    "./src/features/message-access.js": "./src/features/message-access.js?v=92",
-    "./src/features/messages.events.js": "./src/features/messages.events.js?v=92",
-    "./src/features/messages.js": "./src/features/messages.js?v=92",
-    "./src/features/notifications.js": "./src/features/notifications.js?v=92",
-    "./src/features/profile.events.js": "./src/features/profile.events.js?v=92",
-    "./src/features/profile.js": "./src/features/profile.js?v=92",
-    "./src/features/reels.js": "./src/features/reels.js?v=92",
-    "./src/features/saved.events.js": "./src/features/saved.events.js?v=92",
-    "./src/features/sharing.events.js": "./src/features/sharing.events.js?v=92",
-    "./src/features/sharing.js": "./src/features/sharing.js?v=92",
-    "./src/features/stories.events.js": "./src/features/stories.events.js?v=92",
-    "./src/features/stories.js": "./src/features/stories.js?v=92",
-    "./src/features/story-composition.js": "./src/features/story-composition.js?v=92",
-    "./src/features/story-drafts.js": "./src/features/story-drafts.js?v=92",
-    "./src/features/story-edit-session.js": "./src/features/story-edit-session.js?v=92",
-    "./src/features/story-export.js": "./src/features/story-export.js?v=92",
-    "./src/features/story-fonts.js": "./src/features/story-fonts.js?v=92",
-    "./src/features/story-options.js": "./src/features/story-options.js?v=92",
-    "./src/features/story-tools.js": "./src/features/story-tools.js?v=92",
-    "./src/media/demo-sources.js": "./src/media/demo-sources.js?v=92",
-    "./src/media/video.events.js": "./src/media/video.events.js?v=92",
-    "./src/media/video.js": "./src/media/video.js?v=92",
-    "./src/storage/browser-storage.js": "./src/storage/browser-storage.js?v=92",
-    "./src/storage/local-session.js": "./src/storage/local-session.js?v=92",
-    "./src/storage/preferences.js": "./src/storage/preferences.js?v=92"
+    "./src/components/feedback.js": "./src/components/feedback.js?v=96",
+    "./src/components/post-card.js": "./src/components/post-card.js?v=96",
+    "./src/core/account-lock.js": "./src/core/account-lock.js?v=96",
+    "./src/core/dom.js": "./src/core/dom.js?v=96",
+    "./src/core/events.js": "./src/core/events.js?v=96",
+    "./src/core/local-preview.js": "./src/core/local-preview.js?v=96",
+    "./src/core/media-links.js": "./src/core/media-links.js?v=96",
+    "./src/core/navigation.events.js": "./src/core/navigation.events.js?v=96",
+    "./src/core/navigation.js": "./src/core/navigation.js?v=96",
+    "./src/core/social.js": "./src/core/social.js?v=96",
+    "./src/core/state.js": "./src/core/state.js?v=96",
+    "./src/core/utils.js": "./src/core/utils.js?v=96",
+    "./src/data/entities.js": "./src/data/entities.js?v=96",
+    "./src/data/sample-data.js": "./src/data/sample-data.js?v=96",
+    "./src/features/account-model.js": "./src/features/account-model.js?v=96",
+    "./src/features/account-settings.js": "./src/features/account-settings.js?v=96",
+    "./src/features/comments.events.js": "./src/features/comments.events.js?v=96",
+    "./src/features/comments.js": "./src/features/comments.js?v=96",
+    "./src/features/create.events.js": "./src/features/create.events.js?v=96",
+    "./src/features/create.js": "./src/features/create.js?v=96",
+    "./src/features/explore.events.js": "./src/features/explore.events.js?v=96",
+    "./src/features/explore.js": "./src/features/explore.js?v=96",
+    "./src/features/follows.events.js": "./src/features/follows.events.js?v=96",
+    "./src/features/follows.js": "./src/features/follows.js?v=96",
+    "./src/features/highlights.events.js": "./src/features/highlights.events.js?v=96",
+    "./src/features/highlights.js": "./src/features/highlights.js?v=96",
+    "./src/features/home-controls.js": "./src/features/home-controls.js?v=96",
+    "./src/features/home.js": "./src/features/home.js?v=96",
+    "./src/features/likes.events.js": "./src/features/likes.events.js?v=96",
+    "./src/features/likes.js": "./src/features/likes.js?v=96",
+    "./src/features/media-options.events.js": "./src/features/media-options.events.js?v=96",
+    "./src/features/media-options.js": "./src/features/media-options.js?v=96",
+    "./src/features/message-access.js": "./src/features/message-access.js?v=96",
+    "./src/features/messages.events.js": "./src/features/messages.events.js?v=96",
+    "./src/features/messages.js": "./src/features/messages.js?v=96",
+    "./src/features/notifications.js": "./src/features/notifications.js?v=96",
+    "./src/features/profile.events.js": "./src/features/profile.events.js?v=96",
+    "./src/features/profile.js": "./src/features/profile.js?v=96",
+    "./src/features/reels.js": "./src/features/reels.js?v=96",
+    "./src/features/saved.events.js": "./src/features/saved.events.js?v=96",
+    "./src/features/sharing.events.js": "./src/features/sharing.events.js?v=96",
+    "./src/features/sharing.js": "./src/features/sharing.js?v=96",
+    "./src/features/stories.events.js": "./src/features/stories.events.js?v=97",
+    "./src/features/stories.js": "./src/features/stories.js?v=96",
+    "./src/features/story-camera.js": "./src/features/story-camera.js?v=96",
+    "./src/features/story-composition.js": "./src/features/story-composition.js?v=96",
+    "./src/features/story-drafts.js": "./src/features/story-drafts.js?v=96",
+    "./src/features/story-edit-session.js": "./src/features/story-edit-session.js?v=96",
+    "./src/features/story-export.js": "./src/features/story-export.js?v=96",
+    "./src/features/story-fonts.js": "./src/features/story-fonts.js?v=96",
+    "./src/features/story-options.js": "./src/features/story-options.js?v=96",
+    "./src/features/story-tools.js": "./src/features/story-tools.js?v=96",
+    "./src/media/demo-sources.js": "./src/media/demo-sources.js?v=96",
+    "./src/media/video.events.js": "./src/media/video.events.js?v=96",
+    "./src/media/video.js": "./src/media/video.js?v=96",
+    "./src/storage/browser-storage.js": "./src/storage/browser-storage.js?v=96",
+    "./src/storage/local-session.js": "./src/storage/local-session.js?v=96",
+    "./src/storage/preferences.js": "./src/storage/preferences.js?v=96"
   }
 }
     </script>
-    <script type="module" src="app.js?v=92"></script>
+    <script type="module" src="app.js?v=97"></script>
   </body>
 </html>
