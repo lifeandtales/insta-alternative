@@ -8,6 +8,7 @@ import { updateSoundButton } from '../media/video.js';
 import { persistActiveStories } from '../storage/browser-storage.js';
 import { applyStoryComposition, storyVideoRange } from './story-composition.js';
 import { syncStoryOptionButtons, openStoryExitDialog, closeStoryExitDialog } from './story-options.js';
+import { stopStoryCamera } from './story-camera.js';
 let storyCreatorTrigger;
 
 export function getStoryGroups() {
@@ -78,6 +79,7 @@ export function renderStories() {
 
 export function openStoryCreator() {
     if (!mayInteract()) { showShareFeedback('Approval is required to publish stories.'); return; }
+    stopStoryCamera();
     storyCreatorTrigger = document.activeElement;
     state.pendingStoryMedia = null;
     state.storyUploadSelection = null;
@@ -91,6 +93,11 @@ export function openStoryCreator() {
     syncStoryOptionButtons();
     document.querySelector('.story-draft-list').hidden = true;
     document.querySelector('.story-choose-drafts').setAttribute('aria-expanded', 'false');
+    document.querySelector('.story-media-choices').hidden = false;
+    document.querySelector('.story-camera-panel').hidden = true;
+    const recordButton=document.querySelector('.story-camera-record');
+    recordButton.disabled=false;recordButton.dataset.recording='false';recordButton.textContent='Record video';
+    document.querySelector('.story-camera-capture').disabled=false;document.querySelector('.story-camera-switch').disabled=false;
     document.querySelector('.story-selected-preview').replaceChildren();
     document.getElementById('story-caption').value = '';
     document.querySelector('.story-publish-selected').disabled = true;
@@ -121,6 +128,7 @@ export function closeStoryCreator() {
         openStoryExitDialog();
         return;
     }
+    stopStoryCamera();
     closeStoryExitDialog();
     document.querySelector('.story-selected-preview video')?.pause();
     document.querySelectorAll('.story-selected-preview audio').forEach(audio=>audio.pause());
@@ -313,6 +321,7 @@ export function showStoryAtIndex(index) {
     stage.querySelectorAll('audio, video').forEach(media=>media.pause());
     const storySoundButton = viewer.querySelector(".story-sound-toggle");
     const storyOptionsToggle = viewer.querySelector(".story-options-toggle");
+    const storySettingsToggle = viewer.querySelector(".story-settings-toggle");
     const storyOptionsMenu = viewer.querySelector(".story-options-menu");
     const highlight = state.activeStoryHighlightId ? state.storyHighlights.find((item) => item.id === state.activeStoryHighlightId)
         : null;
@@ -320,6 +329,7 @@ export function showStoryAtIndex(index) {
     storyOptionsMenu.hidden = true;
     storyOptionsToggle.setAttribute("aria-expanded", "false");
     storyOptionsToggle.hidden = story.handle !== currentUser.handle && !ownsActiveHighlight;
+    storySettingsToggle.hidden = !isOwner || Boolean(story.fromHighlight);
     viewer.querySelector(".story-highlight-share").hidden = !ownsActiveHighlight;
     storyOptionsMenu.querySelectorAll("[data-story-option]").forEach((button) => {
         button.hidden = story.handle !== currentUser.handle || Boolean(story.fromHighlight);
