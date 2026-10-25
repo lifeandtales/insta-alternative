@@ -7,6 +7,7 @@ import { applyStoryComposition, storyComposition, compositionHistory, STORY_VIDE
 import { storyFontStyles, getStoryFontStyle } from './story-fonts.js';
 
 let storyRef, history, selectedLayer, gesture, drawMode, toolSession, activeAdjustment='brightness', moveMode=false, stickerView=null, textDraft=null;
+let colorPickerHsv={h:0,s:0,v:1},colorPickerPointer=null;
 const storyEmojiChoices=['🙂','😂','😍','🥳','❤️','✨','🔥','🌈','🌸','☀️','🎉','💯','👏','🙌','🦋','🌿','⭐','💫','🎂','☕','📍','✈️','🏖️','🎵'];
 const storyStickerChoices=[
     {id:'good-vibes',text:'GOOD VIBES',background:'#ef72b0',color:'#ffffff'},
@@ -25,8 +26,28 @@ const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
 export function storyDrawingWidthFromPercent(value){return 1+clamp(Number(value)||0,0,100)*39/100;}
 export function storyDrawingPercentFromWidth(width){return Math.round((clamp(Number(width)||1,1,40)-1)/39*100);}
 export function buildStoryTextLayer(existing,{id:layerId,text,font='sans',color='#ffffff',mentions=[],type='text'}={}){
-    return {...existing,id:existing?.id||layerId,type,text,font,color,size:existing?.size||7,x:existing?.x??.5,y:existing?.y??.4,width:existing?.width??.8,rotation:existing?.rotation??0,mentions};
+    return {...existing,id:existing?.id||layerId,type,text,font,color,size:existing?.size||7,x:existing?.x??.5,y:existing?.y??(type==='location'?.5:.4),width:existing?.width??.8,rotation:existing?.rotation??0,mentions};
 }
+export function hexToHsv(hex){
+    const match=/^#?([\da-f]{6})$/i.exec(String(hex||''));if(!match)return {h:0,s:0,v:1};
+    const n=parseInt(match[1],16),r=((n>>16)&255)/255,g=((n>>8)&255)/255,b=(n&255)/255,max=Math.max(r,g,b),min=Math.min(r,g,b),delta=max-min;
+    let h=0;if(delta){if(max===r)h=((g-b)/delta)%6;else if(max===g)h=(b-r)/delta+2;else h=(r-g)/delta+4;h=(h*60+360)%360;}
+    return {h,s:max?delta/max:0,v:max};
+}
+export function hsvToHex(h,s,v){
+    h=((Number(h)||0)%360+360)%360;s=clamp(Number(s)||0,0,1);v=clamp(Number(v)||0,0,1);
+    const c=v*s,x=c*(1-Math.abs((h/60)%2-1)),m=v-c;let rgb=h<60?[c,x,0]:h<120?[x,c,0]:h<180?[0,c,x]:h<240?[0,x,c]:h<300?[x,0,c]:[c,0,x];
+    return '#'+rgb.map(value=>Math.round((value+m)*255).toString(16).padStart(2,'0')).join('');
+}
+export function storyColorAtPoint(hue,x,y){return hsvToHex(hue,clamp(Number(x)||0,0,1),1-clamp(Number(y)||0,0,1));}
+export function moveStoryColorSelection(hsv,key,largerStep=false){
+    const next={...hsv},step=largerStep ? .1 : .01;
+    if(key==='ArrowLeft')next.s=clamp(next.s-step,0,1);else if(key==='ArrowRight')next.s=clamp(next.s+step,0,1);
+    else if(key==='ArrowUp')next.v=clamp(next.v+step,0,1);else if(key==='ArrowDown')next.v=clamp(next.v-step,0,1);
+    else return null;
+    return next;
+}
+export function storyLocationEditPosition(){return {x:.5,y:.5,width:.8,rotation:0};}
 const val=(form,name)=>form.elements[name]?.value;
 const numeric=(form,name)=>Number(val(form,name));
 const input=(name,label,value,type='number',extra='')=>`<label>${label}<input name="${name}" type="${type}" value="${escapeHtml(String(value??''))}" ${extra} /></label>`;
@@ -138,7 +159,8 @@ export function finishStoryMode(save){
     document.querySelector('.story-tools-open').focus();return true;
 }
 export function storyTextColorPicker(color,{name='color',label='Text color',dataAttr='data-story-text-color'}={}){
-    return `<label class="story-color-picker" style="--selected-story-color:${color}"><span class="story-color-picker-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><g stroke="#584c70" stroke-width=".55"><path fill="#f472b6" d="M12 3.2 14.5 4.65v2.9L12 9 9.5 7.55v-2.9Z"/><path fill="#fbbf24" d="m7.1 6 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#34d399" d="m16.9 6 2.5 1.45v2.9L16.9 12l-2.5-1.45v-2.9Z"/><path fill="#60a5fa" d="m7.1 12 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#c084fc" d="M12 9 14.5 10.45v2.9L12 14.8l-2.5-1.45-2.5-1.45v-2.9Z"/><path fill="#fb7185" d="m16.9 12 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#f59e0b" d="m12 14.8 2.5 1.45v2.9L12 20.6l-2.5-1.45v-2.9Z"/></g></svg></span><span class="story-color-picker-swatch" aria-hidden="true"></span><input name="${name}" type="color" value="${color}" aria-label="${label}" ${dataAttr} /></label>`;
+    const hsv=hexToHsv(color),id=`story-color-chart-${name}`;
+    return `<div class="story-color-control" data-story-color-control style="--selected-story-color:${color};--story-color-hue:hsl(${hsv.h} 100% 50%)"><button type="button" class="story-color-trigger" data-story-color-toggle aria-label="${label}: choose color" aria-expanded="false" aria-controls="${id}"><span class="story-color-picker-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><g stroke="#584c70" stroke-width=".55"><path fill="#f472b6" d="M12 3.2 14.5 4.65v2.9L12 9 9.5 7.55v-2.9Z"/><path fill="#fbbf24" d="m7.1 6 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#34d399" d="m16.9 6 2.5 1.45v2.9L16.9 12l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#60a5fa" d="m7.1 12 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#c084fc" d="M12 9 14.5 10.45v2.9L12 14.8l-2.5-1.45-2.5-1.45v-2.9Z"/><path fill="#fb7185" d="m16.9 12 2.5 1.45v2.9L16.9 12l-2.5-1.45v-2.9Z"/><path fill="#f59e0b" d="m12 14.8 2.5 1.45v2.9L12 20.6l-2.5-1.45v-2.9Z"/></g></svg></span><span class="story-color-picker-swatch" aria-hidden="true"></span></button><div class="story-color-chart" id="${id}" data-story-color-chart hidden><button type="button" class="story-color-plane" data-story-color-plane role="slider" tabindex="0" aria-label="${label} shade and saturation" aria-valuetext="${color}, saturation ${Math.round(hsv.s*100)}%, brightness ${Math.round(hsv.v*100)}%" style="--color-saturation:${hsv.s*100}%;--color-brightness:${(1-hsv.v)*100}%"><span class="story-color-indicator" aria-hidden="true"></span></button><label class="story-color-hue-row"><span>Hue</span><input type="range" min="0" max="360" step="1" value="${Math.round(hsv.h)}" data-story-color-hue aria-label="${label} hue" /><output data-story-color-value aria-live="polite">${color.toUpperCase()}</output></label><input type="hidden" name="${name}" value="${color}" ${dataAttr} /></div></div>`;
 }
 function renderStoryTextControls(){
     const panel=document.querySelector('.story-edit-mode-controls');if(!panel||!textDraft)return;
@@ -187,9 +209,29 @@ function renderStoryMode(){
         controls=`<label class="story-live-slider"><span>${option.name} <output data-story-adjust-value>${adjustmentToSlider(option.id,e.filter[option.id])}%</output></span><input type="range" min="0" max="100" value="${adjustmentToSlider(option.id,e.filter[option.id])}" data-story-adjustment="${option.id}" aria-label="${option.name}" /></label><div class="story-adjustment-strip">${storyAdjustments.map(item=>`<button type="button" data-story-adjustment-select="${item.id}" aria-pressed="${item.id===activeAdjustment}"><span aria-hidden="true">${item.icon}</span>${item.name}</button>`).join('')}</div>`;
     }
     if(kind==='draw'){
-        controls=`<div class="story-draw-modes">${[['pen','✎','Freehand'],['line','╱','Line'],['arrow','↗','Arrow'],['highlight','▰','Highlight']].map(([mode,icon,label])=>`<button type="button" data-story-draw-mode="${mode}" aria-pressed="${drawMode.mode===mode}"><span aria-hidden="true">${icon}</span>${label}</button>`).join('')}</div><div class="story-draw-settings">${storyTextColorPicker(drawMode.color,{name:'draw-color',label:'Drawing color',dataAttr:'data-story-draw-color'})}<label class="story-draw-size"><span aria-hidden="true">✎</span><input type="range" min="0" max="100" step="1" value="${storyDrawingPercentFromWidth(drawMode.width)}" data-story-draw-width aria-label="Drawing size" aria-valuetext="${storyDrawingPercentFromWidth(drawMode.width)}%" /><output data-story-draw-size aria-live="polite">${storyDrawingPercentFromWidth(drawMode.width)}%</output></label></div>`;
+        controls=`<div class="story-draw-modes">${[['pen','✎','Freehand'],['dotted','⋯','Dotted'],['highlight','▰','Highlight'],['colorful','🌈','Colorful']].map(([mode,icon,label])=>`<button type="button" data-story-draw-mode="${mode}" aria-pressed="${drawMode.mode===mode}"><span aria-hidden="true">${icon}</span>${label}</button>`).join('')}</div><div class="story-draw-settings">${storyTextColorPicker(drawMode.color,{name:'draw-color',label:'Drawing color',dataAttr:'data-story-draw-color'})}<label class="story-draw-size"><span aria-hidden="true">✎</span><input type="range" min="0" max="100" step="1" value="${storyDrawingPercentFromWidth(drawMode.width)}" data-story-draw-width aria-label="Drawing size" aria-valuetext="${storyDrawingPercentFromWidth(drawMode.width)}%" /><output data-story-draw-size aria-live="polite">${storyDrawingPercentFromWidth(drawMode.width)}%</output></label></div><p class="story-draw-color-hint">Colorful draws a smooth rainbow stroke. The selected color applies to Freehand, Dotted and Highlight.</p>`;
     }
     panel.innerHTML=`${controls}<div class="story-mode-actions"><button type="button" data-story-mode-save>Save changes</button><button type="button" data-story-mode-discard>Discard changes</button></div>`;
+}
+function currentStoryColor(){return toolSession?.kind==='draw'?drawMode?.color:textDraft?.color;}
+function renderColorPickerState(color){
+    const control=document.querySelector('[data-story-color-control]');if(!control)return;
+    const hsv=colorPickerHsv,plane=control.querySelector('[data-story-color-plane]'),swatch=control.querySelector('.story-color-picker-swatch'),value=control.querySelector('[data-story-color-value]'),hue=control.querySelector('[data-story-color-hue]');
+    control.style.setProperty('--selected-story-color',color);control.style.setProperty('--story-color-hue',`hsl(${hsv.h} 100% 50%)`);
+    if(swatch)swatch.style.background=color;if(value)value.value=value.textContent=color.toUpperCase();if(hue)hue.value=String(Math.round(hsv.h));
+    if(plane){plane.style.setProperty('--color-saturation',`${hsv.s*100}%`);plane.style.setProperty('--color-brightness',`${(1-hsv.v)*100}%`);plane.setAttribute('aria-valuetext',`${color.toUpperCase()}, saturation ${Math.round(hsv.s*100)}%, brightness ${Math.round(hsv.v*100)}%`);}
+    const hidden=control.querySelector('input[type="hidden"]');if(hidden)hidden.value=color;
+}
+function setStoryPickerColor(color){
+    colorPickerHsv=hexToHsv(color);
+    if(toolSession?.kind==='draw'&&drawMode)drawMode.color=color;
+    else if(toolSession?.kind==='text'&&textDraft){textDraft.color=color;syncInlineTextStyle();}
+    renderColorPickerState(color);
+}
+function updateStoryColorFromPoint(event){
+    const plane=event.target.closest?.('[data-story-color-plane]')||document.querySelector('[data-story-color-plane]');if(!plane)return;
+    const rect=plane.getBoundingClientRect();if(!rect.width||!rect.height)return;
+    setStoryPickerColor(storyColorAtPoint(colorPickerHsv.h,(event.clientX-rect.left)/rect.width,(event.clientY-rect.top)/rect.height));
 }
 function syncInlineTextStyle(){
     const form=document.querySelector('.story-inline-text form');if(!form)return;
@@ -202,7 +244,7 @@ function syncInlineTextStyle(){
     applyTextDraftPreview();
 }
 function closeInlineText(){const box=document.querySelector('.story-inline-text'),wasVisible=!box.hidden;if(['text','location'].includes(toolSession?.kind)){finishInlineText(false);return;}box.hidden=true;box.classList.remove('story-text-mode','story-location-text-mode');document.querySelector('.story-create-dialog').classList.remove('story-location-editing');if(wasVisible&&pending())repaint();}
-function openInlineLocation(layerId=null){
+export function openInlineLocation(layerId=null){
     if(!pending()||!mayInteract())return;
     ensureHistory();selectedLayer=layerId;
     const layer=storyComposition(pending().edits).layers.find(item=>item.id===layerId&&item.type==='location');
@@ -210,7 +252,7 @@ function openInlineLocation(layerId=null){
     document.querySelector('.story-create-dialog').classList.add('story-mode-active');
     if(layer)preview().querySelector(`[data-layer-id="${layerId}"]`)?.classList.add('story-layer-selected');
     const box=document.querySelector('.story-inline-text');box.hidden=false;box.classList.add('story-location-text-mode');
-    box.style.left=`${(layer?.x??.5)*100}%`;box.style.top=`${(layer?.y??.4)*100}%`;box.style.width=`${(layer?.width??.8)*100}%`;box.style.rotate=`${layer?.rotation||0}deg`;
+    const editPosition=storyLocationEditPosition();box.style.left=`${editPosition.x*100}%`;box.style.top=`${editPosition.y*100}%`;box.style.width=`${editPosition.width*100}%`;box.style.rotate=`${editPosition.rotation}deg`;
     box.innerHTML=`<form class="story-tool-form story-location-inline-form" data-tool="labels"><div class="story-location-entry"><span aria-hidden="true">📍</span><input name="text" type="text" placeholder="Add a location" maxlength="100" required aria-label="Location text" value="${escapeHtml(layer?.text||'')}" /></div></form>`;
     renderStoryTextControls();box.querySelector('input[name="text"]').focus();
 }
@@ -313,6 +355,7 @@ export function registerStoryToolEvents(){
 
     document.addEventListener('click',event=>{
         const target=event.target;
+        const colorToggle=target.closest('[data-story-color-toggle]');if(colorToggle){const chart=document.getElementById(colorToggle.getAttribute('aria-controls'));const open=chart.hidden;colorPickerHsv=hexToHsv(currentStoryColor()||'#ffffff');renderColorPickerState(currentStoryColor()||'#ffffff');chart.hidden=!open;colorToggle.setAttribute('aria-expanded',String(open));if(open)chart.querySelector('[data-story-color-plane]')?.focus();return;}
         if(target.closest('[data-story-mode-save]')){finishStoryMode(true);return;}
         if(target.closest('[data-story-mode-discard]')){finishStoryMode(false);return;}
         const filter=target.closest('[data-story-filter]');if(filter&&toolSession?.kind==='filters'){
@@ -352,9 +395,8 @@ export function registerStoryToolEvents(){
     document.addEventListener('submit',event=>{if(!event.target.matches('.story-tool-form'))return;event.preventDefault();if(['text','location'].includes(toolSession?.kind)&&event.target.matches('.story-inline-form,.story-location-inline-form'))return;if(pending()&&mayInteract())applyTool(event.target);});
     document.addEventListener('input',event=>{
         const adjust=event.target.closest('[data-story-adjustment]');if(adjust){updateStoryAdjustment(adjust.dataset.storyAdjustment,adjust.value);document.querySelector('[data-story-adjust-value]').textContent=`${adjust.value}%`;return;}
-        if(event.target.closest('[data-story-draw-color]')&&drawMode){drawMode.color=event.target.value;event.target.closest('.story-color-picker')?.style.setProperty('--selected-story-color',event.target.value);return;}
+        const colorHue=event.target.closest('[data-story-color-hue]');if(colorHue){colorPickerHsv.h=clamp(Number(colorHue.value),0,360);setStoryPickerColor(hsvToHex(colorPickerHsv.h,colorPickerHsv.s,colorPickerHsv.v));return;}
         if(event.target.closest('[data-story-draw-width]')&&drawMode){const percent=clamp(Number(event.target.value),0,100);drawMode.width=storyDrawingWidthFromPercent(percent);event.target.setAttribute('aria-valuetext',`${Math.round(percent)}%`);const output=document.querySelector('[data-story-draw-size]');if(output)output.textContent=`${Math.round(percent)}%`;return;}
-        if(event.target.closest('[data-story-text-color]')&&toolSession?.kind==='text'&&textDraft){textDraft.color=event.target.value;event.target.closest('.story-color-picker')?.style.setProperty('--selected-story-color',event.target.value);syncInlineTextStyle();return;}
         const form=event.target.closest('.story-tool-form');if(form?.matches('.story-inline-form'))syncInlineTextStyle();if(!form || form.dataset.tool!=='text' || event.target.name!=='text')return;
         const value=event.target.value, match=/@[a-zA-Z0-9._]*$/.exec(value);
         document.getElementById('story-mention-suggestions').innerHTML=match?state.accountDirectory.filter(a=>!state.blockedHandles.has(a.handle)&&a.handle.toLowerCase().startsWith(match[0].toLowerCase())).slice(0,8).map(a=>`<button type="button" data-inline-mention="${escapeHtml(a.handle)}">${escapeHtml(a.name)} · ${escapeHtml(a.handle)}</button>`).join(''):'';
@@ -379,6 +421,11 @@ export function registerStoryToolEvents(){
             buttons.forEach(button=>button.setAttribute('aria-pressed',String(button===chosen)));
         },160);
     },true);
+    document.addEventListener('pointerdown',event=>{const plane=event.target.closest?.('[data-story-color-plane]');if(!plane)return;colorPickerPointer=event.pointerId;plane.setPointerCapture?.(event.pointerId);event.preventDefault();updateStoryColorFromPoint(event);});
+    document.addEventListener('pointermove',event=>{if(colorPickerPointer!==event.pointerId)return;event.preventDefault();updateStoryColorFromPoint(event);});
+    document.addEventListener('pointerup',event=>{if(colorPickerPointer===event.pointerId){document.querySelector('[data-story-color-plane]')?.releasePointerCapture?.(event.pointerId);colorPickerPointer=null;}});
+    document.addEventListener('pointercancel',event=>{if(colorPickerPointer===event.pointerId)colorPickerPointer=null;});
+    document.addEventListener('keydown',event=>{const plane=event.target.closest?.('[data-story-color-plane]');if(!plane)return;const next=moveStoryColorSelection(colorPickerHsv,event.key,event.shiftKey);if(next){event.preventDefault();colorPickerHsv=next;setStoryPickerColor(hsvToHex(next.h,next.s,next.v));}});
     const stage=preview();
     const pointers=new Map();
     const pair=()=>{const [a,b]=[...pointers.values()];return {distance:Math.hypot(b.x-a.x,b.y-a.y),angle:Math.atan2(b.y-a.y,b.x-a.x),x:(a.x+b.x)/2,y:(a.y+b.y)/2};};
@@ -415,8 +462,7 @@ export function registerStoryToolEvents(){
         }else{
             const point={x:clamp((event.clientX-gesture.rect.left)/gesture.rect.width,0,1),y:clamp((event.clientY-gesture.rect.top)/gesture.rect.height,0,1)},dx=point.x-gesture.point.x,dy=point.y-gesture.point.y;
             if(gesture.mode==='draw'){
-                if(gesture.draw.mode==='line'||gesture.draw.mode==='arrow')gesture.draw.points=[gesture.point,point];
-                else if(gesture.draw.points.length<1000)gesture.draw.points.push(point);
+                if(gesture.draw.points.length<1000)gesture.draw.points.push(point);
                 e.layers.push(gesture.draw);
             }else if(gesture.mode==='media'){e.media.x=clamp(e.media.x+dx*100,-100,100);e.media.y=clamp(e.media.y+dy*100,-100,100);}
             else{const item=e.layers.find(layer=>layer.id===gesture.layer);if(item){item.x=clamp(item.x+dx,0,1);item.y=clamp(item.y+dy,0,1);}}

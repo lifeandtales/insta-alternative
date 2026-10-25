@@ -1,6 +1,6 @@
 import { state } from '../core/state.js';
 import { mayInteract } from '../core/social.js';
-import { storyComposition, compositionMediaStyle, storyVideoRange } from './story-composition.js';
+import { storyComposition, compositionMediaStyle, storyVideoRange, storyDrawingSegments } from './story-composition.js';
 import { showShareFeedback } from '../components/feedback.js';
 import { getStoryFontStyle, transformStoryText } from './story-fonts.js';
 
@@ -60,6 +60,13 @@ export function paintLayer(ctx,layer,stageWidth,stageHeight){
         const points=(layer.points||[]).map(point=>({x:point.x*1000,y:point.y*1000}));
         if(!points.length){ctx.restore();return;}
         ctx.strokeStyle=layer.color||'#ffffff';ctx.lineWidth=layer.width||8;ctx.lineCap='round';ctx.lineJoin='round';ctx.globalAlpha=layer.mode==='highlight'?.4:1;
+        if(layer.mode==='dotted')ctx.setLineDash([ctx.lineWidth*.55,ctx.lineWidth*1.7]);
+        if(layer.mode==='colorful'){
+            for(const segment of storyDrawingSegments(layer.points)){
+                ctx.strokeStyle=segment.color;ctx.beginPath();ctx.moveTo(segment.from.x,segment.from.y);ctx.lineTo(segment.to.x,segment.to.y);ctx.stroke();
+            }
+            ctx.restore();return;
+        }
         ctx.beginPath();ctx.moveTo(points[0].x,points[0].y);points.slice(1).forEach(point=>ctx.lineTo(point.x,point.y));ctx.stroke();
         if(layer.mode==='arrow'&&points.length>1){
             const a=points.at(-2),b=points.at(-1),angle=Math.atan2(b.y-a.y,b.x-a.x),size=(layer.width||8)*3;

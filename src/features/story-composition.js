@@ -17,6 +17,28 @@ export function storyComposition(value = {}) {
     };
 }
 
+// Rainbow ink follows traveled Story distance, so adding later pointer samples
+// never changes colors already painted. The same segments drive preview/export.
+export function storyDrawingSegments(points, {cycleLength=180, maxSegmentLength=5}={}) {
+    const scaled=(points||[]).map(point=>({x:number(point.x,0,0,1)*1000,y:number(point.y,0,0,1)*1000}));
+    const segments=[];let distanceAlongPath=0;
+    for(let index=1;index<scaled.length;index++){
+        const from=scaled[index-1],to=scaled[index],length=Math.hypot(to.x-from.x,to.y-from.y);
+        if(!length)continue;
+        const pieces=Math.max(1,Math.ceil(length/maxSegmentLength));
+        for(let piece=0;piece<pieces;piece++){
+            const startDistance=distanceAlongPath+length*piece/pieces,endDistance=distanceAlongPath+length*(piece+1)/pieces;
+            const startRatio=piece/pieces,endRatio=(piece+1)/pieces;
+            const start={x:from.x+(to.x-from.x)*startRatio,y:from.y+(to.y-from.y)*startRatio};
+            const end={x:from.x+(to.x-from.x)*endRatio,y:from.y+(to.y-from.y)*endRatio};
+            const hue=((((startDistance+endDistance)/2)/cycleLength*360)%360+360)%360;
+            segments.push({from:start,to:end,color:`hsl(${hue.toFixed(2)} 100% 55%)`});
+        }
+        distanceAlongPath+=length;
+    }
+    return segments;
+}
+
 export function compositionHistory(initial = {}) {
     let entries=[storyComposition(initial)], cursor=0;
     return {
@@ -59,7 +81,17 @@ function renderLayer(layer, editing) {
         const path=document.createElementNS(svg.namespaceURI,'polyline');
         path.setAttribute('points',points.map(p=>`${p.x},${p.y}`).join(' '));path.setAttribute('fill','none');path.setAttribute('stroke',layer.color||'#ffffff');
         path.setAttribute('stroke-width',String(number(layer.width,8,1,40)));path.setAttribute('stroke-linecap','round');path.setAttribute('stroke-linejoin','round');
-        if(layer.mode==='highlight')path.setAttribute('opacity','.4');svg.append(path);
+        if(layer.mode==='dotted'){const width=number(layer.width,8,1,40);path.setAttribute('stroke-dasharray',`${width*.55} ${width*1.7}`);}
+        if(layer.mode==='highlight')path.setAttribute('opacity','.4');
+        if(layer.mode==='colorful'){
+            for(const segment of storyDrawingSegments(layer.points)){
+                const stroke=document.createElementNS(svg.namespaceURI,'line');
+                stroke.setAttribute('x1',String(segment.from.x));stroke.setAttribute('y1',String(segment.from.y));
+                stroke.setAttribute('x2',String(segment.to.x));stroke.setAttribute('y2',String(segment.to.y));
+                stroke.setAttribute('stroke',segment.color);stroke.setAttribute('stroke-width',String(number(layer.width,8,1,40)));
+                stroke.setAttribute('stroke-linecap','round');svg.append(stroke);
+            }
+        }else svg.append(path);
         if(layer.mode==='arrow' && points.length>1){
             const a=points.at(-2),b=points.at(-1),angle=Math.atan2(b.y-a.y,b.x-a.x),size=number(layer.width,8,1,40)*3;
             const head=document.createElementNS(svg.namespaceURI,'polyline');

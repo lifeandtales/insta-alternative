@@ -375,8 +375,6 @@ function renderSelectedStory() {
     const story = state.pendingStoryMedia;
     setStoryCreationStep(Boolean(story));
     const container = document.querySelector('.story-selected-preview');
-    container.__storyFrameObserver?.disconnect();
-    container.__storyFrameObserver = null;
     container.replaceChildren();
     if (story) {
         const media = document.createElement(story.type === 'video' ? 'video' : 'img');
@@ -396,29 +394,9 @@ function renderSelectedStory() {
         const frameGuide = document.createElement('div');
         frameGuide.className = 'story-frame-guide';
         frameGuide.setAttribute('aria-hidden', 'true');
-        const frameInfo = document.createElement('div');
-        frameInfo.className = 'story-frame-info';
-        frameInfo.setAttribute('role', 'status');
-        frameInfo.setAttribute('aria-live', 'polite');
-        const updateFrameInfo = () => {
-            const frame = container.getBoundingClientRect();
-            const frameWidth = Math.round(frame.width || 0), frameHeight = Math.round(frame.height || 0);
-            const sourceWidth = media.naturalWidth || media.videoWidth || 0;
-            const sourceHeight = media.naturalHeight || media.videoHeight || 0;
-            frameInfo.textContent = frameWidth && frameHeight
-                ? `Frame ${frameWidth} × ${frameHeight} CSS px${sourceWidth && sourceHeight ? ` · Source ${sourceWidth} × ${sourceHeight} px` : ''}`
-                : 'Story frame';
-        };
-        media.addEventListener(story.type === 'video' ? 'loadedmetadata' : 'load', updateFrameInfo);
         media.src = story.media;
         container.append(media);
         container.append(frameGuide);
-        container.append(frameInfo);
-        updateFrameInfo();
-        if (typeof ResizeObserver === 'function') {
-            container.__storyFrameObserver = new ResizeObserver(updateFrameInfo);
-            container.__storyFrameObserver.observe(container);
-        }
     }
     const playButton = document.querySelector('.story-preview-play');
     playButton.hidden = !story || story.type !== 'video';

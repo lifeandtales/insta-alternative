@@ -122,9 +122,6 @@ export function closeStoryCreator() {
         return;
     }
     closeStoryExitDialog();
-    const preview = document.querySelector('.story-selected-preview');
-    preview.__storyFrameObserver?.disconnect();
-    preview.__storyFrameObserver = null;
     document.querySelector('.story-selected-preview video')?.pause();
     document.querySelectorAll('.story-selected-preview audio').forEach(audio=>audio.pause());
     document.querySelector(".story-create-backdrop").hidden = true;
