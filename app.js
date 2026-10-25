@@ -162,6 +162,16 @@ document.addEventListener('change', event => {
     details.textContent = `${filename || 'Selected file'} · ${(file.size / (1024 * 1024)).toFixed(1)} MB`;
     selection.hidden = false;
 });
+document.addEventListener('beforeinput', event => {
+    const input = event.target;
+    if (!input.matches('.welcome-password-wrap input') || !input.closest('[data-entry-form]')) return;
+    if (/\s/.test(event.data || '')) event.preventDefault();
+});
+document.addEventListener('paste', event => {
+    const input = event.target;
+    if (!input.matches('.welcome-password-wrap input') || !input.closest('[data-entry-form]')) return;
+    if (/\s/.test(event.clipboardData?.getData('text') || '')) event.preventDefault();
+});
 document.addEventListener('submit', event => {
     const form = event.target.closest('[data-entry-form]');
     if (!form) return;
@@ -189,6 +199,14 @@ document.addEventListener('submit', event => {
         error = 'Choose an image or PDF no larger than 20 MB.';
         focusTarget = form.querySelector('#signup-verification-file');
     } else if (!password) { error = 'Enter a password to continue.'; focusTarget = form.elements.password; }
+    else if (/\s/.test(password) || (signup && /\s/.test(confirmation))) {
+        error = 'Passwords cannot contain spaces.';
+        focusTarget = /\s/.test(password) ? form.elements.password : form.elements.confirmPassword;
+    }
+    else if ([...password].length < 8) {
+        error = 'Use at least 8 characters in your password.';
+        focusTarget = form.elements.password;
+    }
     else if (signup && !confirmation) { error = 'Confirm your password.'; focusTarget = form.elements.confirmPassword; }
     else if (signup && password !== confirmation) { error = 'The passwords do not match.'; focusTarget = form.elements.confirmPassword; }
     const errorElement = form.querySelector('.welcome-form-error');

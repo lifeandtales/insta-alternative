@@ -100,3 +100,5 @@
   .welcome-sticker { right: calc(50% - 175px); bottom: -25px; }
 }
 @media (prefers-reduced-motion: reduce) { .welcome-actions button { transition: none; } }
+
+.welcome-password-note { margin: -3px 0 0; color: var(--muted); font-size: .74rem; line-height: 1.4; }
