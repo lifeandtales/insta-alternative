@@ -12,6 +12,7 @@ import { currentUser, posts } from '../data/sample-data.js';
 import { getSupportedStoryFileType } from './create.js';
 import { prepareStoryTools } from './story-tools.js';
 import { setStoryDraftSaving } from './story-options.js';
+import { captureStoryPhoto, openStoryCamera, startStoryVideoRecording, stopStoryCamera, stopStoryVideoRecording, switchStoryCamera } from './story-camera.js';
 import {
     archiveStoryHighlight,
     openHighlightDeleteConfirmation,
@@ -110,6 +111,77 @@ export function handleStoryOwnerClick(event) {
 
 export function handleStoryClick(event) {
     if(handleStoryDraftManagement(event))return true;
+    const openCamera = event.target.closest('.story-open-camera');
+    if (openCamera) {
+        if (!mayInteract()) return true;
+        const choices = document.querySelector('.story-media-choices'), panel = document.querySelector('.story-camera-panel');
+        const video = panel.querySelector('.story-camera-preview');
+        choices.hidden = true;
+        panel.hidden = false;
+        panel.querySelector('.story-camera-status').textContent='Photos and videos stay on this device until you choose to share. Video recording may ask for microphone access and is limited to 4 minutes.';
+        openStoryCamera(video).then(stream => { if (stream && !panel.hidden) panel.querySelector('.story-camera-capture').focus(); }).catch(error => {
+            stopStoryCamera();panel.hidden = true;choices.hidden = false;
+            showShareFeedback(error?.name === 'NotAllowedError'
+                ? 'Allow camera access in your browser to take a Story photo.'
+                : 'The camera could not open. Check camera availability and try again.');
+            if (!document.querySelector('.story-create-backdrop').hidden) document.querySelector('.story-open-camera').focus();
+        });
+        return true;
+    }
+    if (event.target.closest('.story-camera-cancel')) {
+        stopStoryCamera();document.querySelector('.story-camera-panel').hidden = true;
+        const panel=document.querySelector('.story-camera-panel'),record=panel.querySelector('.story-camera-record');
+        record.disabled=false;record.dataset.recording='false';record.textContent='Record video';
+        panel.querySelector('.story-camera-capture').disabled=false;panel.querySelector('.story-camera-switch').disabled=false;
+        panel.querySelector('.story-camera-status').textContent='Photos and videos stay on this device until you choose to share. Video recording may ask for microphone access and is limited to 4 minutes.';
+        document.querySelector('.story-media-choices').hidden = false;document.querySelector('.story-open-camera').focus();
+        return true;
+    }
+    if (event.target.closest('.story-camera-switch')) {
+        const panel=document.querySelector('.story-camera-panel'),video=panel.querySelector('.story-camera-preview');
+        switchStoryCamera(video).catch(()=>showShareFeedback('The other camera is unavailable.'));
+        return true;
+    }
+    if (event.target.closest('.story-camera-capture')) {
+        const panel=document.querySelector('.story-camera-panel'),video=panel.querySelector('.story-camera-preview'),button=event.target.closest('.story-camera-capture');
+        button.disabled=true;
+        captureStoryPhoto(video).then(story=>{
+            if (panel.hidden || document.querySelector('.story-create-backdrop').hidden) { URL.revokeObjectURL(story.media);return; }
+            stopStoryCamera();panel.hidden=true;document.querySelector('.story-media-choices').hidden=false;
+            state.pendingStoryMedia=story;state.activeStoryDraftId=null;renderSelectedStory();document.querySelector('.story-create-back').focus();
+        }).catch(()=>{
+            showShareFeedback('The camera is not ready yet. Wait for the preview, then try again.');
+            button.disabled=false;button.focus();
+        });
+        return true;
+    }
+    if (event.target.closest('.story-camera-record')) {
+        const panel=document.querySelector('.story-camera-panel'),button=event.target.closest('.story-camera-record');
+        const photoButton=panel.querySelector('.story-camera-capture'),switchButton=panel.querySelector('.story-camera-switch'),status=panel.querySelector('.story-camera-status');
+        if(button.dataset.recording==='true'){
+            button.disabled=true;button.textContent='Finishing video…';status.textContent='Finishing your Story video…';stopStoryVideoRecording();return true;
+        }
+        button.disabled=true;button.dataset.recording='starting';status.textContent='Allow microphone access to record video with sound.';
+        startStoryVideoRecording({onStarted:()=>{
+            if(panel.hidden||document.querySelector('.story-create-backdrop').hidden){stopStoryVideoRecording();return;}
+            button.dataset.recording='true';button.disabled=false;button.textContent='Stop recording';
+            photoButton.disabled=true;switchButton.disabled=true;status.textContent='Recording… up to 4 minutes. Tap Stop recording when you are done.';
+        }}).then(story=>{
+            button.dataset.recording='false';
+            if(panel.hidden||document.querySelector('.story-create-backdrop').hidden){URL.revokeObjectURL(story.media);return;}
+            stopStoryCamera();panel.hidden=true;document.querySelector('.story-media-choices').hidden=false;
+            state.pendingStoryMedia=story;state.activeStoryDraftId=null;renderSelectedStory();document.querySelector('.story-create-back').focus();
+        }).catch(error=>{
+            if(panel.hidden||document.querySelector('.story-create-backdrop').hidden)return;
+            button.dataset.recording='false';button.disabled=false;button.textContent='Record video';
+            photoButton.disabled=false;switchButton.disabled=false;
+            status.textContent='Photos stay on this device until you share. Video recording may ask for microphone access and is limited to 4 minutes.';
+            if(error?.name==='NotAllowedError')showShareFeedback('Allow microphone access to record video with sound.');
+            else if(error?.message==='unsupported')showShareFeedback('Video recording is unavailable in this browser.');
+            else showShareFeedback('The video could not be recorded. Check microphone access and try again.');
+        });
+        return true;
+    }
     const draftPicker = event.target.closest('.story-choose-drafts');
     if (draftPicker) {
         const list = document.querySelector('.story-draft-list');
@@ -202,6 +274,11 @@ export function handleStoryClick(event) {
     }
     if (event.target.closest(".story-create-close")) {
         closeStoryCreator();
+        return true;
+    }
+    if (event.target.closest('.story-settings-toggle')) {
+        if (!mayInteract()) return true;
+        openStorySettings();
         return true;
     }
     const settingsBackdrop = document.querySelector(".story-settings-backdrop");
@@ -381,6 +458,19 @@ function renderSelectedStory() {
         media.alt = 'Selected story';
         media.setAttribute('aria-label', 'Selected story preview');
         media.className = story.type === 'video' ? 'story-viewer-video' : 'story-viewer-image';
+        media.addEventListener('error', () => {
+            if (!media.isConnected || state.pendingStoryMedia !== story) return;
+            let error = container.querySelector('.story-media-preview-error');
+            if (!error) {
+                error = document.createElement('p');
+                error.className = 'story-media-preview-error';
+                error.setAttribute('role', 'alert');
+                container.append(error);
+            }
+            error.textContent = 'This file could not be previewed here. Go back and choose a JPG, PNG, MP4, or WebM file.';
+            document.querySelector('.story-publish-selected').disabled = true;
+            document.querySelector('.story-save-draft').disabled = true;
+        }, { once: true });
         if (story.type === 'video') {
             media.controls = true; media.playsInline = true; media.preload = 'metadata';
             if (story.poster) media.poster = story.poster;
@@ -394,9 +484,9 @@ function renderSelectedStory() {
         const frameGuide = document.createElement('div');
         frameGuide.className = 'story-frame-guide';
         frameGuide.setAttribute('aria-hidden', 'true');
-        media.src = story.media;
         container.append(media);
         container.append(frameGuide);
+        media.src = story.media;
     }
     const playButton = document.querySelector('.story-preview-play');
     playButton.hidden = !story || story.type !== 'video';
