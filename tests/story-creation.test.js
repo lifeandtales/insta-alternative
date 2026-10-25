@@ -53,6 +53,67 @@ test('Story creation starts with media only and canceled or unsupported selectio
     assert.equal(app.element('.story-editor-step').hidden, true);
 });
 
+test('Story picker captures a photo or a microphone-backed video into the normal Story editor',async()=>{
+    const app=await loadApp();
+    const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+    const choices=html.match(/<div class="story-media-choices">([\s\S]*?)<\/div>/)?.[1]||'';
+    const camera=choices.indexOf('class="story-open-camera"'),files=choices.indexOf('class="story-upload-label"'),input=choices.indexOf('id="story-upload"');
+    assert.ok(camera>=0&&files>camera&&input>files);
+    assert.match(choices,/story-open-camera" type="button">Open camera/);
+    assert.match(choices,/story-upload-label" for="story-upload">Choose from files/);
+    assert.match(html,/story-camera-panel" hidden[^]*<video class="story-camera-preview" autoplay playsinline muted/);
+    assert.match(html,/story-camera-capture">Take photo/);
+    assert.match(html,/story-camera-record">Record video/);
+    assert.match(html,/story-camera-switch">Switch camera/);
+
+    const cameraTools=app.exportsOf('src/features/story-camera.js'),requests=[],stopped=[];
+    app.context.navigator.mediaDevices={getUserMedia:async constraints=>{
+        requests.push(constraints);
+        const track={kind:constraints.audio?'audio':'video',stop(){stopped.push(this.kind);}};
+        return {getTracks:()=>[track],getVideoTracks:()=>constraints.video?[track]:[],getAudioTracks:()=>constraints.audio?[track]:[]};
+    }};
+    class FakeMediaStream { constructor(tracks){this.tracks=tracks;} }
+    class FakeMediaRecorder {
+        static isTypeSupported(type){return type==='video/webm';}
+        constructor(stream,options={}){this.stream=stream;this.mimeType=options.mimeType||'video/webm';this.state='inactive';this.handlers={};}
+        addEventListener(type,callback){this.handlers[type]=callback;}
+        start(timeslice){this.state='recording';this.timeslice=timeslice;}
+        stop(){this.state='inactive';this.handlers.dataavailable?.({data:new Blob(['captured clip'],{type:this.mimeType})});this.handlers.stop?.();}
+    }
+    app.context.MediaStream=FakeMediaStream;app.context.MediaRecorder=FakeMediaRecorder;
+    const video=app.element('.story-camera-preview');video.videoWidth=640;video.videoHeight=480;video.play=async()=>{};
+    await cameraTools.openStoryCamera(video);
+    assert.equal(video.srcObject!==null,true);
+    assert.equal(requests[0].audio,false);
+    assert.deepEqual({...requests[0].video.facingMode},{ideal:'environment'});
+    await cameraTools.switchStoryCamera(video);
+    assert.deepEqual({...requests[1].video.facingMode},{ideal:'user'});
+    assert.ok(stopped.includes('video'),'switching stops the previous camera track');
+    cameraTools.stopStoryCamera();
+    assert.ok(stopped.filter(kind=>kind==='video').length>=2,'leaving camera mode stops the active track');
+
+    const canvas=app.element('new-canvas'),draws=[];
+    canvas.getContext=()=>({drawImage:(...args)=>draws.push(args)});
+    canvas.toBlob=callback=>callback(new Blob(['local photo'],{type:'image/jpeg'}));
+    const capture=await cameraTools.captureStoryPhoto(video);
+    assert.deepEqual(draws[0].slice(1),[0,0,640,480]);
+    assert.equal(capture.type,'image');assert.equal(capture.durationMs,30000);
+    assert.equal(capture.media.startsWith('blob:'),true);
+    URL.revokeObjectURL(capture.media);
+
+    await cameraTools.openStoryCamera(video);
+    let recordingStarted=false;
+    const recording=cameraTools.startStoryVideoRecording({onStarted:()=>{recordingStarted=true;}});
+    await new Promise(resolve=>setTimeout(resolve,0));
+    assert.equal(recordingStarted,true);
+    assert.deepEqual({...requests.at(-1)},{audio:true,video:false});
+    cameraTools.stopStoryVideoRecording();
+    const recorded=await recording;
+    assert.equal(recorded.type,'video');assert.ok(recorded.durationMs<=240000);
+    assert.equal(recorded.media.startsWith('blob:'),true);
+    cameraTools.stopStoryCamera();URL.revokeObjectURL(recorded.media);
+});
+
 test('the first native photo or video selection opens the editor and paired mobile events do not clear it', async () => {
     for (const [type, name, mediaType] of [
         ['image/jpeg', 'phone-photo.jpg', 'image'],
@@ -92,18 +153,19 @@ test('the first native photo or video selection opens the editor and paired mobi
         assert.equal(app.element('.story-editor-step').hidden, false);
         assert.equal(app.element('.story-media-step').hidden, true);
         assert.equal(upload.value, `C:\\fakepath\\${name}`, 'success does not reset the native picker during return');
-        assert.deepEqual(appended.map(item => item.className), [mediaType === 'video' ? 'story-viewer-video' : 'story-viewer-image', 'story-frame-guide', 'story-frame-info']);
-        assert.equal(appended[2].node.textContent, 'Frame 390 × 844 CSS px');
-        const mediaNode = appended[0].node;
-        if (mediaType === 'video') { mediaNode.videoWidth = 1920; mediaNode.videoHeight = 1080; }
-        else { mediaNode.naturalWidth = 4032; mediaNode.naturalHeight = 3024; }
-        const mediaKey = created.find(item => item.node === mediaNode).key;
-        app.listeners.find(item => item.key === mediaKey && item.type === (mediaType === 'video' ? 'loadedmetadata' : 'load')).callback();
-        assert.match(appended[2].node.textContent, /Frame 390 × 844 CSS px · Source (1920 × 1080|4032 × 3024) px/);
+        assert.deepEqual(appended.map(item => item.className), [mediaType === 'video' ? 'story-viewer-video' : 'story-viewer-image', 'story-frame-guide']);
+        const source = fs.readFileSync(new URL('../src/features/stories.events.js', import.meta.url), 'utf8');
+        assert.doesNotMatch(source, /story-frame-info|ResizeObserver/);
         const styles = fs.readFileSync(new URL('../styles/story-and-media-viewers.css', import.meta.url), 'utf8');
         assert.match(styles, /\.story-viewer,\s*\.story-create-dialog\.story-editing\s*\{[^}]*width:\s*min\(100vw,\s*440px\);[^}]*height:\s*min\(100dvh,\s*900px\);/);
-        assert.match(styles, /\.story-frame-guide\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*1px;[^}]*pointer-events:\s*none;/);
-        assert.match(styles, /\.story-frame-info\s*\{[^}]*pointer-events:\s*none;/);
+        assert.match(styles, /\.story-viewer,\s*\.story-create-dialog\.story-editing\s*\{[^}]*overflow:\s*hidden;/);
+        assert.match(styles, /\.story-editing \.story-selected-preview\s*\{[^}]*inset:\s*clamp\(88px,11dvh,112px\) 12px clamp\(156px,19dvh,190px\);[^}]*border-radius:\s*16px;/);
+        assert.match(styles, /\.story-editing \.story-selected-preview :is\(img, video\)\s*\{[^}]*object-fit:\s*contain;/);
+        assert.match(styles, /\.story-editing \.story-create-content\s*\{[^}]*inset:\s*0;[^}]*overflow:\s*hidden;/);
+        assert.match(styles, /\.story-editing \.story-editor-step\s*\{[^}]*inset:\s*0;/);
+        assert.match(styles, /\.story-editing \.story-selected-preview\s*\{[^}]*inset:\s*0;/);
+        assert.match(styles, /\.story-frame-guide\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*1px;[^}]*border:\s*1px solid rgba\(255,255,255,\.58\);[^}]*pointer-events:\s*none;/);
+        assert.doesNotMatch(styles, /\.story-frame-info/);
 
         change({target: upload});
         assert.equal(state.pendingStoryMedia, selected, 'input/change pair is processed only once');
@@ -145,6 +207,11 @@ test('phone generic MIME labels fall back to a recognized filename extension onl
     assert.equal(getType({name: 'photo.jpg', type: 'text/plain'}), null);
 });
 
+test('Story editor is outside the hidden media-picker container', () => {
+    const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+    assert.match(html,/class="story-camera-panel"[\s\S]*?<\/div>\s*<\/div>\s*<div class="story-editor-step"/);
+});
+
 test('valid Story media reveals editor, Back is reversible, and invalid scheduling retains media', async () => {
     const app = await loadApp();
     const {state} = app.exportsOf('src/core/state.js');
@@ -179,6 +246,22 @@ test('valid Story media reveals editor, Back is reversible, and invalid scheduli
     assert.equal(stories.scheduleOrPublishStory(media),false);
     assert.equal(state.pendingStoryMedia,media);
     URL.revokeObjectURL(media.media);
+});
+
+test('media decode failure shows an inline recovery message and blocks unusable Story actions', async () => {
+    const app = await loadApp();
+    const {state} = app.exportsOf('src/core/state.js');
+    app.element('.story-selected-preview').append = () => {};
+    app.exportsOf('src/features/stories.js').openStoryCreator();
+    const change = app.listeners.find(item => item.key === '#story-upload' && item.type === 'change').callback;
+    change({target:{files:[new Blob(['broken image'],{type:'image/heic'})],value:'photo.heic'}});
+    const media = app.listeners.find(item => item.key === 'new-img' && item.type === 'error');
+    assert.ok(media, 'selected media should handle browser decode errors');
+    media.callback();
+    assert.match(app.element('.story-selected-preview .story-media-preview-error').textContent,/could not be previewed here/);
+    assert.equal(app.element('.story-publish-selected').disabled,true);
+    assert.equal(app.element('.story-save-draft').disabled,true);
+    assert.ok(state.pendingStoryMedia, 'keep the selected file available while the user recovers');
 });
 
 test('video Story preview shares viewer sizing classes and exposes reversible playback', async () => {
@@ -227,6 +310,15 @@ test('own Story opens creator when inactive while active Story keeps its viewer 
     stories.openStoryGroup(currentUser.handle);
     assert.equal(app.element('.story-viewer-backdrop').hidden,false);
     assert.equal(app.element('.story-create-backdrop').hidden,true);
+    assert.equal(app.element('.story-viewer .story-settings-toggle').hidden,false);
+    const events=app.exportsOf('src/features/stories.events.js');
+    events.handleStoryClick({target:{closest:selector=>selector==='.story-settings-toggle'?{}:null}});
+    assert.equal(app.element('.story-settings-backdrop').hidden,false,'gear opens the existing Story settings dialog');
+    events.handleStoryClick({target:{closest:selector=>selector==='.story-settings-close'?{}:null}});
+    assert.equal(app.element('.story-settings-backdrop').hidden,true);
+    state.activeStorySequence=[{id:'other-fixture',handle:'noahvale',user:'Noah',avatar:'avatar.png',type:'image',media:'fixture.png',expiresAt:Date.now()+86400000}];
+    stories.showStoryAtIndex(0);
+    assert.equal(app.element('.story-viewer .story-settings-toggle').hidden,true,'Story settings shortcut is owner-only');
     app.exportsOf('src/features/stories.events.js').handleStoryOwnerClick({target:{closest: selector => selector === '.story-add-control' ? {} : null}});
     assert.equal(app.element('.story-create-backdrop').hidden,false);
     assert.equal(app.element('.story-editor-step').hidden,true);
