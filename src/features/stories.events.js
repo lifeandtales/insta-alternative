@@ -481,11 +481,7 @@ function renderSelectedStory() {
             };
             media.addEventListener('play', update); media.addEventListener('pause', update); media.addEventListener('ended', update);
         }
-        const frameGuide = document.createElement('div');
-        frameGuide.className = 'story-frame-guide';
-        frameGuide.setAttribute('aria-hidden', 'true');
         container.append(media);
-        container.append(frameGuide);
         media.src = story.media;
     }
     const playButton = document.querySelector('.story-preview-play');

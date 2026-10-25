@@ -116,6 +116,7 @@ export function setStoryCreationStep(editing) {
     const hasMedia = Boolean(editing && state.pendingStoryMedia);
     document.querySelector('.story-media-step').hidden = hasMedia;
     document.querySelector('.story-editor-step').hidden = !hasMedia;
+    document.querySelector('.story-editor-settings-toggle').hidden = !hasMedia;
     document.querySelector('.story-create-dialog').classList.toggle('story-editing', hasMedia);
     document.querySelector('.story-create-backdrop').classList.toggle('story-editor-open', hasMedia);
     if (!hasMedia) document.querySelector('.story-selected-preview video')?.pause();
