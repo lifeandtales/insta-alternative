@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {loadApp} from './helpers/app-harness.js';
 
 test('image export preserves native pixels without including the Story frame',async()=>{
@@ -48,4 +49,9 @@ test('gallery export applies the same new preset filter used by live preview',as
     paintFrame(context,{naturalWidth:100,naturalHeight:100},story,geometry,stage);
     assert.equal(drawFilter,compositionMediaStyle(storyComposition(story.edits)).filter);
     assert.match(drawFilter,/hue-rotate\(185deg\).*brightness\(1\.08\)/);
+});
+
+test('editor Story frame guide stays out of media export',async()=>{
+    const source=fs.readFileSync(new URL('../src/features/story-export.js',import.meta.url),'utf8');
+    assert.doesNotMatch(source,/story-frame-guide|story-frame-info/);
 });

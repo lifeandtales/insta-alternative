@@ -153,15 +153,18 @@ export async function publishCreatedMedia() {
 }
 
 export function getSupportedStoryFileType(file) {
-    const mimeType = file.type.toLowerCase();
+    const mimeType = String(file?.type || '').split(';', 1)[0].trim().toLowerCase();
     if (mimeType) {
         if (/^image\/(jpeg|png|gif|webp|avif|heic|heif|bmp|tiff?)$/.test(mimeType))
             return "image";
         if (/^video\/(mp4|webm|quicktime|x-m4v|3gpp|ogg|mpeg|x-msvideo)$/.test(mimeType))
             return "video";
-        return null;
+        // Phone file providers sometimes label a recognized file with a generic
+        // binary MIME type. Use its extension only for those generic labels.
+        if (!/^(application|binary)\/(octet-stream|x-octet-stream)$/.test(mimeType))
+            return null;
     }
-    const extension = file.name.toLowerCase().split(".").pop();
+    const extension = String(file?.name || '').toLowerCase().split(".").pop();
     if (["jpg", "jpeg", "png", "gif", "webp", "avif", "heic", "heif", "bmp", "tif", "tiff"].includes(extension))
         return "image";
     if (["mp4", "webm", "mov", "m4v", "3gp", "ogv", "mpeg", "mpg", "avi"].includes(extension))

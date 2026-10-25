@@ -53,6 +53,98 @@ test('Story creation starts with media only and canceled or unsupported selectio
     assert.equal(app.element('.story-editor-step').hidden, true);
 });
 
+test('the first native photo or video selection opens the editor and paired mobile events do not clear it', async () => {
+    for (const [type, name, mediaType] of [
+        ['image/jpeg', 'phone-photo.jpg', 'image'],
+        ['video/mp4', 'phone-video.mp4', 'video']
+    ]) {
+        const app = await loadApp();
+        const {state} = app.exportsOf('src/core/state.js');
+        const stories = app.exportsOf('src/features/stories.js');
+        stories.openStoryCreator();
+        const upload = app.element('#story-upload');
+        const preview = app.element('.story-selected-preview');
+        const appended = [];
+        const created = [];
+        app.document.createElement = tag => {
+            const key = `phone-preview-${tag}-${created.length}`;
+            const node = app.element(key);
+            created.push({tag, key, node});
+            return node;
+        };
+        preview.getBoundingClientRect = () => ({width: 390, height: 844});
+        preview.append = node => appended.push({node, className: node.className});
+        const file = new Blob(['phone fixture'], {type});
+        Object.defineProperties(file, {name: {value: name}, lastModified: {value: 123}});
+        upload.files = [file];
+        upload.value = `C:\\fakepath\\${name}`;
+        const handlers = app.listeners.filter(item => item.key === '#story-upload');
+        const input = handlers.find(item => item.type === 'input').callback;
+        const change = handlers.find(item => item.type === 'change').callback;
+
+        input({type: 'input', target: upload});
+        assert.equal(state.pendingStoryMedia, null, 'the picker input event does not hide the picker before it returns');
+        assert.equal(app.element('.story-editor-step').hidden, true);
+        change({target: upload});
+        const selected = state.pendingStoryMedia;
+        assert.equal(selected.type, mediaType, `${name} is accepted on its first selection`);
+        assert.equal(selected.edits, undefined, 'the comparison frame is presentation-only');
+        assert.equal(app.element('.story-editor-step').hidden, false);
+        assert.equal(app.element('.story-media-step').hidden, true);
+        assert.equal(upload.value, `C:\\fakepath\\${name}`, 'success does not reset the native picker during return');
+        assert.deepEqual(appended.map(item => item.className), [mediaType === 'video' ? 'story-viewer-video' : 'story-viewer-image', 'story-frame-guide', 'story-frame-info']);
+        assert.equal(appended[2].node.textContent, 'Frame 390 × 844 CSS px');
+        const mediaNode = appended[0].node;
+        if (mediaType === 'video') { mediaNode.videoWidth = 1920; mediaNode.videoHeight = 1080; }
+        else { mediaNode.naturalWidth = 4032; mediaNode.naturalHeight = 3024; }
+        const mediaKey = created.find(item => item.node === mediaNode).key;
+        app.listeners.find(item => item.key === mediaKey && item.type === (mediaType === 'video' ? 'loadedmetadata' : 'load')).callback();
+        assert.match(appended[2].node.textContent, /Frame 390 × 844 CSS px · Source (1920 × 1080|4032 × 3024) px/);
+        const styles = fs.readFileSync(new URL('../styles/story-and-media-viewers.css', import.meta.url), 'utf8');
+        assert.match(styles, /\.story-viewer,\s*\.story-create-dialog\.story-editing\s*\{[^}]*width:\s*min\(100vw,\s*440px\);[^}]*height:\s*min\(100dvh,\s*900px\);/);
+        assert.match(styles, /\.story-frame-guide\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*1px;[^}]*pointer-events:\s*none;/);
+        assert.match(styles, /\.story-frame-info\s*\{[^}]*pointer-events:\s*none;/);
+
+        change({target: upload});
+        assert.equal(state.pendingStoryMedia, selected, 'input/change pair is processed only once');
+        assert.equal(app.element('.story-editor-step').hidden, false);
+        URL.revokeObjectURL(selected.media);
+    }
+});
+
+test('mobile input-only picker fallback accepts the first selected file after picker return', async () => {
+    const app = await loadApp();
+    const {state} = app.exportsOf('src/core/state.js');
+    const stories = app.exportsOf('src/features/stories.js');
+    stories.openStoryCreator();
+    const upload = app.element('#story-upload');
+    const preview = app.element('.story-selected-preview');
+    preview.append = () => {};
+    const file = new Blob(['phone fixture'], {type: 'image/jpeg'});
+    Object.defineProperties(file, {name: {value: 'first-photo.jpg'}, lastModified: {value: 456}});
+    upload.files = [file];
+    upload.value = 'C:\\fakepath\\first-photo.jpg';
+    let fallback;
+    app.context.window.setTimeout = callback => { fallback = callback; return 42; };
+    app.context.window.clearTimeout = () => {};
+    const input = app.listeners.find(item => item.key === '#story-upload' && item.type === 'input').callback;
+    input({type: 'input', target: upload});
+    assert.equal(state.pendingStoryMedia, null);
+    assert.equal(typeof fallback, 'function');
+    fallback();
+    assert.equal(state.pendingStoryMedia.type, 'image');
+    assert.equal(app.element('.story-editor-step').hidden, false);
+    URL.revokeObjectURL(state.pendingStoryMedia.media);
+});
+
+test('phone generic MIME labels fall back to a recognized filename extension only', async () => {
+    const app = await loadApp();
+    const getType = app.exportsOf('src/features/create.js').getSupportedStoryFileType;
+    assert.equal(getType({name: 'IMG_1001.HEIC', type: 'application/octet-stream'}), 'image');
+    assert.equal(getType({name: 'VID_1002.MOV', type: 'binary/octet-stream'}), 'video');
+    assert.equal(getType({name: 'photo.jpg', type: 'text/plain'}), null);
+});
+
 test('valid Story media reveals editor, Back is reversible, and invalid scheduling retains media', async () => {
     const app = await loadApp();
     const {state} = app.exportsOf('src/core/state.js');
@@ -94,7 +186,7 @@ test('video Story preview shares viewer sizing classes and exposes reversible pl
     const stories = app.exportsOf('src/features/stories.js');
     const events = app.exportsOf('src/features/stories.events.js');
     let renderedMedia;
-    app.element('.story-selected-preview').append = media => { renderedMedia=media; };
+    app.element('.story-selected-preview').append = media => { if (media.className === 'story-viewer-video') renderedMedia=media; };
     stories.openStoryCreator();
     const change=app.listeners.find(item=>item.key==='#story-upload' && item.type==='change').callback;
     const file=new Blob(['video fixture'],{type:'video/mp4'});

@@ -80,6 +80,9 @@ export function openStoryCreator() {
     if (!mayInteract()) { showShareFeedback('Approval is required to publish stories.'); return; }
     storyCreatorTrigger = document.activeElement;
     state.pendingStoryMedia = null;
+    state.storyUploadSelection = null;
+    if (state.storyUploadInputFallback?.timer) window.clearTimeout(state.storyUploadInputFallback.timer);
+    state.storyUploadInputFallback = null;
     state.activeStoryDraftId = null;
     setStoryCreationStep(false);
     document.getElementById('story-upload').value = '';
@@ -111,7 +114,6 @@ export function setStoryCreationStep(editing) {
     if (!hasMedia) document.querySelector('.story-selected-preview video')?.pause();
     if (!hasMedia) document.querySelectorAll('.story-selected-preview audio').forEach(audio=>audio.pause());
     document.getElementById('story-create-title').textContent = hasMedia ? 'Edit your story' : 'Choose a photo or video';
-    document.getElementById('story-upload').value = '';
 }
 
 export function closeStoryCreator() {
@@ -120,6 +122,9 @@ export function closeStoryCreator() {
         return;
     }
     closeStoryExitDialog();
+    const preview = document.querySelector('.story-selected-preview');
+    preview.__storyFrameObserver?.disconnect();
+    preview.__storyFrameObserver = null;
     document.querySelector('.story-selected-preview video')?.pause();
     document.querySelectorAll('.story-selected-preview audio').forEach(audio=>audio.pause());
     document.querySelector(".story-create-backdrop").hidden = true;

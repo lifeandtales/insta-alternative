@@ -148,26 +148,62 @@ test('Story text editing has an input border but placed overlays only outline fo
     assert.doesNotMatch(composition,/node\.style\.width=`\$\{number\(layer\.width/);
 });
 
-test('Story Text color control uses honeycomb swatches and keeps native color input accessible',async()=>{
-    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js');
-    state.pendingStoryMedia={type:'image',media:'fixture.png'};
-    app.element('.story-selected-preview').getBoundingClientRect=()=>({left:0,top:0,width:390,height:700});
-    const form=app.element('.story-inline-text form'),textarea=app.element('.story-inline-text form textarea'),colorInput=app.element('.story-inline-text form input[name="color"]'),picker=app.element('.story-inline-text form .story-color-picker');
-    form.dataset.tool='text';form.elements={font:{value:'sans'},size:{value:'7'},color:colorInput};
-    form.matches=selector=>selector==='.story-inline-form';
-    form.querySelector=selector=>selector==='textarea'?textarea:selector==='input[name="color"]'?colorInput:app.element(`.story-inline-text form ${selector}`);
-    colorInput.value='#ffffff';colorInput.closest=selector=>selector==='.story-color-picker'?picker:null;
-    picker.style.setProperty=(name,value)=>{picker.style[name]=value;};
-    const click=app.listeners.find(item=>item.key==='document'&&item.type==='click'&&item.callback.toString().includes('story-tools-open')).callback;
-    const target=(selector,data={})=>({closest:value=>value===selector?{dataset:data,focus(){}}:null});
-    click({target:target('.story-tools-open')});click({target:target('[data-story-tool]',{storyTool:'text'})});
-    assert.match(app.element('.story-inline-text').innerHTML,/story-color-picker[^>]*selected-story-color/);
-    assert.match(app.element('.story-inline-text').innerHTML,/<svg viewBox="0 0 24 24"><g[^>]*><path fill="#f472b6"/);
-    assert.match(app.element('.story-inline-text').innerHTML,/<input name="color" type="color" value="#ffffff" aria-label="Text color" \/>/);
-    const input=app.listeners.find(item=>item.key==='document'&&item.type==='input'&&item.callback.toString().includes('syncInlineTextStyle')).callback;
-    form.elements.color.value='#ff0000';colorInput.value='#ff0000';
-    input({target:{name:'color',closest:selector=>['.story-inline-form','.story-tool-form'].includes(selector)?form:null}});
-    assert.equal(picker.style['--selected-story-color'],'#ff0000');
+test('Text and Draw share the honeycomb color control with accessible live color inputs',async()=>{
+    const tools=(await loadApp()).exportsOf('src/features/story-tools.js');
+    const text=tools.storyTextColorPicker('#ffffff');
+    const draw=tools.storyTextColorPicker('#00aaff',{name:'draw-color',label:'Drawing color',dataAttr:'data-story-draw-color'});
+    assert.match(text,/story-color-picker-icon[^]*<svg viewBox="0 0 24 24"><g[^]*<path fill="#f472b6"/);
+    assert.match(text,/<input name="color" type="color" value="#ffffff" aria-label="Text color" data-story-text-color \/>/);
+    assert.match(draw,/--selected-story-color:#00aaff/);
+    assert.match(draw,/<input name="draw-color" type="color" value="#00aaff" aria-label="Drawing color" data-story-draw-color \/>/);
+});
+
+test('focused Story text mode offers all 15 circular fonts without a size slider and commits placement-preserving edits',async()=>{
+    const app=await loadApp(),tools=app.exportsOf('src/features/story-tools.js');
+    const source=fs.readFileSync(new URL('../src/features/story-tools.js',import.meta.url),'utf8');
+    const css=fs.readFileSync(new URL('../styles/story-and-media-viewers.css',import.meta.url),'utf8');
+    assert.match(source,/storyFontStyles\.map\(font=>`<button type="button" data-story-font=/);
+    assert.doesNotMatch(source,/name="size" type="range" aria-label="Text size"/);
+    assert.match(css,/\.story-mode-active \.story-inline-text\.story-text-mode\s*\{[^}]*display:\s*block!important/);
+    assert.match(css,/\.story-font-strip\s*\{[^}]*overflow-x:\s*auto/);
+    assert.match(css,/\.story-mode-active :is\(\.story-tools-open,\.story-editor-controls,\.story-draw-done,\.story-preview-play,\.story-preview-sound\)/);
+    const existing={id:'kept',type:'text',text:'old',x:.27,y:.63,width:.55,rotation:28,size:11,other:'kept'};
+    const edited=tools.buildStoryTextLayer(existing,{id:'ignored',text:'new @friend',font:'serif',color:'#ee00aa',mentions:[{id:'a',handle:'friend'}]});
+    assert.deepEqual({id:edited.id,x:edited.x,y:edited.y,width:edited.width,rotation:edited.rotation,size:edited.size,other:edited.other},{id:'kept',x:.27,y:.63,width:.55,rotation:28,size:11,other:'kept'});
+    assert.equal(edited.text,'new @friend');assert.equal(edited.color,'#ee00aa');assert.equal(edited.font,'serif');
+    const fresh=tools.buildStoryTextLayer(null,{id:'new',text:'hello'});assert.equal(fresh.id,'new');assert.equal(fresh.x,.5);assert.equal(fresh.y,.4);
+});
+
+test('Draw size bar maps 0–100% onto visible supported stroke widths and preserves saved stroke widths',async()=>{
+    const app=await loadApp(),tools=app.exportsOf('src/features/story-tools.js');
+    assert.equal(tools.storyDrawingWidthFromPercent(0),1);assert.equal(tools.storyDrawingWidthFromPercent(100),40);
+    assert.equal(tools.storyDrawingPercentFromWidth(8),18);assert.equal(tools.storyDrawingPercentFromWidth(40),100);
+    assert.equal(tools.storyDrawingWidthFromPercent(50),20.5);
+    const css=fs.readFileSync(new URL('../styles/story-and-media-viewers.css',import.meta.url),'utf8');
+    const source=fs.readFileSync(new URL('../src/features/story-tools.js',import.meta.url),'utf8');
+    assert.match(source,/aria-label="Drawing size"/);assert.match(source,/data-story-draw-size/);assert.match(source,/data-story-draw-color/);
+    assert.match(css,/\.story-draw-size input\[type="range"\]\s*\{[^}]*flex:\s*1/);
+    const {state}=app.exportsOf('src/core/state.js');state.pendingStoryMedia={type:'image',media:'fixture.png'};tools.prepareStoryTools();tools.beginStoryMode('draw');
+    const stroke={id:'existing-stroke',type:'draw',mode:'pen',color:'#ffffff',width:8,points:[{x:.1,y:.2},{x:.5,y:.6}]};tools.commitStoryEdit({layers:[stroke]});
+    const input=app.listeners.find(item=>item.key==='document'&&item.type==='input'&&item.callback.toString().includes('data-story-draw-width')).callback;
+    const sizeTarget=value=>({value,setAttribute(){},closest:selector=>selector==='[data-story-draw-width]'?{}:null});
+    input({target:sizeTarget('0')});input({target:sizeTarget('100')});tools.finishStoryMode(true);
+    assert.equal(state.pendingStoryMedia.edits.layers[0].width,8);assert.equal(state.pendingStoryMedia.edits.layers[0].points.length,2);
+});
+
+test('Location edits inline with a fixed pin and preserve existing placement on Done',async()=>{
+    const app=await loadApp(),tools=app.exportsOf('src/features/story-tools.js');
+    const source=fs.readFileSync(new URL('../src/features/story-tools.js',import.meta.url),'utf8');
+    const css=fs.readFileSync(new URL('../styles/story-and-media-viewers.css',import.meta.url),'utf8');
+    assert.match(source,/story-location-entry"><span aria-hidden="true">📍<\/span><input name="text" type="text"/);
+    assert.match(source,/createStoryEditSession\('location',pending\(\)\.edits\)/);
+    assert.doesNotMatch(source,/story-inline-location-form[^]*Location<input/);
+    assert.match(css,/\.story-mode-active \.story-inline-text\.story-location-text-mode\s*\{[^}]*display:\s*block!important/);
+    assert.match(css,/\.story-location-entry:focus-within\s*\{[^}]*outline:\s*2px solid/);
+    const existing={id:'place',type:'location',text:'Old place',x:.72,y:.31,width:.46,rotation:-17,size:6,extra:'preserved'};
+    const edited=tools.buildStoryTextLayer(existing,{id:'unused',text:'New place',type:'location'});
+    assert.deepEqual({id:edited.id,type:edited.type,x:edited.x,y:edited.y,width:edited.width,rotation:edited.rotation,extra:edited.extra},{id:'place',type:'location',x:.72,y:.31,width:.46,rotation:-17,extra:'preserved'});
+    assert.equal(edited.text,'New place');
 });
 
 test('selected Story sticker becomes a draggable, undoable sticker layer',async()=>{

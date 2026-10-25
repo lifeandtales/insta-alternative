@@ -60,6 +60,8 @@ export const state = {
     storyTouchStart: null,
     scheduledStories: new Map(),
     storySettings: { allowReplies: true, saveToArchive: true },
+    storyUploadSelection: null,
+    storyUploadInputFallback: null,
     selectedShareRecipients: new Set(),
     shareFeedbackTimeout: undefined,
     previousTap: { media: null, time: 0 }

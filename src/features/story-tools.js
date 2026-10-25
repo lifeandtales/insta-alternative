@@ -6,7 +6,7 @@ import { showShareFeedback } from '../components/feedback.js';
 import { applyStoryComposition, storyComposition, compositionHistory, STORY_VIDEO_LIMIT_SECONDS } from './story-composition.js';
 import { storyFontStyles, getStoryFontStyle } from './story-fonts.js';
 
-let storyRef, history, selectedLayer, gesture, drawMode, toolSession, activeAdjustment='brightness', moveMode=false, stickerView=null;
+let storyRef, history, selectedLayer, gesture, drawMode, toolSession, activeAdjustment='brightness', moveMode=false, stickerView=null, textDraft=null;
 const storyEmojiChoices=['🙂','😂','😍','🥳','❤️','✨','🔥','🌈','🌸','☀️','🎉','💯','👏','🙌','🦋','🌿','⭐','💫','🎂','☕','📍','✈️','🏖️','🎵'];
 const storyStickerChoices=[
     {id:'good-vibes',text:'GOOD VIBES',background:'#ef72b0',color:'#ffffff'},
@@ -22,6 +22,11 @@ const preview=()=>document.querySelector('.story-selected-preview');
 const pending=()=>state.pendingStoryMedia;
 const id=()=>`layer-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
 const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
+export function storyDrawingWidthFromPercent(value){return 1+clamp(Number(value)||0,0,100)*39/100;}
+export function storyDrawingPercentFromWidth(width){return Math.round((clamp(Number(width)||1,1,40)-1)/39*100);}
+export function buildStoryTextLayer(existing,{id:layerId,text,font='sans',color='#ffffff',mentions=[],type='text'}={}){
+    return {...existing,id:existing?.id||layerId,type,text,font,color,size:existing?.size||7,x:existing?.x??.5,y:existing?.y??.4,width:existing?.width??.8,rotation:existing?.rotation??0,mentions};
+}
 const val=(form,name)=>form.elements[name]?.value;
 const numeric=(form,name)=>Number(val(form,name));
 const input=(name,label,value,type='number',extra='')=>`<label>${label}<input name="${name}" type="${type}" value="${escapeHtml(String(value??''))}" ${extra} /></label>`;
@@ -110,8 +115,9 @@ function renderStickerPicker(section='emojis'){
     const options=document.querySelector('.story-tool-options');options.innerHTML=`<div class="story-sticker-section-tabs" role="tablist" aria-label="Story stickers, emojis and GIFs">${[['stickers','Stickers'],['emojis','Emojis'],['gifs','GIFs']].map(([key,label])=>`<button type="button" id="story-sticker-tab-${key}" role="tab" data-story-sticker-section="${key}" aria-controls="story-sticker-panel" aria-selected="${section===key}" aria-pressed="${section===key}" tabindex="${section===key?0:-1}">${label}</button>`).join('')}</div><div class="story-sticker-section" id="story-sticker-panel" role="tabpanel" aria-labelledby="story-sticker-tab-${section}">${content}</div>`;
 }
 function resetStoryMode(){
-    toolSession=null;drawMode=null;moveMode=false;
+    toolSession=null;drawMode=null;moveMode=false;textDraft=null;
     document.querySelector('.story-create-dialog').classList.remove('story-mode-active');
+    const textBox=document.querySelector('.story-inline-text');textBox.hidden=true;textBox.classList.remove('story-text-mode','story-location-text-mode');document.querySelector('.story-create-dialog').classList.remove('story-location-editing');
     const panel=document.querySelector('.story-edit-mode-controls');panel.hidden=true;panel.setAttribute('aria-label','Story editing controls');
 }
 function syncFilterSelection(preset){
@@ -131,6 +137,39 @@ export function finishStoryMode(save){
     if(save)commitStoryEdit(result);else repaint();
     document.querySelector('.story-tools-open').focus();return true;
 }
+export function storyTextColorPicker(color,{name='color',label='Text color',dataAttr='data-story-text-color'}={}){
+    return `<label class="story-color-picker" style="--selected-story-color:${color}"><span class="story-color-picker-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><g stroke="#584c70" stroke-width=".55"><path fill="#f472b6" d="M12 3.2 14.5 4.65v2.9L12 9 9.5 7.55v-2.9Z"/><path fill="#fbbf24" d="m7.1 6 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#34d399" d="m16.9 6 2.5 1.45v2.9L16.9 12l-2.5-1.45v-2.9Z"/><path fill="#60a5fa" d="m7.1 12 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#c084fc" d="M12 9 14.5 10.45v2.9L12 14.8l-2.5-1.45-2.5-1.45v-2.9Z"/><path fill="#fb7185" d="m16.9 12 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#f59e0b" d="m12 14.8 2.5 1.45v2.9L12 20.6l-2.5-1.45v-2.9Z"/></g></svg></span><span class="story-color-picker-swatch" aria-hidden="true"></span><input name="${name}" type="color" value="${color}" aria-label="${label}" ${dataAttr} /></label>`;
+}
+function renderStoryTextControls(){
+    const panel=document.querySelector('.story-edit-mode-controls');if(!panel||!textDraft)return;
+    panel.hidden=false;panel.setAttribute('aria-label',textDraft.kind==='location'?'Location editing controls':'Text and mention controls');
+    const fonts=textDraft.kind==='location'?'':`<div class="story-font-strip" role="group" aria-label="Swipe to browse writing styles">${storyFontStyles.map(font=>`<button type="button" data-story-font="${font.id}" aria-pressed="${textDraft.font===font.id}"><span class="story-font-circle" style="font-family:${font.family};font-weight:${font.weight};font-style:${font.style};letter-spacing:${font.spacing}em;text-transform:${font.transform}">Aa</span><span>${font.label}</span></button>`).join('')}</div>`;
+    const color=textDraft.kind==='location'?'':storyTextColorPicker(textDraft.color);
+    panel.innerHTML=`${fonts}<div class="story-text-mode-actions">${color}<button type="button" data-story-text-cancel>Cancel</button><button type="button" data-story-text-done>Done</button></div>`;
+}
+function applyTextDraftPreview(){
+    const box=document.querySelector('.story-inline-text'),field=box.querySelector('textarea')||box.querySelector('input[name="text"]');if(!field||!textDraft)return;
+    if(textDraft.kind==='location'){const layer=selectedLayer&&preview().querySelector(`[data-layer-id="${selectedLayer}"]`);if(layer)layer.style.visibility='hidden';return;}
+    const font=getStoryFontStyle(textDraft.font),size=Number(textDraft.size)||7;
+    Object.assign(field.style,{fontFamily:font.family,fontWeight:String(font.weight),fontStyle:font.style,letterSpacing:`${font.spacing}em`,textTransform:font.transform,fontSize:`${size}cqw`,color:textDraft.color});
+    const layer=selectedLayer&&preview().querySelector(`[data-layer-id="${selectedLayer}"]`);
+    if(layer)layer.style.visibility='hidden';
+}
+function finishInlineText(save){
+    if(!toolSession||!['text','location'].includes(toolSession.kind))return false;
+    const form=document.querySelector('.story-inline-text form');
+    if(save&&form&&textDraft){
+        const field=form.querySelector('textarea')||form.querySelector('input[name="text"]'),text=String(field?.value||'').trim();
+        if(!text){field?.focus();return false;}
+        const type=textDraft.kind==='location'?'location':'text';
+        const e=toolSession.current(),existing=e.layers.find(item=>item.id===selectedLayer&&item.type===type);
+        const mentions=type==='text'?[...text.matchAll(/@[a-zA-Z0-9._]+/g)].map(match=>state.accountDirectory.find(a=>a.handle.toLowerCase()===match[0].toLowerCase()&&!state.blockedHandles.has(a.handle))).filter(Boolean).map(a=>({id:a.id,handle:a.handle})):[];
+        const layer=buildStoryTextLayer(existing,{id:id(),text,font:textDraft.font,color:textDraft.color,mentions,type});
+        e.layers=existing?e.layers.map(item=>item.id===existing.id?layer:item):[...e.layers,layer];selectedLayer=layer.id;
+        toolSession.history.commit(e);
+    }
+    finishStoryMode(Boolean(save));document.querySelector('.story-tools-open').focus();return true;
+}
 export function updateStoryAdjustment(key,value){
     if(toolSession?.kind!=='adjustments'||!storyAdjustments.some(item=>item.id===key))return false;
     const next=toolSession.current();next.filter[key]=adjustmentFromSlider(key,value);commitStoryEdit(next);return true;
@@ -148,44 +187,46 @@ function renderStoryMode(){
         controls=`<label class="story-live-slider"><span>${option.name} <output data-story-adjust-value>${adjustmentToSlider(option.id,e.filter[option.id])}%</output></span><input type="range" min="0" max="100" value="${adjustmentToSlider(option.id,e.filter[option.id])}" data-story-adjustment="${option.id}" aria-label="${option.name}" /></label><div class="story-adjustment-strip">${storyAdjustments.map(item=>`<button type="button" data-story-adjustment-select="${item.id}" aria-pressed="${item.id===activeAdjustment}"><span aria-hidden="true">${item.icon}</span>${item.name}</button>`).join('')}</div>`;
     }
     if(kind==='draw'){
-        controls=`<div class="story-draw-modes">${[['pen','✎','Freehand'],['line','╱','Line'],['arrow','↗','Arrow'],['highlight','▰','Highlight']].map(([mode,icon,label])=>`<button type="button" data-story-draw-mode="${mode}" aria-pressed="${drawMode.mode===mode}"><span aria-hidden="true">${icon}</span>${label}</button>`).join('')}</div><div class="story-draw-settings"><label>Color<input type="color" data-story-draw-color value="${drawMode.color}" aria-label="Drawing color" /></label><button type="button" data-story-stroke-toggle aria-expanded="false">Stroke width</button><label class="story-stroke-slider" hidden>Stroke width<input type="range" min="2" max="30" value="${drawMode.width}" data-story-draw-width aria-label="Stroke width" /></label></div>`;
+        controls=`<div class="story-draw-modes">${[['pen','✎','Freehand'],['line','╱','Line'],['arrow','↗','Arrow'],['highlight','▰','Highlight']].map(([mode,icon,label])=>`<button type="button" data-story-draw-mode="${mode}" aria-pressed="${drawMode.mode===mode}"><span aria-hidden="true">${icon}</span>${label}</button>`).join('')}</div><div class="story-draw-settings">${storyTextColorPicker(drawMode.color,{name:'draw-color',label:'Drawing color',dataAttr:'data-story-draw-color'})}<label class="story-draw-size"><span aria-hidden="true">✎</span><input type="range" min="0" max="100" step="1" value="${storyDrawingPercentFromWidth(drawMode.width)}" data-story-draw-width aria-label="Drawing size" aria-valuetext="${storyDrawingPercentFromWidth(drawMode.width)}%" /><output data-story-draw-size aria-live="polite">${storyDrawingPercentFromWidth(drawMode.width)}%</output></label></div>`;
     }
     panel.innerHTML=`${controls}<div class="story-mode-actions"><button type="button" data-story-mode-save>Save changes</button><button type="button" data-story-mode-discard>Discard changes</button></div>`;
 }
 function syncInlineTextStyle(){
     const form=document.querySelector('.story-inline-text form');if(!form)return;
-    const field=form.querySelector('textarea'),font=getStoryFontStyle(val(form,'font'));
-    const size=numeric(form,'size')||7,color=val(form,'color')||'#ffffff';
+    const field=form.querySelector('textarea')||form.querySelector('input[name="text"]'),font=getStoryFontStyle(textDraft?.font||val(form,'font'));
+    const size=Number(textDraft?.size||7),color=textDraft?.color||val(form,'color')||'#ffffff';
+    if(textDraft)textDraft.color=color;
+    if(field.tagName==='TEXTAREA'){field.style.height='auto';field.style.height=`${Math.min(field.scrollHeight||40,Math.round((preview().getBoundingClientRect().height||700)*.55))}px`;}
     form.querySelector('input[name="color"]')?.closest('.story-color-picker')?.style.setProperty('--selected-story-color',color);
-    Object.assign(field.style,{fontFamily:font.family,fontWeight:String(font.weight),fontStyle:font.style,letterSpacing:`${font.spacing}em`,textTransform:font.transform,fontSize:`${preview().getBoundingClientRect().width*size/100}px`,color});
-    const layer=selectedLayer&&preview().querySelector(`[data-layer-id="${selectedLayer}"]`);
-    if(layer){
-        layer.textContent=field.value;
-        Object.assign(layer.style,{fontFamily:font.family,fontWeight:String(font.weight),fontStyle:font.style,letterSpacing:`${font.spacing}em`,textTransform:font.transform,fontSize:`${size}cqw`,color});
-        layer.classList.add('story-layer-selected');
-    }
+    Object.assign(field.style,{fontFamily:font.family,fontWeight:String(font.weight),fontStyle:font.style,letterSpacing:`${font.spacing}em`,textTransform:font.transform,fontSize:`${size}cqw`,color});
+    applyTextDraftPreview();
 }
-function closeInlineText(){const box=document.querySelector('.story-inline-text'),wasVisible=!box.hidden;box.hidden=true;document.querySelector('.story-create-dialog').classList.remove('story-location-editing');if(wasVisible&&pending())repaint();}
-function openInlineLocation(){
-    if(!pending()||!mayInteract())return;
-    ensureHistory();selectedLayer=null;closeTools();closeInlineText();
-    const box=document.querySelector('.story-inline-text');box.hidden=false;
-    Object.assign(box.style,{left:'50%',top:'40%',width:'80%'});
-    box.innerHTML=`<form class="story-tool-form story-inline-location-form" data-tool="labels"><input type="hidden" name="kind" value="location" /><label>📍 Location<input name="text" type="text" placeholder="Enter a location" maxlength="100" required aria-label="Location" /></label><button type="button" data-story-text-cancel>Cancel</button><button type="submit">Done</button></form>`;
-    document.querySelector('.story-create-dialog').classList.add('story-location-editing');
-    box.querySelector('input[name="text"]').focus();
-}
-function openInlineText(layerId=null){
+function closeInlineText(){const box=document.querySelector('.story-inline-text'),wasVisible=!box.hidden;if(['text','location'].includes(toolSession?.kind)){finishInlineText(false);return;}box.hidden=true;box.classList.remove('story-text-mode','story-location-text-mode');document.querySelector('.story-create-dialog').classList.remove('story-location-editing');if(wasVisible&&pending())repaint();}
+function openInlineLocation(layerId=null){
     if(!pending()||!mayInteract())return;
     ensureHistory();selectedLayer=layerId;
-    const layer=storyComposition(pending().edits).layers.find(item=>item.id===layerId);
-    closeTools();
+    const layer=storyComposition(pending().edits).layers.find(item=>item.id===layerId&&item.type==='location');
+    closeTools();closeInlineText();toolSession=createStoryEditSession('location',pending().edits);textDraft={kind:'location',font:layer?.font||'sans',color:layer?.color||'#ffffff',size:layer?.size||7};
+    document.querySelector('.story-create-dialog').classList.add('story-mode-active');
     if(layer)preview().querySelector(`[data-layer-id="${layerId}"]`)?.classList.add('story-layer-selected');
-    const box=document.querySelector('.story-inline-text');box.hidden=false;
-    box.style.left=`${clamp(layer?.x??.5,.15,.85)*100}%`;box.style.top=`${clamp(layer?.y??.4,.15,.7)*100}%`;box.style.width=`${(layer?.width??.8)*100}%`;
-    const textColor=/^#[\da-f]{6}$/i.test(layer?.color||'')?layer.color:'#ffffff';
-    box.innerHTML=`<form class="story-tool-form story-inline-form" data-tool="text"><textarea name="text" maxlength="500" placeholder="Write text or @mention" aria-label="Story text">${escapeHtml(layer?.text||'')}</textarea><div id="story-mention-suggestions" class="story-inline-mentions"></div><div class="story-inline-format"><select name="font" aria-label="Writing style">${storyFontStyles.map(font=>`<option value="${font.id}" ${layer?.font===font.id?'selected':''}>${font.label}</option>`).join('')}</select><label class="story-color-picker" style="--selected-story-color:${textColor}"><span class="story-color-picker-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><g stroke="#584c70" stroke-width=".55"><path fill="#f472b6" d="M12 3.2 14.5 4.65v2.9L12 9 9.5 7.55v-2.9Z"/><path fill="#fbbf24" d="m7.1 6 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#34d399" d="m16.9 6 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#60a5fa" d="m7.1 12 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#c084fc" d="M12 9 14.5 10.45v2.9L12 14.8l-2.5-1.45v-2.9Z"/><path fill="#fb7185" d="m16.9 12 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#f59e0b" d="m12 14.8 2.5 1.45v2.9L12 20.6l-2.5-1.45v-2.9Z"/></g></svg></span><span class="story-color-picker-swatch" aria-hidden="true"></span><input name="color" type="color" value="${textColor}" aria-label="Text color" /></label><input name="size" type="range" aria-label="Text size" min="2" max="20" step=".5" value="${layer?.size||7}" /><button type="button" data-story-text-cancel>Cancel</button><button type="submit">Done</button></div></form>`;
-    syncInlineTextStyle();box.querySelector('textarea').focus();
+    const box=document.querySelector('.story-inline-text');box.hidden=false;box.classList.add('story-location-text-mode');
+    box.style.left=`${(layer?.x??.5)*100}%`;box.style.top=`${(layer?.y??.4)*100}%`;box.style.width=`${(layer?.width??.8)*100}%`;box.style.rotate=`${layer?.rotation||0}deg`;
+    box.innerHTML=`<form class="story-tool-form story-location-inline-form" data-tool="labels"><div class="story-location-entry"><span aria-hidden="true">📍</span><input name="text" type="text" placeholder="Add a location" maxlength="100" required aria-label="Location text" value="${escapeHtml(layer?.text||'')}" /></div></form>`;
+    renderStoryTextControls();box.querySelector('input[name="text"]').focus();
+}
+function openInlineText(layerId=null,kind='text'){
+    if(!pending()||!mayInteract())return;
+    ensureHistory();selectedLayer=layerId;
+    const type=kind==='location'?'location':'text';
+    const layer=storyComposition(pending().edits).layers.find(item=>item.id===layerId&&item.type===type);
+    closeTools();closeInlineText();
+    toolSession=createStoryEditSession(type,pending().edits);textDraft={kind:type,font:layer?.font||'sans',color:/^#[\da-f]{6}$/i.test(layer?.color||'')?layer.color:'#ffffff',size:layer?.size||7};
+    document.querySelector('.story-create-dialog').classList.add('story-mode-active');
+    if(layer)preview().querySelector(`[data-layer-id="${layerId}"]`)?.classList.add('story-layer-selected');
+    const box=document.querySelector('.story-inline-text');box.hidden=false;box.classList.add('story-text-mode');
+    box.style.left=`${(layer?.x??.5)*100}%`;box.style.top=`${(layer?.y??.4)*100}%`;box.style.width=`${(layer?.width??.8)*100}%`;box.style.rotate=`${layer?.rotation||0}deg`;
+    box.innerHTML=`<form class="story-tool-form story-inline-form" data-tool="text"><textarea name="text" maxlength="500" placeholder="Write text or @mention" aria-label="Story text">${escapeHtml(layer?.text||'')}</textarea><div id="story-mention-suggestions" class="story-inline-mentions" role="listbox" aria-label="Mention suggestions"></div></form>`;
+    renderStoryTextControls();syncInlineTextStyle();box.querySelector('textarea').focus();
 }
 function hideDeleteTarget(){const target=document.querySelector('.story-delete-target');target.hidden=true;target.classList.remove('story-delete-ready');}
 export function isStoryDeleteDrop(rect,x,y){return x>=rect.left&&x<=rect.right&&y>=rect.top&&y<=rect.bottom;}
@@ -207,7 +248,6 @@ function toolForm(tool){
     }
     const e=storyComposition(pending().edits), layer=e.layers.find(item=>item.id===selectedLayer);
     let fields='';
-    if(tool==='text')fields=`<p>Text may include @mentions. Suggestions resolve only local available accounts; no notifications are sent.</p>${input('text','Text',layer?.type==='text'?layer.text:'','text','maxlength="500" list="story-mention-suggestions" required')}<datalist id="story-mention-suggestions"></datalist><label>Writing style<select name="font">${storyFontStyles.map(font=>`<option value="${font.id}" ${layer?.font===font.id?'selected':''}>${font.label}</option>`).join('')}</select></label>${range('size','Text size (% of Story width)',layer?.size||7,2,20,.5)}${input('color','Color',layer?.color||'#ffffff','color')}`;
     if(tool==='move')fields=`${range('x','Horizontal position',e.media.x,-100,100,1)}${range('y','Vertical position',e.media.y,-100,100,1)}${range('zoom','Zoom',e.media.zoom,.2,4,.05)}<button type="button" data-story-drag-media>Drag media on Story</button>`;
     if(tool==='fit')fields=`<label>Media framing<select name="fit"><option value="contain" ${e.media.fit==='contain'?'selected':''}>Fit · keep full media</option><option value="cover" ${e.media.fit==='cover'?'selected':''}>Fill · crop to Story</option></select></label>`;
     if(tool==='rotate')fields=`${range('rotation','Rotation',e.media.rotation,-180,180,1)}${range('straighten','Straighten',e.media.straighten,-15,15,.5)}<button type="button" data-story-rotate>Rotate 90°</button>`;
@@ -283,7 +323,9 @@ export function registerStoryToolEvents(){
         const brush=target.closest('[data-story-draw-mode]');if(brush&&drawMode){drawMode.mode=brush.dataset.storyDrawMode;renderStoryMode();return;}
         if(target.closest('[data-story-stroke-toggle]')){const slider=document.querySelector('.story-stroke-slider');slider.hidden=!slider.hidden;target.closest('[data-story-stroke-toggle]').setAttribute('aria-expanded',String(!slider.hidden));return;}
 
-        if(target.closest('[data-story-text-cancel]')){closeInlineText();return;}
+        if(target.closest('[data-story-text-cancel]')){if(['text','location'].includes(toolSession?.kind))finishInlineText(false);else closeInlineText();return;}
+        if(target.closest('[data-story-text-done]')){finishInlineText(true);return;}
+        const fontButton=target.closest('[data-story-font]');if(fontButton&&toolSession?.kind==='text'&&textDraft){textDraft.font=fontButton.dataset.storyFont;renderStoryTextControls();syncInlineTextStyle();return;}
         const mention=target.closest('[data-inline-mention]');if(mention){const field=document.querySelector('.story-inline-text textarea');field.value=field.value.replace(/@[a-zA-Z0-9._]*$/,mention.dataset.inlineMention);document.getElementById('story-mention-suggestions').replaceChildren();field.focus();return;}
         if(target.closest('.story-tools-open')){closeInlineText();openTools();return;}
         if(target.closest('.story-tools-back')){closeStickerPicker();return;}
@@ -307,11 +349,12 @@ export function registerStoryToolEvents(){
         if(target.closest('[data-story-remove-music]')){e.music=null;commitStoryEdit(e);toolForm('music');}
         if(target.closest('[data-story-remove-layer]')){e.layers=e.layers.filter(item=>item.id!==selectedLayer);selectedLayer=null;commitStoryEdit(e);closeTools();}
     });
-    document.addEventListener('submit',event=>{if(!event.target.matches('.story-tool-form'))return;event.preventDefault();if(pending()&&mayInteract())applyTool(event.target);});
+    document.addEventListener('submit',event=>{if(!event.target.matches('.story-tool-form'))return;event.preventDefault();if(['text','location'].includes(toolSession?.kind)&&event.target.matches('.story-inline-form,.story-location-inline-form'))return;if(pending()&&mayInteract())applyTool(event.target);});
     document.addEventListener('input',event=>{
         const adjust=event.target.closest('[data-story-adjustment]');if(adjust){updateStoryAdjustment(adjust.dataset.storyAdjustment,adjust.value);document.querySelector('[data-story-adjust-value]').textContent=`${adjust.value}%`;return;}
-        if(event.target.closest('[data-story-draw-color]')&&drawMode){drawMode.color=event.target.value;return;}
-        if(event.target.closest('[data-story-draw-width]')&&drawMode){drawMode.width=Number(event.target.value);return;}
+        if(event.target.closest('[data-story-draw-color]')&&drawMode){drawMode.color=event.target.value;event.target.closest('.story-color-picker')?.style.setProperty('--selected-story-color',event.target.value);return;}
+        if(event.target.closest('[data-story-draw-width]')&&drawMode){const percent=clamp(Number(event.target.value),0,100);drawMode.width=storyDrawingWidthFromPercent(percent);event.target.setAttribute('aria-valuetext',`${Math.round(percent)}%`);const output=document.querySelector('[data-story-draw-size]');if(output)output.textContent=`${Math.round(percent)}%`;return;}
+        if(event.target.closest('[data-story-text-color]')&&toolSession?.kind==='text'&&textDraft){textDraft.color=event.target.value;event.target.closest('.story-color-picker')?.style.setProperty('--selected-story-color',event.target.value);syncInlineTextStyle();return;}
         const form=event.target.closest('.story-tool-form');if(form?.matches('.story-inline-form'))syncInlineTextStyle();if(!form || form.dataset.tool!=='text' || event.target.name!=='text')return;
         const value=event.target.value, match=/@[a-zA-Z0-9._]*$/.exec(value);
         document.getElementById('story-mention-suggestions').innerHTML=match?state.accountDirectory.filter(a=>!state.blockedHandles.has(a.handle)&&a.handle.toLowerCase().startsWith(match[0].toLowerCase())).slice(0,8).map(a=>`<button type="button" data-inline-mention="${escapeHtml(a.handle)}">${escapeHtml(a.name)} · ${escapeHtml(a.handle)}</button>`).join(''):'';
@@ -396,9 +439,10 @@ export function registerStoryToolEvents(){
         pointers.delete(event.pointerId);
         if(gesture){const next=gesture.next,layerId=gesture.layer;
             if(next&&gesture.deleteDrop&&layerId)next.layers=next.layers.filter(item=>item.id!==layerId);
-            const tappedText=!next&&layerId&&gesture.e.layers.find(item=>item.id===layerId)?.type==='text';
+            const tappedLayer=!next&&layerId?gesture.e.layers.find(item=>item.id===layerId):null;
             gesture=null;pointers.clear();hideDeleteTarget();if(next)commitStoryEdit(next);fadeAlignmentGuides();
-            if(tappedText)openInlineText(layerId);
+            if(tappedLayer?.type==='text')openInlineText(layerId);
+            else if(tappedLayer?.type==='location')openInlineLocation(layerId);
         }
     });
     stage.addEventListener('pointercancel',()=>{pointers.clear();gesture=null;hideDeleteTarget();clearAlignmentGuides();repaint();});

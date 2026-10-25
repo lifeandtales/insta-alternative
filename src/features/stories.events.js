@@ -314,32 +314,72 @@ export function registerStoryUploadEvents() {
             event.preventDefault(); first.focus();
         }
     });
-    document.getElementById("story-upload").addEventListener("change", (event) => {
-        const [file] = event.target.files;
-        if (!file)
+    const upload = document.getElementById("story-upload");
+    const acceptStoryFile = (file, input) => {
+        const key = [file.name, file.size, file.lastModified, file.type].join('\u0000');
+        const previous = state.storyUploadSelection;
+        const now = Date.now();
+        // Mobile browsers may emit both input and change for one picker return.
+        // Treat that pair as one selection while allowing a later same-file retry.
+        if (previous?.key === key && now - previous.at < 750)
             return;
+        state.storyUploadSelection = { key, at: now };
         if (!getSupportedStoryFileType(file)) {
-            event.target.value = '';
+            input.value = '';
             showShareFeedback("Choose a supported image or video file for your story.");
             return;
         }
         const type = getSupportedStoryFileType(file);
-        state.pendingStoryMedia = { type, media: URL.createObjectURL(file), caption: '', durationMs: type === 'image' ? 30000 : undefined };
+        let media;
+        try {
+            media = URL.createObjectURL(file);
+        } catch {
+            input.value = '';
+            state.storyUploadSelection = null;
+            showShareFeedback("This file couldn't be opened. Please choose it again.");
+            return;
+        }
+        state.pendingStoryMedia = { type, media, caption: '', durationMs: type === 'image' ? 30000 : undefined };
         state.activeStoryDraftId = null;
         renderSelectedStory();
         document.querySelector('.story-create-back').focus();
-        event.target.value = "";
-    });
+        // Keep the native input untouched during picker return; it is cleared
+        // when a fresh creator opens, or when a rejected file is retried.
+    };
+    const handleStoryFileSelection = (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        if (event.type === 'input') {
+            if (state.storyUploadInputFallback?.timer) window.clearTimeout(state.storyUploadInputFallback.timer);
+            const pending = {file, input: event.target, timer: 0};
+            state.storyUploadInputFallback = pending;
+            // Some mobile pickers send input before change. Let the picker return
+            // completely before replacing its view, and use input as a fallback
+            // only if the browser never sends change.
+            pending.timer = window.setTimeout(() => {
+                if (state.storyUploadInputFallback !== pending) return;
+                state.storyUploadInputFallback = null;
+                acceptStoryFile(file, event.target);
+            }, 150);
+            return;
+        }
+        if (state.storyUploadInputFallback?.timer) window.clearTimeout(state.storyUploadInputFallback.timer);
+        state.storyUploadInputFallback = null;
+        acceptStoryFile(file, event.target);
+    };
+    upload.addEventListener('input', handleStoryFileSelection);
+    upload.addEventListener('change', handleStoryFileSelection);
 }
 
 function renderSelectedStory() {
     const story = state.pendingStoryMedia;
     setStoryCreationStep(Boolean(story));
     const container = document.querySelector('.story-selected-preview');
+    container.__storyFrameObserver?.disconnect();
+    container.__storyFrameObserver = null;
     container.replaceChildren();
     if (story) {
         const media = document.createElement(story.type === 'video' ? 'video' : 'img');
-        media.src = story.media;
         media.alt = 'Selected story';
         media.setAttribute('aria-label', 'Selected story preview');
         media.className = story.type === 'video' ? 'story-viewer-video' : 'story-viewer-image';
@@ -353,7 +393,32 @@ function renderSelectedStory() {
             };
             media.addEventListener('play', update); media.addEventListener('pause', update); media.addEventListener('ended', update);
         }
+        const frameGuide = document.createElement('div');
+        frameGuide.className = 'story-frame-guide';
+        frameGuide.setAttribute('aria-hidden', 'true');
+        const frameInfo = document.createElement('div');
+        frameInfo.className = 'story-frame-info';
+        frameInfo.setAttribute('role', 'status');
+        frameInfo.setAttribute('aria-live', 'polite');
+        const updateFrameInfo = () => {
+            const frame = container.getBoundingClientRect();
+            const frameWidth = Math.round(frame.width || 0), frameHeight = Math.round(frame.height || 0);
+            const sourceWidth = media.naturalWidth || media.videoWidth || 0;
+            const sourceHeight = media.naturalHeight || media.videoHeight || 0;
+            frameInfo.textContent = frameWidth && frameHeight
+                ? `Frame ${frameWidth} × ${frameHeight} CSS px${sourceWidth && sourceHeight ? ` · Source ${sourceWidth} × ${sourceHeight} px` : ''}`
+                : 'Story frame';
+        };
+        media.addEventListener(story.type === 'video' ? 'loadedmetadata' : 'load', updateFrameInfo);
+        media.src = story.media;
         container.append(media);
+        container.append(frameGuide);
+        container.append(frameInfo);
+        updateFrameInfo();
+        if (typeof ResizeObserver === 'function') {
+            container.__storyFrameObserver = new ResizeObserver(updateFrameInfo);
+            container.__storyFrameObserver.observe(container);
+        }
     }
     const playButton = document.querySelector('.story-preview-play');
     playButton.hidden = !story || story.type !== 'video';
