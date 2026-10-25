@@ -148,14 +148,83 @@ test('Story text editing has an input border but placed overlays only outline fo
     assert.doesNotMatch(composition,/node\.style\.width=`\$\{number\(layer\.width/);
 });
 
-test('Text and Draw share the honeycomb color control with accessible live color inputs',async()=>{
+test('Text and Draw share exactly 30 accessible circular color swatches',async()=>{
     const tools=(await loadApp()).exportsOf('src/features/story-tools.js');
     const text=tools.storyTextColorPicker('#ffffff');
     const draw=tools.storyTextColorPicker('#00aaff',{name:'draw-color',label:'Drawing color',dataAttr:'data-story-draw-color'});
-    assert.match(text,/story-color-picker-icon[^]*<svg viewBox="0 0 24 24"><g[^]*<path fill="#f472b6"/);
-    assert.match(text,/<input name="color" type="color" value="#ffffff" aria-label="Text color" data-story-text-color \/>/);
-    assert.match(draw,/--selected-story-color:#00aaff/);
-    assert.match(draw,/<input name="draw-color" type="color" value="#00aaff" aria-label="Drawing color" data-story-draw-color \/>/);
+    for(const markup of [text,draw]){
+        assert.match(markup,/story-color-picker-icon[^]*<svg viewBox="0 0 24 24"><g[^]*<path fill="#f472b6"/);
+        assert.match(markup,/data-story-color-toggle[^]*aria-expanded="false"[^]*aria-controls="story-color-chart-/);
+        assert.match(markup,/data-story-color-chart hidden/);
+        assert.equal((markup.match(/data-story-color-choice=/g)||[]).length,30);
+        assert.match(markup,/role="radiogroup" aria-label="[^"]+ choices"/);
+        assert.match(markup,/data-story-color-choice="#000000"[^]*aria-label="[^"]+: Black"/);
+        assert.match(markup,/data-story-color-choice="#ffffff"[^]*aria-label="[^"]+: White"/);
+        assert.match(markup,/data-story-color-choice="#f44336"[^]*aria-label="[^"]+: Red"/);
+        assert.match(markup,/data-story-color-value aria-live="polite"/);
+    }
+    assert.match(text,/--selected-story-color:#ffffff/);assert.match(draw,/--selected-story-color:#00aaff/);
+    assert.match(text,/input type="hidden" name="color" value="#ffffff" data-story-text-color/);
+    assert.match(draw,/input type="hidden" name="draw-color" value="#00aaff" data-story-draw-color/);
+    const eventApp=await loadApp();
+    assert.equal(tools.storyColorSwatches.length,30);
+    assert.equal(new Set(tools.storyColorSwatches.map(item=>item.color)).size,30);
+    assert.ok(tools.storyColorSwatches.some(item=>item.name==='Light red'));
+    assert.ok(tools.storyColorSwatches.some(item=>item.name==='Dark violet'));
+    assert.equal(eventApp.listeners.filter(listener=>listener.key==='document'&&listener.type==='click'&&listener.callback.toString().includes('data-story-color-choice')).length,1);
+    assert.equal(eventApp.listeners.filter(listener=>listener.key==='document'&&listener.type==='keydown'&&listener.callback.toString().includes('data-story-color-choice')).length,1);
+    assert.doesNotMatch(fs.readFileSync(new URL('../src/features/story-tools.js',import.meta.url),'utf8'),/data-story-color-plane|data-story-color-hue|colorPickerPointer/);
+    assert.deepEqual({...tools.hexToHsv('#ff0000')},{h:0,s:1,v:1});
+    assert.equal(tools.hsvToHex(240,1,1),'#0000ff');assert.equal(tools.hsvToHex(0,0,0),'#000000');
+    assert.equal(tools.storyColorAtPoint(0,.5,.5),'#804040');
+    assert.deepEqual({...tools.moveStoryColorSelection({h:210,s:.5,v:.5},'ArrowRight')},{h:210,s:.51,v:.5});
+    assert.deepEqual({...tools.moveStoryColorSelection({h:210,s:.5,v:.5},'ArrowUp',true)},{h:210,s:.5,v:.6});
+    assert.equal(tools.moveStoryColorSelection({h:0,s:1,v:1},'Enter'),null);
+    assert.equal(JSON.stringify(tools.storyLocationEditPosition()),JSON.stringify({x:.5,y:.5,width:.8,rotation:0}));
+    const newLocation=tools.buildStoryTextLayer(null,{id:'new-place',text:'Here',type:'location'});
+    assert.deepEqual({x:newLocation.x,y:newLocation.y,width:newLocation.width,rotation:newLocation.rotation},{x:.5,y:.5,width:.8,rotation:0});
+});
+
+test('Filters and Tune show Cancel left and Done right while Draw keeps Save and Discard',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js');
+    state.pendingStoryMedia={type:'image',media:'fixture.png'};
+    const tools=app.exportsOf('src/features/story-tools.js');tools.prepareStoryTools();
+    for(const kind of ['filters','adjustments']){
+        tools.beginStoryMode(kind);
+        const markup=app.element('.story-edit-mode-controls').innerHTML;
+        assert.match(markup,/story-mode-actions-done-cancel[^]*data-story-mode-discard>Cancel<\/button>[^]*data-story-mode-save>Done<\/button>/);
+        tools.finishStoryMode(false);
+    }
+    tools.beginStoryMode('draw');
+    const draw=app.element('.story-edit-mode-controls').innerHTML;
+    assert.match(draw,/data-story-mode-save>Save changes<\/button>[^]*data-story-mode-discard>Discard changes<\/button>/);
+});
+
+test('Draw offers Freehand, Dotted, Highlight and Colorful while keeping legacy Line and Arrow out of new controls',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js');state.pendingStoryMedia={type:'image',media:'fixture.png'};
+    const tools=app.exportsOf('src/features/story-tools.js');tools.prepareStoryTools();tools.beginStoryMode('draw');
+    const markup=app.element('.story-edit-mode-controls').innerHTML;
+    for(const mode of ['pen','dotted','highlight','colorful'])assert.match(markup,new RegExp(`data-story-draw-mode="${mode}"`));
+    assert.doesNotMatch(markup,/data-story-draw-mode="(?:line|arrow)"/);
+    assert.match(markup,/Colorful draws a smooth rainbow stroke/);
+});
+
+test('Dotted and Colorful drawing exports use visible dots and deterministic continuous path colors; legacy line and arrow still render',async()=>{
+    const app=await loadApp(),composition=app.exportsOf('src/features/story-composition.js'),paint=app.exportsOf('src/features/story-export.js').paintLayer;
+    const points=[{x:.05,y:.1},{x:.5,y:.35},{x:.9,y:.8}],segments=composition.storyDrawingSegments(points);
+    assert.ok(segments.length>10);
+    assert.equal(JSON.stringify(composition.storyDrawingSegments(points)),JSON.stringify(segments));
+    assert.notEqual(segments[0].color,segments.at(-1).color);
+    for(let index=1;index<segments.length;index++)assert.ok(Math.hypot(segments[index].from.x-segments[index-1].to.x,segments[index].from.y-segments[index-1].to.y)<1e-8);
+    const makeContext=()=>({strokeStyles:[],dash:null,strokes:0,save(){},restore(){},scale(){},beginPath(){},moveTo(){},lineTo(){},stroke(){this.strokeStyles.push(this.strokeStyle);this.strokes++;},setLineDash(value){this.dash=value;}});
+    const colorful=makeContext();paint(colorful,{type:'draw',mode:'colorful',width:8,points},1000,1000);
+    assert.equal(JSON.stringify(colorful.strokeStyles),JSON.stringify(segments.map(segment=>segment.color)));
+    const persisted=composition.storyComposition({layers:[{id:'rainbow',type:'draw',mode:'colorful',points}]});
+    assert.equal(persisted.layers[0].mode,'colorful');assert.equal(JSON.stringify(persisted.layers[0].points),JSON.stringify(points));
+    const dotted=makeContext();paint(dotted,{type:'draw',mode:'dotted',color:'#123456',width:8,points},1000,1000);
+    assert.equal(JSON.stringify(dotted.dash),JSON.stringify([4.4,13.6]));
+    const line=makeContext();paint(line,{type:'draw',mode:'line',color:'#123456',width:8,points},1000,1000);assert.equal(line.strokes,1);
+    const arrow=makeContext();paint(arrow,{type:'draw',mode:'arrow',color:'#123456',width:8,points},1000,1000);assert.equal(arrow.strokes,2);
 });
 
 test('focused Story text mode offers all 15 circular fonts without a size slider and commits placement-preserving edits',async()=>{
@@ -181,7 +250,7 @@ test('Draw size bar maps 0–100% onto visible supported stroke widths and prese
     assert.equal(tools.storyDrawingWidthFromPercent(50),20.5);
     const css=fs.readFileSync(new URL('../styles/story-and-media-viewers.css',import.meta.url),'utf8');
     const source=fs.readFileSync(new URL('../src/features/story-tools.js',import.meta.url),'utf8');
-    assert.match(source,/aria-label="Drawing size"/);assert.match(source,/data-story-draw-size/);assert.match(source,/data-story-draw-color/);
+    assert.match(source,/aria-label="Drawing size"/);assert.match(source,/data-story-draw-size/);assert.match(source,/data-story-draw-color/);assert.match(source,/drawMode\.color=color/);assert.match(source,/storyTextColorPicker\(drawMode\.color/);
     assert.match(css,/\.story-draw-size input\[type="range"\]\s*\{[^}]*flex:\s*1/);
     const {state}=app.exportsOf('src/core/state.js');state.pendingStoryMedia={type:'image',media:'fixture.png'};tools.prepareStoryTools();tools.beginStoryMode('draw');
     const stroke={id:'existing-stroke',type:'draw',mode:'pen',color:'#ffffff',width:8,points:[{x:.1,y:.2},{x:.5,y:.6}]};tools.commitStoryEdit({layers:[stroke]});
@@ -196,14 +265,34 @@ test('Location edits inline with a fixed pin and preserve existing placement on 
     const source=fs.readFileSync(new URL('../src/features/story-tools.js',import.meta.url),'utf8');
     const css=fs.readFileSync(new URL('../styles/story-and-media-viewers.css',import.meta.url),'utf8');
     assert.match(source,/story-location-entry"><span aria-hidden="true">📍<\/span><input name="text" type="text"/);
-    assert.match(source,/createStoryEditSession\('location',pending\(\)\.edits\)/);
+    assert.match(source,/createStoryEditSession\('location',pending\(\)\.edits\)/);assert.match(source,/const editPosition=storyLocationEditPosition\(\);box\.style\.left=`\$\{editPosition\.x\*100\}%`;box\.style\.top=`\$\{editPosition\.y\*100\}%`;/);
     assert.doesNotMatch(source,/story-inline-location-form[^]*Location<input/);
     assert.match(css,/\.story-mode-active \.story-inline-text\.story-location-text-mode\s*\{[^}]*display:\s*block!important/);
-    assert.match(css,/\.story-location-entry:focus-within\s*\{[^}]*outline:\s*2px solid/);
+    assert.match(css,/\.story-location-entry:focus-within\s*\{[^}]*outline:\s*2px solid/);assert.match(css,/\.story-inline-text\s*\{[^}]*transform:\s*translate\(-50%,-50%\)/);
     const existing={id:'place',type:'location',text:'Old place',x:.72,y:.31,width:.46,rotation:-17,size:6,extra:'preserved'};
     const edited=tools.buildStoryTextLayer(existing,{id:'unused',text:'New place',type:'location'});
     assert.deepEqual({id:edited.id,type:edited.type,x:edited.x,y:edited.y,width:edited.width,rotation:edited.rotation,extra:edited.extra},{id:'place',type:'location',x:.72,y:.31,width:.46,rotation:-17,extra:'preserved'});
     assert.equal(edited.text,'New place');
+});
+
+test('Location re-edit opens centered while Cancel restores and Done edits the saved layer in place',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js');
+    const original={id:'place',type:'location',text:'Old place',x:.78,y:.29,width:.47,rotation:-23,size:7};
+    state.pendingStoryMedia={type:'image',media:'fixture.png',edits:{layers:[original]}};
+    const tools=app.exportsOf('src/features/story-tools.js');tools.prepareStoryTools();
+    const click=app.listeners.find(item=>item.key==='document'&&item.type==='click'&&item.callback.toString().includes('data-story-text-cancel')).callback;
+    const open=()=>tools.openInlineLocation('place');
+    open();let box=app.element('.story-inline-text');
+    assert.equal(box.style.left,'50%');assert.equal(box.style.top,'50%');assert.equal(box.style.width,'80%');assert.equal(box.style.rotate,'0deg');
+    app.element('.story-inline-text form textarea').value='Canceled edit';
+    click({target:{closest:selector=>selector==='[data-story-text-cancel]'?{}:null}});
+    assert.equal(state.pendingStoryMedia.edits.layers[0].text,'Old place');assert.equal(state.pendingStoryMedia.edits.layers[0].x,.78);
+    open();app.element('.story-inline-text form textarea').value='Updated place';
+    click({target:{closest:selector=>selector==='[data-story-text-done]'?{}:null}});
+    const saved=state.pendingStoryMedia.edits.layers[0];
+    assert.equal(saved.id,'place');assert.equal(saved.text,'Updated place');assert.equal(saved.x,.78);assert.equal(saved.y,.29);assert.equal(saved.width,.47);assert.equal(saved.rotation,-23);
+    const undo=app.listeners.find(item=>item.key==='document'&&item.type==='click'&&item.callback.toString().includes('story-undo')).callback;
+    undo({target:{closest:selector=>selector==='.story-undo'?{}:null}});assert.equal(state.pendingStoryMedia.edits.layers[0].text,'Old place');
 });
 
 test('selected Story sticker becomes a draggable, undoable sticker layer',async()=>{
