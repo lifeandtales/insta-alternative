@@ -10,7 +10,17 @@ export const storyFilterPresets = [
     {id:'cool',name:'Cool',css:'sepia(.15) hue-rotate(160deg)'},
     {id:'fade',name:'Fade',css:'contrast(.8) saturate(.8) brightness(1.1)'},
     {id:'dramatic',name:'Drama',css:'contrast(1.3) saturate(.8)'},
-    {id:'rose',name:'Rose',css:'sepia(.2) hue-rotate(310deg) saturate(1.15)'}
+    {id:'rose',name:'Rose',css:'sepia(.2) hue-rotate(310deg) saturate(1.15)'},
+    {id:'amber',name:'Amber',css:'sepia(.28) saturate(1.35) hue-rotate(350deg) brightness(1.03)'},
+    {id:'blush',name:'Blush',css:'sepia(.14) hue-rotate(320deg) saturate(1.2)'},
+    {id:'mint',name:'Mint',css:'hue-rotate(85deg) saturate(1.08) brightness(1.02)'},
+    {id:'twilight',name:'Twilight',css:'hue-rotate(230deg) saturate(1.12) brightness(.93)'},
+    {id:'film',name:'Film',css:'sepia(.2) contrast(1.08) saturate(.78)'},
+    {id:'bright',name:'Bright',css:'brightness(1.15) contrast(.96) saturate(1.04)'},
+    {id:'deep',name:'Deep',css:'brightness(.9) contrast(1.16) saturate(1.08)'},
+    {id:'punch',name:'Punch',css:'contrast(1.18) saturate(1.55)'},
+    {id:'arctic',name:'Arctic',css:'hue-rotate(185deg) saturate(.78) brightness(1.08)'},
+    {id:'chalk',name:'Chalk',css:'grayscale(.72) brightness(1.11) contrast(.88)'}
 ];
 export const storyAdjustments = [
     {id:'brightness',name:'Brightness',icon:'☀'},

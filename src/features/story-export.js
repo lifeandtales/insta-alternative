@@ -2,6 +2,7 @@ import { state } from '../core/state.js';
 import { mayInteract } from '../core/social.js';
 import { storyComposition, compositionMediaStyle, storyVideoRange } from './story-composition.js';
 import { showShareFeedback } from '../components/feedback.js';
+import { getStoryFontStyle, transformStoryText } from './story-fonts.js';
 
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 let operation,readyFile,readyURL;
@@ -52,7 +53,7 @@ function wrapText(context,text,maxWidth){
 function roundedRect(ctx,x,y,width,height,radius){
     ctx.beginPath();ctx.moveTo(x+radius,y);ctx.arcTo(x+width,y,x+width,y+height,radius);ctx.arcTo(x+width,y+height,x,y+height,radius);ctx.arcTo(x,y+height,x,y,radius);ctx.arcTo(x,y,x+width,y,radius);ctx.closePath();
 }
-function paintLayer(ctx,layer,stageWidth,stageHeight){
+export function paintLayer(ctx,layer,stageWidth,stageHeight){
     ctx.save();
     if(layer.type==='draw'){
         ctx.scale(stageWidth/1000,stageHeight/1000);
@@ -68,18 +69,25 @@ function paintLayer(ctx,layer,stageWidth,stageHeight){
     }
     ctx.translate(clamp(layer.x??.5,0,1)*stageWidth,clamp(layer.y??.4,0,1)*stageHeight);ctx.rotate((layer.rotation||0)*Math.PI/180);
     const fontSize=clamp(layer.size||7,2,25)*stageWidth/100;
-    ctx.font=`${fontSize}px ${{sans:'Inter, sans-serif',serif:'Georgia, serif',mono:'monospace'}[layer.font]||'Inter, sans-serif'}`;
+    const font=getStoryFontStyle(layer.font);
+    ctx.font=`${font.style} ${layer.type==='sticker'?800:font.weight} ${fontSize}px ${font.family}`;
+    if('letterSpacing' in ctx)ctx.letterSpacing=`${fontSize*font.spacing}px`;
     ctx.textAlign='center';ctx.textBaseline='middle';
-    const text=layer.type==='location'?`📍 ${layer.text||''}`:layer.text||'';
+    const rawText=layer.type==='location'?`📍 ${layer.text||''}`:layer.text||'';
+    const text=transformStoryText(rawText,font);
     const lines=wrapText(ctx,text,stageWidth*(layer.width||.9));
     const lineHeight=fontSize*1.2,height=lines.length*lineHeight;
     if(layer.type==='location'){
         const width=Math.max(...lines.map(line=>ctx.measureText(line).width))+24;
         ctx.fillStyle='#ffffffdc';roundedRect(ctx,-width/2,-height/2-8,width,height+16,10);ctx.fill();ctx.fillStyle='#21162e';
+    }else if(layer.type==='sticker'){
+        const width=Math.max(...lines.map(line=>ctx.measureText(line).width))+fontSize*.9;
+        ctx.fillStyle=layer.background||'#9277eb';roundedRect(ctx,-width/2,-height/2-5,width,height+10,fontSize*.45);ctx.fill();
+        ctx.fillStyle=layer.color||'#ffffff';ctx.shadowColor='transparent';
     }else{ctx.fillStyle=layer.color||'#ffffff';ctx.shadowColor='#000c';ctx.shadowBlur=5;ctx.shadowOffsetY=2;}
     lines.forEach((line,index)=>ctx.fillText(line,0,(index-(lines.length-1)/2)*lineHeight));ctx.restore();
 }
-function paintFrame(ctx,media,story,geometry,stage){
+export function paintFrame(ctx,media,story,geometry,stage){
     const edits=storyComposition(story.edits),w=media.videoWidth||media.naturalWidth,h=media.videoHeight||media.naturalHeight;
     const {width:sw,height:sh,mediaWidth:mw,mediaHeight:mh,mediaLeft:ml,mediaTop:mt}=stage;
     const angle=(edits.media.rotation+edits.media.straighten)*Math.PI/180;

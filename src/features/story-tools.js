@@ -4,8 +4,18 @@ import { mayInteract } from '../core/social.js';
 import { escapeHtml } from '../core/utils.js';
 import { showShareFeedback } from '../components/feedback.js';
 import { applyStoryComposition, storyComposition, compositionHistory, STORY_VIDEO_LIMIT_SECONDS } from './story-composition.js';
+import { storyFontStyles, getStoryFontStyle } from './story-fonts.js';
 
-let storyRef, history, selectedLayer, gesture, drawMode, toolSession, activeAdjustment='brightness', moveMode=false;
+let storyRef, history, selectedLayer, gesture, drawMode, toolSession, activeAdjustment='brightness', moveMode=false, stickerView=null;
+const storyEmojiChoices=['🙂','😂','😍','🥳','❤️','✨','🔥','🌈','🌸','☀️','🎉','💯','👏','🙌','🦋','🌿','⭐','💫','🎂','☕','📍','✈️','🏖️','🎵'];
+const storyStickerChoices=[
+    {id:'good-vibes',text:'GOOD VIBES',background:'#ef72b0',color:'#ffffff'},
+    {id:'love-this',text:'LOVE THIS',background:'#ffca58',color:'#40234e'},
+    {id:'wow',text:'WOW',background:'#71d7c0',color:'#143d3b'},
+    {id:'yay',text:'YAY!',background:'#9277eb',color:'#ffffff'},
+    {id:'good-day',text:'GOOD DAY',background:'#78b8ff',color:'#173250'},
+    {id:'oh-yes',text:'OH YES',background:'#ff826f',color:'#ffffff'}
+];
 const currentComposition=()=>toolSession?toolSession.current():storyComposition(pending()?.edits);
 const activeHistory=()=>toolSession?.history||history;
 const preview=()=>document.querySelector('.story-selected-preview');
@@ -76,13 +86,36 @@ export function commitStoryEdit(next){
 }
 function closeTools(){
     document.querySelector('.story-tools-backdrop').hidden=true;
+    document.querySelector('.story-tools-backdrop').classList.remove('story-sticker-picker-active');
+    stickerView=null;
+    document.querySelector('.story-tools-back').hidden=true;
+    document.getElementById('story-tools-title').textContent='Story tools';
+    document.querySelector('.story-tool-options').replaceChildren();
     document.querySelector('.story-create-dialog').inert=false;
     if(pending() && !state.deletionRequestedAt)document.querySelector('.story-tools-open').focus();
+}
+function closeStickerPicker(){
+    stickerView=null;
+    document.querySelector('.story-tools-backdrop').classList.remove('story-tool-active','story-tool-mini','story-sticker-picker-active');
+    document.querySelector('.story-tools-back').hidden=true;
+    document.getElementById('story-tools-title').textContent='Story tools';
+    document.querySelector('.story-tool-options').replaceChildren();
+    document.querySelector('[data-story-tool="sticker"]').focus();
+}
+function renderStickerPicker(section='emojis'){
+    stickerView=section;
+    const content=section==='gifs'?'<div class="story-sticker-empty" aria-hidden="true"></div>'
+        :section==='stickers'?`<div class="story-static-sticker-grid">${storyStickerChoices.map(item=>`<button type="button" data-story-sticker-label="${item.id}" style="background:${item.background};color:${item.color}">${item.text}</button>`).join('')}</div>`
+        :`<div class="story-sticker-picker">${storyEmojiChoices.map(emoji=>`<button type="button" data-story-sticker="${emoji}" aria-label="Add ${emoji}">${emoji}</button>`).join('')}</div>`;
+    const options=document.querySelector('.story-tool-options');options.innerHTML=`<div class="story-sticker-section-tabs" role="tablist" aria-label="Story stickers, emojis and GIFs">${[['stickers','Stickers'],['emojis','Emojis'],['gifs','GIFs']].map(([key,label])=>`<button type="button" id="story-sticker-tab-${key}" role="tab" data-story-sticker-section="${key}" aria-controls="story-sticker-panel" aria-selected="${section===key}" aria-pressed="${section===key}" tabindex="${section===key?0:-1}">${label}</button>`).join('')}</div><div class="story-sticker-section" id="story-sticker-panel" role="tabpanel" aria-labelledby="story-sticker-tab-${section}">${content}</div>`;
 }
 function resetStoryMode(){
     toolSession=null;drawMode=null;moveMode=false;
     document.querySelector('.story-create-dialog').classList.remove('story-mode-active');
-    document.querySelector('.story-edit-mode-controls').hidden=true;
+    const panel=document.querySelector('.story-edit-mode-controls');panel.hidden=true;panel.setAttribute('aria-label','Story editing controls');
+}
+function syncFilterSelection(preset){
+    document.querySelectorAll('[data-story-filter]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.storyFilter===preset)));
 }
 export function beginStoryMode(kind){
     if(!pending()||!mayInteract())return false;
@@ -105,6 +138,7 @@ export function updateStoryAdjustment(key,value){
 function renderStoryMode(){
     if(!toolSession)return;
     const panel=document.querySelector('.story-edit-mode-controls');panel.hidden=false;
+    panel.setAttribute('aria-label',toolSession.kind==='adjustments'?'Tune controls':toolSession.kind==='filters'?'Story filters':'Story drawing controls');
     const kind=toolSession.kind,e=toolSession.current();let controls='';
     if(kind==='filters'){
         controls=`<div class="story-filter-strip" role="group" aria-label="Swipe to browse filters">${storyFilterPresets.map(preset=>`<button type="button" data-story-filter="${preset.id}" aria-pressed="${e.filter.preset===preset.id}"><span class="story-filter-circle" style="filter:${preset.css||'none'}">${pending().type==='image'?`<img src="${escapeHtml(pending().media)}" alt="" />`:'◉'}</span><span>${preset.name}</span></button>`).join('')}</div>`;
@@ -120,10 +154,18 @@ function renderStoryMode(){
 }
 function syncInlineTextStyle(){
     const form=document.querySelector('.story-inline-text form');if(!form)return;
-    const field=form.querySelector('textarea');
-    Object.assign(field.style,{fontFamily:{sans:'Inter, sans-serif',serif:'Georgia, serif',mono:'monospace'}[val(form,'font')]||'Inter, sans-serif',fontSize:`${preview().getBoundingClientRect().width*(numeric(form,'size')||7)/100}px`,color:val(form,'color')||'#ffffff'});
+    const field=form.querySelector('textarea'),font=getStoryFontStyle(val(form,'font'));
+    const size=numeric(form,'size')||7,color=val(form,'color')||'#ffffff';
+    form.querySelector('input[name="color"]')?.closest('.story-color-picker')?.style.setProperty('--selected-story-color',color);
+    Object.assign(field.style,{fontFamily:font.family,fontWeight:String(font.weight),fontStyle:font.style,letterSpacing:`${font.spacing}em`,textTransform:font.transform,fontSize:`${preview().getBoundingClientRect().width*size/100}px`,color});
+    const layer=selectedLayer&&preview().querySelector(`[data-layer-id="${selectedLayer}"]`);
+    if(layer){
+        layer.textContent=field.value;
+        Object.assign(layer.style,{fontFamily:font.family,fontWeight:String(font.weight),fontStyle:font.style,letterSpacing:`${font.spacing}em`,textTransform:font.transform,fontSize:`${size}cqw`,color});
+        layer.classList.add('story-layer-selected');
+    }
 }
-function closeInlineText(){document.querySelector('.story-inline-text').hidden=true;document.querySelector('.story-create-dialog').classList.remove('story-location-editing');}
+function closeInlineText(){const box=document.querySelector('.story-inline-text'),wasVisible=!box.hidden;box.hidden=true;document.querySelector('.story-create-dialog').classList.remove('story-location-editing');if(wasVisible&&pending())repaint();}
 function openInlineLocation(){
     if(!pending()||!mayInteract())return;
     ensureHistory();selectedLayer=null;closeTools();closeInlineText();
@@ -138,9 +180,11 @@ function openInlineText(layerId=null){
     ensureHistory();selectedLayer=layerId;
     const layer=storyComposition(pending().edits).layers.find(item=>item.id===layerId);
     closeTools();
+    if(layer)preview().querySelector(`[data-layer-id="${layerId}"]`)?.classList.add('story-layer-selected');
     const box=document.querySelector('.story-inline-text');box.hidden=false;
     box.style.left=`${clamp(layer?.x??.5,.15,.85)*100}%`;box.style.top=`${clamp(layer?.y??.4,.15,.7)*100}%`;box.style.width=`${(layer?.width??.8)*100}%`;
-    box.innerHTML=`<form class="story-tool-form story-inline-form" data-tool="text"><textarea name="text" maxlength="500" placeholder="Write text or @mention" aria-label="Story text">${escapeHtml(layer?.text||'')}</textarea><div id="story-mention-suggestions" class="story-inline-mentions"></div><div class="story-inline-format"><select name="font" aria-label="Font">${['sans','serif','mono'].map(font=>`<option ${layer?.font===font?'selected':''}>${font}</option>`).join('')}</select><input name="color" aria-label="Text color" type="color" value="${escapeHtml(layer?.color||'#ffffff')}" /><input name="size" type="range" aria-label="Text size" min="2" max="20" step=".5" value="${layer?.size||7}" /><button type="button" data-story-text-cancel>Cancel</button><button type="submit">Done</button></div></form>`;
+    const textColor=/^#[\da-f]{6}$/i.test(layer?.color||'')?layer.color:'#ffffff';
+    box.innerHTML=`<form class="story-tool-form story-inline-form" data-tool="text"><textarea name="text" maxlength="500" placeholder="Write text or @mention" aria-label="Story text">${escapeHtml(layer?.text||'')}</textarea><div id="story-mention-suggestions" class="story-inline-mentions"></div><div class="story-inline-format"><select name="font" aria-label="Writing style">${storyFontStyles.map(font=>`<option value="${font.id}" ${layer?.font===font.id?'selected':''}>${font.label}</option>`).join('')}</select><label class="story-color-picker" style="--selected-story-color:${textColor}"><span class="story-color-picker-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><g stroke="#584c70" stroke-width=".55"><path fill="#f472b6" d="M12 3.2 14.5 4.65v2.9L12 9 9.5 7.55v-2.9Z"/><path fill="#fbbf24" d="m7.1 6 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#34d399" d="m16.9 6 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#60a5fa" d="m7.1 12 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#c084fc" d="M12 9 14.5 10.45v2.9L12 14.8l-2.5-1.45v-2.9Z"/><path fill="#fb7185" d="m16.9 12 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#f59e0b" d="m12 14.8 2.5 1.45v2.9L12 20.6l-2.5-1.45v-2.9Z"/></g></svg></span><span class="story-color-picker-swatch" aria-hidden="true"></span><input name="color" type="color" value="${textColor}" aria-label="Text color" /></label><input name="size" type="range" aria-label="Text size" min="2" max="20" step=".5" value="${layer?.size||7}" /><button type="button" data-story-text-cancel>Cancel</button><button type="submit">Done</button></div></form>`;
     syncInlineTextStyle();box.querySelector('textarea').focus();
 }
 function hideDeleteTarget(){const target=document.querySelector('.story-delete-target');target.hidden=true;target.classList.remove('story-delete-ready');}
@@ -157,17 +201,17 @@ function toolForm(tool){
     const popup=document.querySelector('.story-tools-backdrop');
     popup.classList.add('story-tool-active');
     popup.classList.toggle('story-tool-mini',tool==='labels');
-    document.getElementById('story-tools-title').textContent=({labels:'Location',sticker:'Stickers / Emojis',text:'Text / @mentions'})[tool]||tool.charAt(0).toUpperCase()+tool.slice(1);
+    document.getElementById('story-tools-title').textContent=({labels:'Location',sticker:'Stickers / Emojis / GIFs',text:'Text / @mentions'})[tool]||tool.charAt(0).toUpperCase()+tool.slice(1);
     if(tool==='sticker'){
-        document.querySelector('.story-tool-options').innerHTML=`<div class="story-sticker-picker">${['🙂','😂','😍','🥳','❤️','✨','🔥','🌈','🌸','☀️','🎉','💯','👏','🙌','🦋','🌿','⭐','💫','🎂','☕','📍','✈️','🏖️','🎵'].map(emoji=>`<button type="button" data-story-sticker="${emoji}" aria-label="Add ${emoji}">${emoji}</button>`).join('')}</div>`;return;
+        document.querySelector('.story-tools-backdrop').classList.add('story-tool-active','story-sticker-picker-active');document.querySelector('.story-tools-back').hidden=false;renderStickerPicker('emojis');return;
     }
     const e=storyComposition(pending().edits), layer=e.layers.find(item=>item.id===selectedLayer);
     let fields='';
-    if(tool==='text')fields=`<p>Text may include @mentions. Suggestions resolve only local available accounts; no notifications are sent.</p>${input('text','Text',layer?.type==='text'?layer.text:'','text','maxlength="500" list="story-mention-suggestions" required')}<datalist id="story-mention-suggestions"></datalist><label>Font<select name="font">${['sans','serif','mono'].map(v=>`<option ${layer?.font===v?'selected':''}>${v}</option>`).join('')}</select></label>${range('size','Text size (% of Story width)',layer?.size||7,2,20,.5)}${input('color','Color',layer?.color||'#ffffff','color')}`;
+    if(tool==='text')fields=`<p>Text may include @mentions. Suggestions resolve only local available accounts; no notifications are sent.</p>${input('text','Text',layer?.type==='text'?layer.text:'','text','maxlength="500" list="story-mention-suggestions" required')}<datalist id="story-mention-suggestions"></datalist><label>Writing style<select name="font">${storyFontStyles.map(font=>`<option value="${font.id}" ${layer?.font===font.id?'selected':''}>${font.label}</option>`).join('')}</select></label>${range('size','Text size (% of Story width)',layer?.size||7,2,20,.5)}${input('color','Color',layer?.color||'#ffffff','color')}`;
     if(tool==='move')fields=`${range('x','Horizontal position',e.media.x,-100,100,1)}${range('y','Vertical position',e.media.y,-100,100,1)}${range('zoom','Zoom',e.media.zoom,.2,4,.05)}<button type="button" data-story-drag-media>Drag media on Story</button>`;
     if(tool==='fit')fields=`<label>Media framing<select name="fit"><option value="contain" ${e.media.fit==='contain'?'selected':''}>Fit · keep full media</option><option value="cover" ${e.media.fit==='cover'?'selected':''}>Fill · crop to Story</option></select></label>`;
     if(tool==='rotate')fields=`${range('rotation','Rotation',e.media.rotation,-180,180,1)}${range('straighten','Straighten',e.media.straighten,-15,15,.5)}<button type="button" data-story-rotate>Rotate 90°</button>`;
-    if(tool==='filters')fields=`<label>Filter<select name="preset">${['none','mono','vivid','sepia'].map(v=>`<option ${e.filter.preset===v?'selected':''}>${v}</option>`).join('')}</select></label>${range('brightness','Brightness',e.filter.brightness,.2,2,.05)}${range('contrast','Contrast',e.filter.contrast,.2,2,.05)}${range('warmth','Warmth / cool tint',e.filter.warmth,-1,1,.05)}${range('saturation','Color saturation',e.filter.saturation,0,2,.05)}`;
+    if(tool==='filters')fields=`<label>Filter<select name="preset">${storyFilterPresets.map(preset=>`<option value="${preset.id}" ${e.filter.preset===preset.id?'selected':''}>${preset.name}</option>`).join('')}</select></label>${range('brightness','Brightness',e.filter.brightness,.2,2,.05)}${range('contrast','Contrast',e.filter.contrast,.2,2,.05)}${range('warmth','Warmth / cool tint',e.filter.warmth,-1,1,.05)}${range('saturation','Color saturation',e.filter.saturation,0,2,.05)}`;
     if(tool==='draw')fields=`<label>Drawing<select name="mode"><option value="pen">Freehand</option><option value="line">Line</option><option value="arrow">Arrow</option><option value="highlight">Highlighter</option></select></label>${input('color','Color','#ffffff','color')}${range('width','Stroke width',8,2,30,1)}<p>Choose Apply, then draw on the preview. Select Done when finished.</p>`;
     if(tool==='sticker')fields=`${input('text','Sticker / emoji','🙂','text','maxlength="40" required')}${range('size','Size (% of Story width)',15,4,25,.5)}<p>Drag the sticker to place it anywhere on the Story.</p>`;
     if(tool==='labels')fields=`<input type="hidden" name="kind" value="location" />${input('text','Location','','text','maxlength="100" required')}<p>Enter a location label.</p>`;
@@ -178,8 +222,10 @@ function toolForm(tool){
 function openTools(){
     if(!pending() || !mayInteract())return;
     ensureHistory();
-    document.querySelector('.story-tools-backdrop').classList.remove('story-tool-active','story-tool-mini');
+    stickerView=null;
+    document.querySelector('.story-tools-backdrop').classList.remove('story-tool-active','story-tool-mini','story-sticker-picker-active');
     document.getElementById('story-tools-title').textContent='Story tools';
+    document.querySelector('.story-tools-back').hidden=true;
     document.querySelector('.story-tool-options').replaceChildren();
     document.querySelector('[data-story-tool="video"]').hidden=pending().type!=='video';
     document.querySelector('.story-tools-backdrop').hidden=false;
@@ -231,7 +277,7 @@ export function registerStoryToolEvents(){
         if(target.closest('[data-story-mode-discard]')){finishStoryMode(false);return;}
         const filter=target.closest('[data-story-filter]');if(filter&&toolSession?.kind==='filters'){
             const e=toolSession.current();e.filter.preset=filter.dataset.storyFilter;commitStoryEdit(e);
-            document.querySelectorAll('[data-story-filter]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.storyFilter===e.filter.preset)));filter.scrollIntoView?.({block:'nearest',inline:'center',behavior:'smooth'});return;
+            syncFilterSelection(e.filter.preset);filter.scrollIntoView?.({block:'nearest',inline:'center',behavior:'smooth'});return;
         }
         const adjust=target.closest('[data-story-adjustment-select]');if(adjust&&toolSession?.kind==='adjustments'){activeAdjustment=adjust.dataset.storyAdjustmentSelect;renderStoryMode();return;}
         const brush=target.closest('[data-story-draw-mode]');if(brush&&drawMode){drawMode.mode=brush.dataset.storyDrawMode;renderStoryMode();return;}
@@ -240,12 +286,17 @@ export function registerStoryToolEvents(){
         if(target.closest('[data-story-text-cancel]')){closeInlineText();return;}
         const mention=target.closest('[data-inline-mention]');if(mention){const field=document.querySelector('.story-inline-text textarea');field.value=field.value.replace(/@[a-zA-Z0-9._]*$/,mention.dataset.inlineMention);document.getElementById('story-mention-suggestions').replaceChildren();field.focus();return;}
         if(target.closest('.story-tools-open')){closeInlineText();openTools();return;}
+        if(target.closest('.story-tools-back')){closeStickerPicker();return;}
         if(target.closest('.story-tools-close') || target===document.querySelector('.story-tools-backdrop')){closeTools();return;}
         if(!pending() || !mayInteract())return;
         if(target.closest('.story-preview-sound')){if(pending().type!=='video')return;const next=currentComposition();next.video.muted=!next.video.muted;commitStoryEdit(next);return;}
         if(target.closest('.story-undo') || target.closest('.story-redo')){
-            ensureHistory();const next=target.closest('.story-undo')?activeHistory().undo():activeHistory().redo();if(!toolSession)pending().edits=next;repaint();return;
+            ensureHistory();const next=target.closest('.story-undo')?activeHistory().undo():activeHistory().redo();if(!toolSession)pending().edits=next;else if(toolSession.kind==='filters')syncFilterSelection(next.filter.preset);repaint();return;
         }
+        const section=target.closest('[data-story-sticker-section]');
+        if(section&&stickerView){const key=section.dataset.storyStickerSection;renderStickerPicker(key);document.getElementById(`story-sticker-tab-${key}`).focus();return;}
+        const stickerChoice=target.closest('[data-story-sticker-label]');
+        if(stickerChoice){const choice=storyStickerChoices.find(item=>item.id===stickerChoice.dataset.storyStickerLabel);if(!choice)return;const e=storyComposition(pending().edits),layer={id:id(),type:'sticker',text:choice.text,background:choice.background,color:choice.color,x:.5,y:.4,size:8,rotation:0};e.layers.push(layer);selectedLayer=layer.id;commitStoryEdit(e);closeTools();return;}
         const sticker=target.closest('[data-story-sticker]');
         if(sticker){const e=storyComposition(pending().edits);const layer={id:id(),type:'emoji',text:sticker.dataset.storySticker,x:.5,y:.4,size:15};e.layers.push(layer);selectedLayer=layer.id;commitStoryEdit(e);closeTools();return;}
         const tool=target.closest('[data-story-tool]');if(tool){toolForm(tool.dataset.storyTool);return;}
@@ -339,7 +390,7 @@ export function registerStoryToolEvents(){
             }
         }
         gesture.next=e;applyStoryComposition(stage,{...pending(),edits:e},{editing:true});
-        if(gesture.overlayAngleSnapped)stage.querySelector(`[data-layer-id="${gesture.layer}"]`)?.classList.add('story-overlay-angle-snapped');
+        if(gesture.layer){const selected=stage.querySelector(`[data-layer-id="${gesture.layer}"]`);selected?.classList.add('story-layer-selected');if(gesture.overlayAngleSnapped)selected?.classList.add('story-overlay-angle-snapped');}
     });
     stage.addEventListener('pointerup',event=>{
         pointers.delete(event.pointerId);
@@ -359,6 +410,12 @@ export function registerStoryToolEvents(){
     });
     document.addEventListener('keydown',event=>{
         const popup=document.querySelector('.story-tools-backdrop');if(popup.hidden)return;
+        const section=event.target.closest('[data-story-sticker-section]');
+        if(section&&['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){
+            event.preventDefault();const order=['stickers','emojis','gifs'],current=order.indexOf(section.dataset.storyStickerSection);
+            const index=event.key==='Home'?0:event.key==='End'?order.length-1:(current+(event.key==='ArrowRight'?1:-1)+order.length)%order.length;
+            const key=order[index];renderStickerPicker(key);document.getElementById(`story-sticker-tab-${key}`).focus();return;
+        }
         if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();closeTools();return;}
         if(event.key==='Tab'){
             const controls=[...popup.querySelectorAll('button,input,select')].filter(e=>!e.disabled&&e.getClientRects().length),first=controls[0],last=controls.at(-1);

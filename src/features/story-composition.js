@@ -1,6 +1,8 @@
 import { state } from '../core/state.js';
+import { getStoryFontStyle } from './story-fonts.js';
 
 export const STORY_VIDEO_LIMIT_SECONDS=240;
+export const STORY_FILTER_PRESET_IDS=Object.freeze(['none','mono','vivid','sepia','soft','golden','cool','fade','dramatic','rose','amber','blush','mint','twilight','film','bright','deep','punch','arctic','chalk']);
 export const cloneComposition = value => JSON.parse(JSON.stringify(value));
 const number = (value, fallback, min, max) => Math.max(min, Math.min(max, Number.isFinite(Number(value)) ? Number(value) : fallback));
 export function storyComposition(value = {}) {
@@ -8,7 +10,7 @@ export function storyComposition(value = {}) {
     return {
         version: 1,
         media: { x:number(media.x,0,-100,100), y:number(media.y,0,-100,100), zoom:number(media.zoom,1,.2,4), rotation:number(media.rotation,0,-360,360), straighten:number(media.straighten,0,-15,15), fit:media.fit === 'cover' ? 'cover' : 'contain' },
-        filter: { brightness:number(filter.brightness,1,.2,2), contrast:number(filter.contrast,1,.2,2), warmth:number(filter.warmth,0,-1,1), tint:number(filter.tint,0,-1,1), hue:number(filter.hue,0,-180,180), saturation:number(filter.saturation,1,0,2), preset:['none','mono','vivid','sepia','soft','golden','cool','fade','dramatic','rose'].includes(filter.preset) ? filter.preset : 'none' },
+        filter: { brightness:number(filter.brightness,1,.2,2), contrast:number(filter.contrast,1,.2,2), warmth:number(filter.warmth,0,-1,1), tint:number(filter.tint,0,-1,1), hue:number(filter.hue,0,-180,180), saturation:number(filter.saturation,1,0,2), preset:STORY_FILTER_PRESET_IDS.includes(filter.preset) ? filter.preset : 'none' },
         layers: Array.isArray(value.layers) ? cloneComposition(value.layers) : [],
         music: value.music?.src ? cloneComposition(value.music) : null,
         video: { start:number(video.start,0,0,STORY_VIDEO_LIMIT_SECONDS-.05), end:video.end == null ? null : number(video.end,0,0,STORY_VIDEO_LIMIT_SECONDS), muted:Boolean(video.muted), volume:number(video.volume,1,0,1) }
@@ -42,7 +44,7 @@ export function storyVideoRange(story, duration) {
 
 export function compositionMediaStyle(value) {
     const {media:m,filter:f}=storyComposition(value);
-    const presets={none:'',mono:' grayscale(1)',vivid:' saturate(1.35)',sepia:' sepia(.65)',soft:' contrast(.9) brightness(1.08)',golden:' sepia(.25) saturate(1.2)',cool:' sepia(.15) hue-rotate(160deg)',fade:' contrast(.8) saturate(.8) brightness(1.1)',dramatic:' contrast(1.3) saturate(.8)',rose:' sepia(.2) hue-rotate(310deg) saturate(1.15)'};
+    const presets={none:'',mono:' grayscale(1)',vivid:' saturate(1.35)',sepia:' sepia(.65)',soft:' contrast(.9) brightness(1.08)',golden:' sepia(.25) saturate(1.2)',cool:' sepia(.15) hue-rotate(160deg)',fade:' contrast(.8) saturate(.8) brightness(1.1)',dramatic:' contrast(1.3) saturate(.8)',rose:' sepia(.2) hue-rotate(310deg) saturate(1.15)',amber:' sepia(.28) saturate(1.35) hue-rotate(350deg) brightness(1.03)',blush:' sepia(.14) hue-rotate(320deg) saturate(1.2)',mint:' hue-rotate(85deg) saturate(1.08) brightness(1.02)',twilight:' hue-rotate(230deg) saturate(1.12) brightness(.93)',film:' sepia(.2) contrast(1.08) saturate(.78)',bright:' brightness(1.15) contrast(.96) saturate(1.04)',deep:' brightness(.9) contrast(1.16) saturate(1.08)',punch:' contrast(1.18) saturate(1.55)',arctic:' hue-rotate(185deg) saturate(.78) brightness(1.08)',chalk:' grayscale(.72) brightness(1.11) contrast(.88)'};
     return {objectFit:m.fit, transform:`translate(${m.x}%, ${m.y}%) scale(${m.zoom}) rotate(${m.rotation+m.straighten}deg)`,
         filter:`brightness(${f.brightness}) contrast(${f.contrast}) saturate(${f.saturation}) sepia(${Math.abs(f.warmth)*.4}) hue-rotate(${f.warmth<0 ? 180*Math.abs(f.warmth) : 0}deg) hue-rotate(${f.hue}deg) sepia(${Math.abs(f.tint)*.25}) hue-rotate(${f.tint*35}deg)${presets[f.preset]}`};
 }
@@ -68,10 +70,13 @@ function renderLayer(layer, editing) {
     }
     const node=document.createElement('div');node.className=`story-composition-layer story-layer-${layer.type}`;node.dataset.layerId=layer.id;
     node.style.left=`${number(layer.x,.5,0,1)*100}%`;node.style.top=`${number(layer.y,.4,0,1)*100}%`;
-    if(layer.type==='text'&&layer.width)node.style.width=`${number(layer.width,.8,.1,.9)*100}%`;
+    if(layer.type==='text'&&layer.width)node.style.maxWidth=`${number(layer.width,.8,.1,.9)*100}%`;
     node.style.rotate=`${number(layer.rotation,0,-360,360)}deg`;
     node.style.fontSize=`${number(layer.size,7,2,25)}cqw`;node.style.color=layer.color||'#ffffff';
-    node.style.fontFamily={sans:'Inter, sans-serif',serif:'Georgia, serif',mono:'monospace'}[layer.font]||'Inter, sans-serif';
+    const font=getStoryFontStyle(layer.font);
+    node.style.fontFamily=font.family;node.style.fontWeight=String(font.weight);node.style.fontStyle=font.style;
+    node.style.letterSpacing=`${font.spacing}em`;node.style.textTransform=font.transform;
+    if(layer.type==='sticker'){node.style.backgroundColor=layer.background||'#9277eb';node.style.color=layer.color||'#ffffff';}
     const text=String(layer.text||'');
     if(layer.type==='text' && !editing){
         let offset=0;

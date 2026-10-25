@@ -1,6 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { loadApp } from './helpers/app-harness.js';
+
+test('Story editor places Save Draft before Share while retaining each action binding',()=>{
+    const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+    const actions=html.match(/<div class="story-editor-actions">([\s\S]*?)<\/div>/)?.[1]||'';
+    const save=actions.indexOf('class="story-save-draft"'),share=actions.indexOf('class="story-publish-selected"');
+    assert.ok(save>=0&&share>save);
+    assert.match(actions,/<button[^>]*class="story-save-draft"[^>]*>[\s\S]*?<span class="story-editor-action-label">Draft story<\/span>[\s\S]*?<\/button>/);
+    assert.match(actions,/<button[^>]*class="story-publish-selected"[^>]*>[\s\S]*?<span class="story-editor-action-label">Share story<\/span>[\s\S]*?<\/button>/);
+    assert.doesNotMatch(actions,/7 days/);
+    assert.equal((html.match(/class="story-editor-control-icon"/g)||[]).length,4);
+    const styles=fs.readFileSync(new URL('../styles/story-and-media-viewers.css',import.meta.url),'utf8');
+    assert.match(styles,/\.story-option-buttons\s*\{\s*display:\s*grid;\s*grid-template-columns:\s*1fr 1fr;/);
+    assert.match(styles,/\.story-editor-actions\s*\{\s*display:\s*grid;\s*grid-template-columns:\s*1fr 1fr;/);
+    assert.match(styles,/\.story-editor-control-icon\s*\{[^}]*flex:\s*0 0 20px;[^}]*width:\s*20px;[^}]*height:\s*20px;/);
+    assert.match(styles,/\.story-editor-control-icon svg\s*\{[^}]*width:\s*18px;[^}]*height:\s*18px;[^}]*stroke-width:\s*1\.8;/);
+    assert.match(styles,/\.story-option-buttons\s*>\s*button,\s*\.story-editor-actions\s*>\s*button\s*\{\s*box-sizing:\s*border-box;\s*height:\s*52px;\s*min-height:\s*52px;/);
+    assert.match(styles,/\.story-editor-actions\s*>\s*button\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*gap:\s*8px;/);
+    const events=fs.readFileSync(new URL('../src/features/stories.events.js',import.meta.url),'utf8');
+    assert.match(events,/event\.target\.closest\('\.story-save-draft'\)/);
+    assert.match(events,/event\.target\.closest\('\.story-publish-selected'\)/);
+});
 
 test('welcome pause is reversible and applies only to local development hosts', async () => {
     const app = await loadApp();

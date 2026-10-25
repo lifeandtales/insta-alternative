@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=77" />
+    <link rel="stylesheet" href="styles.css?v=88" />
   </head>
   <body>
     <main id="deletion-lock" class="welcome-screen" hidden aria-labelledby="deletion-lock-title">
@@ -349,13 +349,13 @@
           <button type="button" class="story-preview-play" aria-label="Play video preview" hidden>▶</button>
           <div class="story-editor-controls" role="group" aria-label="Story options">
           <div class="story-option-buttons">
-            <button type="button" class="story-schedule-open" aria-haspopup="dialog" aria-controls="story-options-dialog"><span aria-hidden="true">▦</span><span>Schedule<small class="story-schedule-summary">Share now</small></span></button>
-            <button type="button" class="story-audience-open" aria-haspopup="dialog" aria-controls="story-options-dialog"><span aria-hidden="true">◎</span><span class="story-audience-summary">Normal audience</span></button>
+            <button type="button" class="story-schedule-open" aria-haspopup="dialog" aria-controls="story-options-dialog"><span class="story-editor-control-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 10h16M8 14h2m4 0h2m-8 4h2"/></svg></span><span>Schedule<small class="story-schedule-summary">Share now</small></span></button>
+            <button type="button" class="story-audience-open" aria-haspopup="dialog" aria-controls="story-options-dialog"><span class="story-editor-control-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.4-3.1 2.2-5 5.5-5s5.1 1.9 5.5 5M16 7.5a2.5 2.5 0 1 1 0 5m1.5 2.2c1.8.6 2.8 2 3 4.3"/></svg></span><span class="story-audience-summary">Normal audience</span></button>
           </div>
           <input id="story-audience" type="hidden" value="all" />
           <!-- Retain captions from older drafts without offering a second text editor. -->
           <input id="story-caption" type="hidden" value="" />
-          <div class="story-editor-actions"><button type="button" class="story-publish-selected" disabled>Share story</button><button type="button" class="story-save-draft" disabled>Save story draft · 7 days</button></div>
+          <div class="story-editor-actions"><button type="button" class="story-save-draft" disabled><span class="story-editor-control-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3.5h9l4 4V20H6z"/><path d="M9 3.5v6h7v-4M9 20v-6h7v6"/></svg></span><span class="story-editor-action-label">Draft story</span></button><button type="button" class="story-publish-selected" disabled><span class="story-editor-control-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m3 11 18-8-7 18-3.5-7L3 11Z"/><path d="m10.5 14 5-5"/></svg></span><span class="story-editor-action-label">Share story</span></button></div>
 
           </div>
           </div>
@@ -391,17 +391,17 @@
     </div>
     <div class="story-tools-backdrop" hidden>
       <section id="story-tools-dialog" class="story-tools-dialog" role="dialog" aria-modal="true" aria-labelledby="story-tools-title">
-        <header><h2 id="story-tools-title">Story tools</h2><button class="story-tools-close" type="button" aria-label="Close Story tools">×</button></header>
+        <header><button class="story-tools-back" type="button" aria-label="Back to Story tools" hidden>‹</button><h2 id="story-tools-title">Story tools</h2><button class="story-tools-close" type="button" aria-label="Close Story tools">×</button></header>
         <div class="story-tool-grid">
-          <button type="button" data-story-tool="text">Text / @mentions</button>
-          <button type="button" data-story-tool="filters">Filters</button>
-          <button type="button" data-story-tool="adjustments">Adjustments</button>
-          <button type="button" data-story-tool="draw">Draw</button>
-          <button type="button" data-story-tool="sticker">Stickers / Emojis</button>
-          <button type="button" data-story-tool="labels">Location</button>
-          <button type="button" data-story-tool="music">Music / Segment</button>
-          <button type="button" data-story-tool="video">Video trim</button>
-          <button type="button" class="story-export-open">Save to gallery</button>
+          <button type="button" data-story-tool="text"><span class="story-tool-icon story-tool-icon-letters" aria-hidden="true">Aa</span><span>Text / @mentions</span></button>
+          <button type="button" data-story-tool="filters"><span class="story-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16l-6.2 7.1v5.2l-3.6 1.8v-7z"/></svg></span><span>Filters</span></button>
+          <button type="button" data-story-tool="adjustments"><span class="story-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M9 4v4M15 10v4M8 16v4"/></svg></span><span>Tune</span></button>
+          <button type="button" data-story-tool="draw"><span class="story-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m4 16.5-.8 4.3 4.3-.8L20 7.5 16.5 4zM14.8 5.7l3.5 3.5"/></svg></span><span>Draw</span></button>
+          <button type="button" data-story-tool="sticker"><span class="story-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 3.8h14a1.2 1.2 0 0 1 1.2 1.2v9.5L14.5 20H5a1.2 1.2 0 0 1-1.2-1.2V5A1.2 1.2 0 0 1 5 3.8Z"/><path d="M20 14.5h-4.3a1.2 1.2 0 0 0-1.2 1.2V20"/><path d="m9 8 .5 1.2 1.3.1-1 .8.3 1.3-1.1-.7-1.1.7.3-1.3-1-.8 1.3-.1z"/></svg></span><span>Stickers / Emojis / GIFs</span></button>
+          <button type="button" data-story-tool="labels"><span class="story-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2.3"/></svg></span><span>Location</span></button>
+          <button type="button" data-story-tool="music"><span class="story-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></span><span>Music / Segment</span></button>
+          <button type="button" data-story-tool="video"><span class="story-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="m8 8 12 12M8 16 20 4M14.5 9.5l2-2"/></svg></span><span>Video trim</span></button>
+          <button type="button" class="story-export-open"><span class="story-tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M5 17v3h14v-3"/></svg></span><span>Save to gallery</span></button>
         </div>
         <div class="story-tool-options"></div>
       </section>
@@ -542,65 +542,66 @@
     <script type="importmap">
 {
   "imports": {
-    "./src/components/feedback.js": "./src/components/feedback.js?v=77",
-    "./src/components/post-card.js": "./src/components/post-card.js?v=77",
-    "./src/core/account-lock.js": "./src/core/account-lock.js?v=77",
-    "./src/core/dom.js": "./src/core/dom.js?v=77",
-    "./src/core/events.js": "./src/core/events.js?v=77",
-    "./src/core/local-preview.js": "./src/core/local-preview.js?v=77",
-    "./src/core/media-links.js": "./src/core/media-links.js?v=77",
-    "./src/core/navigation.events.js": "./src/core/navigation.events.js?v=77",
-    "./src/core/navigation.js": "./src/core/navigation.js?v=77",
-    "./src/core/social.js": "./src/core/social.js?v=77",
-    "./src/core/state.js": "./src/core/state.js?v=77",
-    "./src/core/utils.js": "./src/core/utils.js?v=77",
-    "./src/data/entities.js": "./src/data/entities.js?v=77",
-    "./src/data/sample-data.js": "./src/data/sample-data.js?v=77",
-    "./src/features/account-model.js": "./src/features/account-model.js?v=77",
-    "./src/features/account-settings.js": "./src/features/account-settings.js?v=77",
-    "./src/features/comments.events.js": "./src/features/comments.events.js?v=77",
-    "./src/features/comments.js": "./src/features/comments.js?v=77",
-    "./src/features/create.events.js": "./src/features/create.events.js?v=77",
-    "./src/features/create.js": "./src/features/create.js?v=77",
-    "./src/features/explore.events.js": "./src/features/explore.events.js?v=77",
-    "./src/features/explore.js": "./src/features/explore.js?v=77",
-    "./src/features/follows.events.js": "./src/features/follows.events.js?v=77",
-    "./src/features/follows.js": "./src/features/follows.js?v=77",
-    "./src/features/highlights.events.js": "./src/features/highlights.events.js?v=77",
-    "./src/features/highlights.js": "./src/features/highlights.js?v=77",
-    "./src/features/home-controls.js": "./src/features/home-controls.js?v=77",
-    "./src/features/home.js": "./src/features/home.js?v=77",
-    "./src/features/likes.events.js": "./src/features/likes.events.js?v=77",
-    "./src/features/likes.js": "./src/features/likes.js?v=77",
-    "./src/features/media-options.events.js": "./src/features/media-options.events.js?v=77",
-    "./src/features/media-options.js": "./src/features/media-options.js?v=77",
-    "./src/features/message-access.js": "./src/features/message-access.js?v=77",
-    "./src/features/messages.events.js": "./src/features/messages.events.js?v=77",
-    "./src/features/messages.js": "./src/features/messages.js?v=77",
-    "./src/features/notifications.js": "./src/features/notifications.js?v=77",
-    "./src/features/profile.events.js": "./src/features/profile.events.js?v=77",
-    "./src/features/profile.js": "./src/features/profile.js?v=77",
-    "./src/features/reels.js": "./src/features/reels.js?v=77",
-    "./src/features/saved.events.js": "./src/features/saved.events.js?v=77",
-    "./src/features/sharing.events.js": "./src/features/sharing.events.js?v=77",
-    "./src/features/sharing.js": "./src/features/sharing.js?v=77",
-    "./src/features/stories.events.js": "./src/features/stories.events.js?v=77",
-    "./src/features/stories.js": "./src/features/stories.js?v=77",
-    "./src/features/story-composition.js": "./src/features/story-composition.js?v=77",
-    "./src/features/story-drafts.js": "./src/features/story-drafts.js?v=77",
-    "./src/features/story-edit-session.js": "./src/features/story-edit-session.js?v=77",
-    "./src/features/story-export.js": "./src/features/story-export.js?v=77",
-    "./src/features/story-options.js": "./src/features/story-options.js?v=77",
-    "./src/features/story-tools.js": "./src/features/story-tools.js?v=77",
-    "./src/media/demo-sources.js": "./src/media/demo-sources.js?v=77",
-    "./src/media/video.events.js": "./src/media/video.events.js?v=77",
-    "./src/media/video.js": "./src/media/video.js?v=77",
-    "./src/storage/browser-storage.js": "./src/storage/browser-storage.js?v=77",
-    "./src/storage/local-session.js": "./src/storage/local-session.js?v=77",
-    "./src/storage/preferences.js": "./src/storage/preferences.js?v=77"
+    "./src/components/feedback.js": "./src/components/feedback.js?v=88",
+    "./src/components/post-card.js": "./src/components/post-card.js?v=88",
+    "./src/core/account-lock.js": "./src/core/account-lock.js?v=88",
+    "./src/core/dom.js": "./src/core/dom.js?v=88",
+    "./src/core/events.js": "./src/core/events.js?v=88",
+    "./src/core/local-preview.js": "./src/core/local-preview.js?v=88",
+    "./src/core/media-links.js": "./src/core/media-links.js?v=88",
+    "./src/core/navigation.events.js": "./src/core/navigation.events.js?v=88",
+    "./src/core/navigation.js": "./src/core/navigation.js?v=88",
+    "./src/core/social.js": "./src/core/social.js?v=88",
+    "./src/core/state.js": "./src/core/state.js?v=88",
+    "./src/core/utils.js": "./src/core/utils.js?v=88",
+    "./src/data/entities.js": "./src/data/entities.js?v=88",
+    "./src/data/sample-data.js": "./src/data/sample-data.js?v=88",
+    "./src/features/account-model.js": "./src/features/account-model.js?v=88",
+    "./src/features/account-settings.js": "./src/features/account-settings.js?v=88",
+    "./src/features/comments.events.js": "./src/features/comments.events.js?v=88",
+    "./src/features/comments.js": "./src/features/comments.js?v=88",
+    "./src/features/create.events.js": "./src/features/create.events.js?v=88",
+    "./src/features/create.js": "./src/features/create.js?v=88",
+    "./src/features/explore.events.js": "./src/features/explore.events.js?v=88",
+    "./src/features/explore.js": "./src/features/explore.js?v=88",
+    "./src/features/follows.events.js": "./src/features/follows.events.js?v=88",
+    "./src/features/follows.js": "./src/features/follows.js?v=88",
+    "./src/features/highlights.events.js": "./src/features/highlights.events.js?v=88",
+    "./src/features/highlights.js": "./src/features/highlights.js?v=88",
+    "./src/features/home-controls.js": "./src/features/home-controls.js?v=88",
+    "./src/features/home.js": "./src/features/home.js?v=88",
+    "./src/features/likes.events.js": "./src/features/likes.events.js?v=88",
+    "./src/features/likes.js": "./src/features/likes.js?v=88",
+    "./src/features/media-options.events.js": "./src/features/media-options.events.js?v=88",
+    "./src/features/media-options.js": "./src/features/media-options.js?v=88",
+    "./src/features/message-access.js": "./src/features/message-access.js?v=88",
+    "./src/features/messages.events.js": "./src/features/messages.events.js?v=88",
+    "./src/features/messages.js": "./src/features/messages.js?v=88",
+    "./src/features/notifications.js": "./src/features/notifications.js?v=88",
+    "./src/features/profile.events.js": "./src/features/profile.events.js?v=88",
+    "./src/features/profile.js": "./src/features/profile.js?v=88",
+    "./src/features/reels.js": "./src/features/reels.js?v=88",
+    "./src/features/saved.events.js": "./src/features/saved.events.js?v=88",
+    "./src/features/sharing.events.js": "./src/features/sharing.events.js?v=88",
+    "./src/features/sharing.js": "./src/features/sharing.js?v=88",
+    "./src/features/stories.events.js": "./src/features/stories.events.js?v=88",
+    "./src/features/stories.js": "./src/features/stories.js?v=88",
+    "./src/features/story-composition.js": "./src/features/story-composition.js?v=88",
+    "./src/features/story-drafts.js": "./src/features/story-drafts.js?v=88",
+    "./src/features/story-edit-session.js": "./src/features/story-edit-session.js?v=88",
+    "./src/features/story-export.js": "./src/features/story-export.js?v=88",
+    "./src/features/story-fonts.js": "./src/features/story-fonts.js?v=88",
+    "./src/features/story-options.js": "./src/features/story-options.js?v=88",
+    "./src/features/story-tools.js": "./src/features/story-tools.js?v=88",
+    "./src/media/demo-sources.js": "./src/media/demo-sources.js?v=88",
+    "./src/media/video.events.js": "./src/media/video.events.js?v=88",
+    "./src/media/video.js": "./src/media/video.js?v=88",
+    "./src/storage/browser-storage.js": "./src/storage/browser-storage.js?v=88",
+    "./src/storage/local-session.js": "./src/storage/local-session.js?v=88",
+    "./src/storage/preferences.js": "./src/storage/preferences.js?v=88"
   }
 }
     </script>
-    <script type="module" src="app.js?v=77"></script>
+    <script type="module" src="app.js?v=88"></script>
   </body>
 </html>
