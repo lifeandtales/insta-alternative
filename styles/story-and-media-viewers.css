@@ -861,8 +861,13 @@ body.video-fullscreen-open {
 .story-color-trigger:focus-visible,.story-color-plane:focus-visible { outline: 3px solid #d6baff; outline-offset: 2px; }
 .story-color-chart { position: absolute; z-index: 30; left: 0; bottom: calc(100% + 10px); width: min(360px,calc(100vw - 32px)); box-sizing: border-box; padding: 12px; border: 1px solid #ffffff55; border-radius: 16px; background: #17131df5; box-shadow: 0 10px 35px #0009; }
 .story-color-chart[hidden] { display: none; }
-.story-color-swatches { display: flex; gap: 8px; overflow-x: auto; padding: 4px 3px 10px; overscroll-behavior-x: contain; scrollbar-width: thin; touch-action: pan-x; }
+.story-color-swatches { display: flex; gap: 8px; overflow-x: auto; padding: 4px 3px 10px; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: #cbb5e7 #ffffff20; touch-action: pan-x; }
+.story-color-swatches::-webkit-scrollbar { height: 6px; }
+.story-color-swatches::-webkit-scrollbar-track { border-radius: 6px; background: #ffffff20; }
+.story-color-swatches::-webkit-scrollbar-thumb { border-radius: 6px; background: #cbb5e7; }
 .story-color-choice { position: relative; flex: 0 0 34px; width: 34px; height: 34px; padding: 0; border: 2px solid #ffffff70; border-radius: 50%; background: var(--swatch-color); cursor: pointer; }
+.story-color-choice { scroll-snap-align: start; }
+.story-text-mode-actions .story-color-chart .story-color-choice { flex: 0 0 34px; width: 34px; min-width: 34px; max-width: 34px; height: 34px; min-height: 34px; padding: 0; border: 2px solid #ffffff70; border-radius: 50%; background: var(--swatch-color); }
 .story-color-choice[aria-checked="true"] { outline: 2px solid #fff; outline-offset: 2px; }
 .story-color-choice:focus-visible { outline: 3px solid #d6baff; outline-offset: 3px; }
 .story-color-chart output { display: block; padding: 2px 3px 0; color: #fff; font: 600 .7rem ui-monospace,monospace; }

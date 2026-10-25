@@ -169,7 +169,7 @@ function renderStoryTextControls(){
     const panel=document.querySelector('.story-edit-mode-controls');if(!panel||!textDraft)return;
     panel.hidden=false;panel.setAttribute('aria-label',textDraft.kind==='location'?'Location editing controls':'Text and mention controls');
     const fonts=textDraft.kind==='location'?'':`<div class="story-font-strip" role="group" aria-label="Swipe to browse writing styles">${storyFontStyles.map(font=>`<button type="button" data-story-font="${font.id}" aria-pressed="${textDraft.font===font.id}"><span class="story-font-circle" style="font-family:${font.family};font-weight:${font.weight};font-style:${font.style};letter-spacing:${font.spacing}em;text-transform:${font.transform}">Aa</span><span>${font.label}</span></button>`).join('')}</div>`;
-    const color=textDraft.kind==='location'?'':storyTextColorPicker(textDraft.color,{open:true});
+    const color=textDraft.kind==='location'?'':storyTextColorPicker(textDraft.color);
     panel.innerHTML=`${fonts}<div class="story-text-mode-actions">${color}<button type="button" data-story-text-cancel>Cancel</button><button type="button" data-story-text-done>Done</button></div>`;
 }
 function applyTextDraftPreview(){
