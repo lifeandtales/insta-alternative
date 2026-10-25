@@ -33,6 +33,27 @@ test('saved writing styles render in Story composition previews',async()=>{
     assert.equal(node.style.maxWidth,'60%');
 });
 
+test('new dotted and rainbow strokes render in the shared Story preview layer renderer',async()=>{
+    const app=await loadApp(),stage=app.element('.story-selected-preview'),nodes=[];
+    stage.ownerDocument=app.document;stage.querySelector=()=>null;stage.querySelectorAll=()=>[];stage.append=node=>nodes.push(node);
+    app.document.createElementNS=(namespaceURI,tag)=>{
+        const attributes=new Map(),children=[];
+        return {namespaceURI,tag,attributes,children,dataset:{},style:{},classList:{add(){}},setAttribute:(name,value)=>attributes.set(name,value),append:node=>children.push(node)};
+    };
+    const {applyStoryComposition,storyDrawingSegments}=app.exportsOf('src/features/story-composition.js');
+    const points=[{x:.1,y:.2},{x:.55,y:.44},{x:.9,y:.83}];
+    applyStoryComposition(stage,{edits:{layers:[
+        {id:'dots',type:'draw',mode:'dotted',color:'#ab34ef',width:7,points},
+        {id:'rainbow',type:'draw',mode:'colorful',width:9,points}
+    ]}});
+    const dotted=nodes.find(node=>node.attributes.get('aria-label')==='Story dotted drawing');
+    const rainbow=nodes.find(node=>node.attributes.get('aria-label')==='Story colorful drawing');
+    const dash=dotted.children[0].attributes.get('stroke-dasharray').split(' ').map(Number);
+    assert.ok(Math.abs(dash[0]-3.85)<1e-9);assert.ok(Math.abs(dash[1]-11.9)<1e-9);
+    assert.equal(rainbow.children.length,storyDrawingSegments(points).length);
+    assert.ok(new Set(rainbow.children.map(node=>node.attributes.get('stroke'))).size>10);
+});
+
 test('ten additional Story filters preserve old IDs and flow through preview composition plus history',async()=>{
     const app=await loadApp();
     const {storyFilterPresets}=app.exportsOf('src/features/story-edit-session.js');
@@ -111,9 +132,9 @@ test('Story storage roundtrips nested music media and composition for playback/H
     const app=await loadApp();app.context.fetch=fetch;
     const {serializeStoryMedia,restoreStoryMedia}=app.exportsOf('src/storage/browser-storage.js');
     const image=URL.createObjectURL(new Blob(['image'],{type:'image/png'}));const music=URL.createObjectURL(new Blob(['tone'],{type:'audio/wav'}));
-    const story={media:image,type:'image',edits:{layers:[{type:'text',text:'Saved text',x:.3,y:.6},{type:'sticker',text:'GOOD VIBES',background:'#ef72b0',color:'#fff',x:.5,y:.4}],music:{src:music,title:'Fixture tone',start:1,end:3}}};
+    const story={media:image,type:'image',edits:{layers:[{type:'text',text:'Saved text',x:.3,y:.6,color:'#15b8a6'},{type:'sticker',text:'GOOD VIBES',background:'#ef72b0',color:'#fff',x:.5,y:.4},{id:'rainbow',type:'draw',mode:'colorful',color:'#ffffff',width:8,points:[{x:.2,y:.3},{x:.7,y:.8}]},{id:'dots',type:'draw',mode:'dotted',color:'#ab34ef',width:5,points:[{x:.1,y:.1},{x:.5,y:.5}]}],music:{src:music,title:'Fixture tone',start:1,end:3}}};
     const stored=await serializeStoryMedia(story);assert.ok(stored.media instanceof Blob);assert.ok(stored.edits.music.src instanceof Blob);
-    const restored=restoreStoryMedia(stored);assert.ok(restored.edits.music.src.startsWith('blob:'));assert.equal(restored.edits.layers[0].x,.3);assert.equal(restored.edits.layers[1].background,'#ef72b0');assert.equal(restored.edits.music.end,3);
+    const restored=restoreStoryMedia(stored);assert.ok(restored.edits.music.src.startsWith('blob:'));assert.equal(restored.edits.layers[0].x,.3);assert.equal(restored.edits.layers[0].color,'#15b8a6');assert.equal(restored.edits.layers[1].background,'#ef72b0');assert.equal(restored.edits.layers[2].mode,'colorful');assert.equal(restored.edits.layers[3].color,'#ab34ef');assert.equal(restored.edits.music.end,3);
     assert.equal(await (await fetch(restored.edits.music.src)).text(),'tone');
     for(const url of [image,music,restored.media,restored.edits.music.src])URL.revokeObjectURL(url);
 });
