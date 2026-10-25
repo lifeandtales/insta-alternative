@@ -7,7 +7,10 @@ import { applyStoryComposition, storyComposition, compositionHistory, STORY_VIDE
 import { storyFontStyles, getStoryFontStyle } from './story-fonts.js';
 
 let storyRef, history, selectedLayer, gesture, drawMode, toolSession, activeAdjustment='brightness', moveMode=false, stickerView=null, textDraft=null;
-let colorPickerHsv={h:0,s:0,v:1},colorPickerPointer=null;
+export const storyColorSwatches=[
+    ['Black','#000000'],['Charcoal','#262626'],['Dark gray','#4a4a4a'],['Gray','#6b7280'],['Slate gray','#9ca3af'],['Medium gray','#c5c5c5'],['Light gray','#e5e5e5'],['Pale gray','#f5f5f5'],['White','#ffffff'],
+    ['Light red','#ff8a80'],['Red','#f44336'],['Dark red','#b71c1c'],['Light orange','#ffcc80'],['Orange','#ff9800'],['Dark orange','#e65100'],['Light yellow','#fff59d'],['Yellow','#ffeb3b'],['Dark yellow','#f9a825'],['Light green','#a5d6a7'],['Green','#4caf50'],['Dark green','#1b5e20'],['Light blue','#90caf9'],['Blue','#2196f3'],['Dark blue','#0d47a1'],['Light indigo','#9fa8da'],['Indigo','#3f51b5'],['Dark indigo','#1a237e'],['Light violet','#ce93d8'],['Violet','#9c27b0'],['Dark violet','#4a148c']
+].map(([name,color])=>({name,color}));
 const storyEmojiChoices=['🙂','😂','😍','🥳','❤️','✨','🔥','🌈','🌸','☀️','🎉','💯','👏','🙌','🦋','🌿','⭐','💫','🎂','☕','📍','✈️','🏖️','🎵'];
 const storyStickerChoices=[
     {id:'good-vibes',text:'GOOD VIBES',background:'#ef72b0',color:'#ffffff'},
@@ -159,8 +162,8 @@ export function finishStoryMode(save){
     document.querySelector('.story-tools-open').focus();return true;
 }
 export function storyTextColorPicker(color,{name='color',label='Text color',dataAttr='data-story-text-color'}={}){
-    const hsv=hexToHsv(color),id=`story-color-chart-${name}`;
-    return `<div class="story-color-control" data-story-color-control style="--selected-story-color:${color};--story-color-hue:hsl(${hsv.h} 100% 50%)"><button type="button" class="story-color-trigger" data-story-color-toggle aria-label="${label}: choose color" aria-expanded="false" aria-controls="${id}"><span class="story-color-picker-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><g stroke="#584c70" stroke-width=".55"><path fill="#f472b6" d="M12 3.2 14.5 4.65v2.9L12 9 9.5 7.55v-2.9Z"/><path fill="#fbbf24" d="m7.1 6 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#34d399" d="m16.9 6 2.5 1.45v2.9L16.9 12l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#60a5fa" d="m7.1 12 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#c084fc" d="M12 9 14.5 10.45v2.9L12 14.8l-2.5-1.45-2.5-1.45v-2.9Z"/><path fill="#fb7185" d="m16.9 12 2.5 1.45v2.9L16.9 12l-2.5-1.45v-2.9Z"/><path fill="#f59e0b" d="m12 14.8 2.5 1.45v2.9L12 20.6l-2.5-1.45v-2.9Z"/></g></svg></span><span class="story-color-picker-swatch" aria-hidden="true"></span></button><div class="story-color-chart" id="${id}" data-story-color-chart hidden><button type="button" class="story-color-plane" data-story-color-plane role="slider" tabindex="0" aria-label="${label} shade and saturation" aria-valuetext="${color}, saturation ${Math.round(hsv.s*100)}%, brightness ${Math.round(hsv.v*100)}%" style="--color-saturation:${hsv.s*100}%;--color-brightness:${(1-hsv.v)*100}%"><span class="story-color-indicator" aria-hidden="true"></span></button><label class="story-color-hue-row"><span>Hue</span><input type="range" min="0" max="360" step="1" value="${Math.round(hsv.h)}" data-story-color-hue aria-label="${label} hue" /><output data-story-color-value aria-live="polite">${color.toUpperCase()}</output></label><input type="hidden" name="${name}" value="${color}" ${dataAttr} /></div></div>`;
+    const id=`story-color-chart-${name}`;
+    return `<div class="story-color-control" data-story-color-control style="--selected-story-color:${color}"><button type="button" class="story-color-trigger" data-story-color-toggle aria-label="${label}: choose color" aria-expanded="false" aria-controls="${id}"><span class="story-color-picker-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><g stroke="#584c70" stroke-width=".55"><path fill="#f472b6" d="M12 3.2 14.5 4.65v2.9L12 9 9.5 7.55v-2.9Z"/><path fill="#fbbf24" d="m7.1 6 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#34d399" d="m16.9 6 2.5 1.45v2.9L16.9 12l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#60a5fa" d="m7.1 12 2.5 1.45v2.9l-2.5 1.45-2.5-1.45v-2.9Z"/><path fill="#c084fc" d="M12 9 14.5 10.45v2.9L12 14.8l-2.5-1.45-2.5-1.45v-2.9Z"/><path fill="#fb7185" d="m16.9 12 2.5 1.45v2.9L16.9 12l-2.5-1.45v-2.9Z"/><path fill="#f59e0b" d="m12 14.8 2.5 1.45v2.9L12 20.6l-2.5-1.45v-2.9Z"/></g></svg></span><span class="story-color-picker-swatch" aria-hidden="true"></span></button><div class="story-color-chart" id="${id}" data-story-color-chart hidden><div class="story-color-swatches" role="radiogroup" aria-label="${label} choices">${storyColorSwatches.map(swatch=>`<button type="button" class="story-color-choice" data-story-color-choice="${swatch.color}" aria-label="${label}: ${swatch.name}" aria-checked="${swatch.color.toLowerCase()===String(color).toLowerCase()}" role="radio" tabindex="${swatch.color.toLowerCase()===String(color).toLowerCase()?0:-1}" style="--swatch-color:${swatch.color}"></button>`).join('')}</div><output data-story-color-value aria-live="polite">${color.toUpperCase()}</output><input type="hidden" name="${name}" value="${color}" ${dataAttr} /></div></div>`;
 }
 function renderStoryTextControls(){
     const panel=document.querySelector('.story-edit-mode-controls');if(!panel||!textDraft)return;
@@ -211,27 +214,26 @@ function renderStoryMode(){
     if(kind==='draw'){
         controls=`<div class="story-draw-modes">${[['pen','✎','Freehand'],['dotted','⋯','Dotted'],['highlight','▰','Highlight'],['colorful','🌈','Colorful']].map(([mode,icon,label])=>`<button type="button" data-story-draw-mode="${mode}" aria-pressed="${drawMode.mode===mode}"><span aria-hidden="true">${icon}</span>${label}</button>`).join('')}</div><div class="story-draw-settings">${storyTextColorPicker(drawMode.color,{name:'draw-color',label:'Drawing color',dataAttr:'data-story-draw-color'})}<label class="story-draw-size"><span aria-hidden="true">✎</span><input type="range" min="0" max="100" step="1" value="${storyDrawingPercentFromWidth(drawMode.width)}" data-story-draw-width aria-label="Drawing size" aria-valuetext="${storyDrawingPercentFromWidth(drawMode.width)}%" /><output data-story-draw-size aria-live="polite">${storyDrawingPercentFromWidth(drawMode.width)}%</output></label></div><p class="story-draw-color-hint">Colorful draws a smooth rainbow stroke. The selected color applies to Freehand, Dotted and Highlight.</p>`;
     }
-    panel.innerHTML=`${controls}<div class="story-mode-actions"><button type="button" data-story-mode-save>Save changes</button><button type="button" data-story-mode-discard>Discard changes</button></div>`;
+    const doneCancel=kind==='filters'||kind==='adjustments';
+    panel.innerHTML=`${controls}<div class="story-mode-actions${doneCancel?' story-mode-actions-done-cancel':''}"><button type="button" data-story-mode-${doneCancel?'discard':'save'}>${doneCancel?'Cancel':'Save changes'}</button><button type="button" data-story-mode-${doneCancel?'save':'discard'}>${doneCancel?'Done':'Discard changes'}</button></div>`;
 }
 function currentStoryColor(){return toolSession?.kind==='draw'?drawMode?.color:textDraft?.color;}
+function closeStoryColorPalette(chart,toggle){
+    if(!chart||!toggle)return;
+    chart.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.focus();
+}
 function renderColorPickerState(color){
     const control=document.querySelector('[data-story-color-control]');if(!control)return;
-    const hsv=colorPickerHsv,plane=control.querySelector('[data-story-color-plane]'),swatch=control.querySelector('.story-color-picker-swatch'),value=control.querySelector('[data-story-color-value]'),hue=control.querySelector('[data-story-color-hue]');
-    control.style.setProperty('--selected-story-color',color);control.style.setProperty('--story-color-hue',`hsl(${hsv.h} 100% 50%)`);
-    if(swatch)swatch.style.background=color;if(value)value.value=value.textContent=color.toUpperCase();if(hue)hue.value=String(Math.round(hsv.h));
-    if(plane){plane.style.setProperty('--color-saturation',`${hsv.s*100}%`);plane.style.setProperty('--color-brightness',`${(1-hsv.v)*100}%`);plane.setAttribute('aria-valuetext',`${color.toUpperCase()}, saturation ${Math.round(hsv.s*100)}%, brightness ${Math.round(hsv.v*100)}%`);}
+    const swatch=control.querySelector('.story-color-picker-swatch'),value=control.querySelector('[data-story-color-value]');
+    control.style.setProperty('--selected-story-color',color);
+    if(swatch)swatch.style.background=color;if(value)value.value=value.textContent=color.toUpperCase();
+    control.querySelectorAll('[data-story-color-choice]').forEach(choice=>{const selected=choice.dataset.storyColorChoice.toLowerCase()===color.toLowerCase();choice.setAttribute('aria-checked',String(selected));choice.tabIndex=selected?0:-1;});
     const hidden=control.querySelector('input[type="hidden"]');if(hidden)hidden.value=color;
 }
 function setStoryPickerColor(color){
-    colorPickerHsv=hexToHsv(color);
     if(toolSession?.kind==='draw'&&drawMode)drawMode.color=color;
     else if(toolSession?.kind==='text'&&textDraft){textDraft.color=color;syncInlineTextStyle();}
     renderColorPickerState(color);
-}
-function updateStoryColorFromPoint(event){
-    const plane=event.target.closest?.('[data-story-color-plane]')||document.querySelector('[data-story-color-plane]');if(!plane)return;
-    const rect=plane.getBoundingClientRect();if(!rect.width||!rect.height)return;
-    setStoryPickerColor(storyColorAtPoint(colorPickerHsv.h,(event.clientX-rect.left)/rect.width,(event.clientY-rect.top)/rect.height));
 }
 function syncInlineTextStyle(){
     const form=document.querySelector('.story-inline-text form');if(!form)return;
@@ -350,12 +352,23 @@ export function registerStoryToolEvents(){
         if(toolSession&&(event.target.closest('.story-create-back')||event.target.closest('.story-create-close'))){event.preventDefault();event.stopImmediatePropagation();finishStoryMode(false);}
     },true);
     document.addEventListener('keydown',event=>{
+        const choice=event.target.closest?.('[data-story-color-choice]');
+        if(choice&&['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){
+            const choices=[...choice.closest('[role="radiogroup"]').querySelectorAll('[data-story-color-choice]')];
+            const current=choices.indexOf(choice),nextIndex=event.key==='Home'?0:event.key==='End'?choices.length-1:(current+(event.key==='ArrowRight'?1:-1)+choices.length)%choices.length;
+            event.preventDefault();choices[nextIndex].focus();setStoryPickerColor(choices[nextIndex].dataset.storyColorChoice);return;
+        }
+        if(choice&&event.key==='Escape'){
+            const chart=choice.closest('[data-story-color-chart]'),toggle=document.querySelector(`[aria-controls="${chart.id}"]`);
+            event.preventDefault();event.stopImmediatePropagation();closeStoryColorPalette(chart,toggle);return;
+        }
         if(toolSession&&event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();finishStoryMode(false);}
     },true);
 
     document.addEventListener('click',event=>{
         const target=event.target;
-        const colorToggle=target.closest('[data-story-color-toggle]');if(colorToggle){const chart=document.getElementById(colorToggle.getAttribute('aria-controls'));const open=chart.hidden;colorPickerHsv=hexToHsv(currentStoryColor()||'#ffffff');renderColorPickerState(currentStoryColor()||'#ffffff');chart.hidden=!open;colorToggle.setAttribute('aria-expanded',String(open));if(open)chart.querySelector('[data-story-color-plane]')?.focus();return;}
+        const colorToggle=target.closest('[data-story-color-toggle]');if(colorToggle){const chart=document.getElementById(colorToggle.getAttribute('aria-controls'));const open=chart.hidden;renderColorPickerState(currentStoryColor()||'#ffffff');chart.hidden=!open;colorToggle.setAttribute('aria-expanded',String(open));if(open)(chart.querySelector('[aria-checked="true"]')||chart.querySelector('[data-story-color-choice]'))?.focus();return;}
+        const colorChoice=target.closest('[data-story-color-choice]');if(colorChoice){const chart=colorChoice.closest('[data-story-color-chart]'),toggle=document.querySelector(`[aria-controls="${chart.id}"]`);setStoryPickerColor(colorChoice.dataset.storyColorChoice);closeStoryColorPalette(chart,toggle);return;}
         if(target.closest('[data-story-mode-save]')){finishStoryMode(true);return;}
         if(target.closest('[data-story-mode-discard]')){finishStoryMode(false);return;}
         const filter=target.closest('[data-story-filter]');if(filter&&toolSession?.kind==='filters'){
@@ -395,7 +408,6 @@ export function registerStoryToolEvents(){
     document.addEventListener('submit',event=>{if(!event.target.matches('.story-tool-form'))return;event.preventDefault();if(['text','location'].includes(toolSession?.kind)&&event.target.matches('.story-inline-form,.story-location-inline-form'))return;if(pending()&&mayInteract())applyTool(event.target);});
     document.addEventListener('input',event=>{
         const adjust=event.target.closest('[data-story-adjustment]');if(adjust){updateStoryAdjustment(adjust.dataset.storyAdjustment,adjust.value);document.querySelector('[data-story-adjust-value]').textContent=`${adjust.value}%`;return;}
-        const colorHue=event.target.closest('[data-story-color-hue]');if(colorHue){colorPickerHsv.h=clamp(Number(colorHue.value),0,360);setStoryPickerColor(hsvToHex(colorPickerHsv.h,colorPickerHsv.s,colorPickerHsv.v));return;}
         if(event.target.closest('[data-story-draw-width]')&&drawMode){const percent=clamp(Number(event.target.value),0,100);drawMode.width=storyDrawingWidthFromPercent(percent);event.target.setAttribute('aria-valuetext',`${Math.round(percent)}%`);const output=document.querySelector('[data-story-draw-size]');if(output)output.textContent=`${Math.round(percent)}%`;return;}
         const form=event.target.closest('.story-tool-form');if(form?.matches('.story-inline-form'))syncInlineTextStyle();if(!form || form.dataset.tool!=='text' || event.target.name!=='text')return;
         const value=event.target.value, match=/@[a-zA-Z0-9._]*$/.exec(value);
@@ -421,11 +433,6 @@ export function registerStoryToolEvents(){
             buttons.forEach(button=>button.setAttribute('aria-pressed',String(button===chosen)));
         },160);
     },true);
-    document.addEventListener('pointerdown',event=>{const plane=event.target.closest?.('[data-story-color-plane]');if(!plane)return;colorPickerPointer=event.pointerId;plane.setPointerCapture?.(event.pointerId);event.preventDefault();updateStoryColorFromPoint(event);});
-    document.addEventListener('pointermove',event=>{if(colorPickerPointer!==event.pointerId)return;event.preventDefault();updateStoryColorFromPoint(event);});
-    document.addEventListener('pointerup',event=>{if(colorPickerPointer===event.pointerId){document.querySelector('[data-story-color-plane]')?.releasePointerCapture?.(event.pointerId);colorPickerPointer=null;}});
-    document.addEventListener('pointercancel',event=>{if(colorPickerPointer===event.pointerId)colorPickerPointer=null;});
-    document.addEventListener('keydown',event=>{const plane=event.target.closest?.('[data-story-color-plane]');if(!plane)return;const next=moveStoryColorSelection(colorPickerHsv,event.key,event.shiftKey);if(next){event.preventDefault();colorPickerHsv=next;setStoryPickerColor(hsvToHex(next.h,next.s,next.v));}});
     const stage=preview();
     const pointers=new Map();
     const pair=()=>{const [a,b]=[...pointers.values()];return {distance:Math.hypot(b.x-a.x,b.y-a.y),angle:Math.atan2(b.y-a.y,b.x-a.x),x:(a.x+b.x)/2,y:(a.y+b.y)/2};};
