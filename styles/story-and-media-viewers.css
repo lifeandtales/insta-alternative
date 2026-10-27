@@ -737,14 +737,15 @@ body.video-fullscreen-open {
   top: 50%;
   width: min(78vw, 390px);
   height: min(58dvh, 560px);
-  transform: translate(-50%, -50%) scale(var(--repost-scale, 1));
+  transform: translate3d(var(--repost-tx, 0px), var(--repost-ty, 0px), 0) translate(-50%, -50%) scale(var(--repost-scale, 1));
   overflow: hidden;
   border-radius: 12px;
   cursor: grab;
   touch-action: none;
+  will-change: transform;
 }
-.story-editing .story-repost-drag-frame.story-repost-positioned { left: var(--repost-x); top: var(--repost-y); }
-.story-editing .story-repost-full-canvas-frame { left: 50%; top: 50%; width: 100%; height: 100%; transform: translate(-50%, -50%) scale(var(--repost-scale, 1)); border-radius: 0; background: #17131d; }
+.story-editing .story-repost-drag-frame.story-repost-positioned { left: 50%; top: 50%; }
+.story-editing .story-repost-full-canvas-frame { left: 50%; top: 50%; width: 100%; height: 100%; transform: translate3d(var(--repost-tx, 0px), var(--repost-ty, 0px), 0) translate(-50%, -50%) scale(var(--repost-scale, 1)); border-radius: 0; background: #17131d; }
 .story-editing .story-repost-drag-frame > :is(img, video) { display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; }
 .story-editing .story-repost-drag-frame .story-repost-credit { pointer-events: none; }
 .story-media-preview-error {

@@ -651,8 +651,12 @@ function renderSelectedStory() {
         if (story.repostPosition) {
             repostFrame.style.setProperty('--repost-x', `${story.repostPosition.x}%`);
             repostFrame.style.setProperty('--repost-y', `${story.repostPosition.y}%`);
-            repostFrame.classList.add('story-repost-positioned');
         }
+        const initialBounds = container.getBoundingClientRect();
+        const initialX = story.repostPosition ? initialBounds.width * story.repostPosition.x / 100 : initialBounds.width / 2;
+        const initialY = story.repostPosition ? initialBounds.height * story.repostPosition.y / 100 : initialBounds.height / 2;
+        repostFrame.style.setProperty('--repost-tx', `${initialX - initialBounds.width / 2}px`);
+        repostFrame.style.setProperty('--repost-ty', `${initialY - initialBounds.height / 2}px`);
         const pointers = new Map();
         let gesture = null;
         const midpoint = () => {
@@ -672,7 +676,8 @@ function renderSelectedStory() {
             repostFrame.style.setProperty('--repost-scale', String(scale));
             repostFrame.style.setProperty('--repost-x', `${story.repostPosition.x}%`);
             repostFrame.style.setProperty('--repost-y', `${story.repostPosition.y}%`);
-            repostFrame.classList.add('story-repost-positioned');
+            repostFrame.style.setProperty('--repost-tx', `${x - bounds.width / 2}px`);
+            repostFrame.style.setProperty('--repost-ty', `${y - bounds.height / 2}px`);
         };
         const beginGesture = () => {
             const bounds = repostFrame.parentElement.getBoundingClientRect();
