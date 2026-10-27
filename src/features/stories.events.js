@@ -35,7 +35,7 @@ import {
     openStoryCreator,
     openStoryGroup,
     openStorySettings,
-    removeOwnStories,
+    removeOwnStory,
     scheduleOrPublishStory,
     showStoryAtIndex,
     showStoryOptions,
@@ -121,7 +121,7 @@ export function handleStoryMenuClick(event) {
             showShareFeedback(wasMuted ? `Stories from ${activeStory.user} are unmuted.` : `Stories from ${activeStory.user} are muted. You can unmute them in Story and feed settings.`);
         }
         else if (storyOption.dataset.storyOption === "remove") {
-            removeOwnStories();
+            removeOwnStory();
         }
         else if (storyOption.dataset.storyOption === "schedule") {
             openStoryCreator();

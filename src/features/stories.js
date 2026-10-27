@@ -260,34 +260,35 @@ export function closeStorySettings() {
         document.body.classList.remove("story-overlay-open");
 }
 
-export function removeOwnStories() {
-    if (!mayInteract()) return;
-    const wasViewingOwnStories = state.activeStoryGroups[state.activeStoryGroupIndex]?.handle === currentUser.handle;
-    const removedMedia = [];
-    state.stories = state.stories.filter((story) => {
-        if (story.handle !== currentUser.handle)
-            return true;
-        clearTimeout(state.storyExpiryTimers.get(story.id));
-        state.storyExpiryTimers.delete(story.id);
-        if (story.media.startsWith("blob:")) removedMedia.push(story.media);
-        return false;
+export function removeOwnStory() {
+    if (!mayInteract()) return false;
+    const removedIndex = state.activeStoryIndex;
+    const story = state.activeStorySequence[removedIndex];
+    if (!story || story.handle !== currentUser.handle || story.fromHighlight) return false;
+    clearTimeout(state.storyExpiryTimers.get(story.id));
+    state.storyExpiryTimers.delete(story.id);
+    state.stories = state.stories.filter(item => item.id !== story.id);
+    state.seenStoryIds.delete(story.id);
+    persistPreferences();
+    const remainingStories = state.activeStorySequence.filter(item => item.id !== story.id);
+    state.activeStoryGroups.forEach(group => {
+        group.stories = group.stories.filter(item => item.id !== story.id);
     });
-    const retainedMedia = new Set([
-        ...state.storyHighlights.flatMap((highlight) => highlight.stories.map((story) => story.media)),
-        ...state.stories.map(story => story.media),
-    ]);
-    removedMedia.forEach(media => { if (!retainedMedia.has(media)) URL.revokeObjectURL(media); });
-    state.scheduledStories.forEach(({ story, timer }) => {
-        clearTimeout(timer);
-        if (story.media.startsWith("blob:"))
-            URL.revokeObjectURL(story.media);
-    });
-    state.scheduledStories.clear();
-    persistActiveStories().catch(() => showShareFeedback('Story removal could not be saved.'));
+    state.activeStorySequence = remainingStories;
     renderStories();
-    if (wasViewingOwnStories)
-        closeStoryViewer();
-    showShareFeedback("Your stories were removed.");
+    if (remainingStories.length) showStoryAtIndex(Math.min(removedIndex, remainingStories.length - 1));
+    else closeStoryViewer();
+    const retainedMedia = new Set([
+        ...state.stories.map(item => item.media),
+        ...state.storyHighlights.flatMap(highlight => highlight.stories.map(item => item.media)),
+        ...[...state.scheduledStories.values()].map(item => item.story.media),
+        ...state.draftItems.map(item => item.story?.media),
+        state.pendingStoryMedia?.media,
+    ]);
+    if (story.media.startsWith('blob:') && !retainedMedia.has(story.media)) URL.revokeObjectURL(story.media);
+    persistActiveStories().catch(() => showShareFeedback('Story removal could not be saved.'));
+    showShareFeedback('Story removed.');
+    return true;
 }
 
 export function showStoryOptions(toggle) {

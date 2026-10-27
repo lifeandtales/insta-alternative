@@ -153,9 +153,11 @@ export async function loadStoryHighlights() {
             if (!Array.isArray(storedStories))
                 throw new Error("Saved story data has an invalid format.");
             const now = Date.now();
-            const activeStories = storedStories.filter((story) => story.expiresAt > now);
+            const activeStories = storedStories.filter((story) => story.handle === currentUser.handle && story.expiresAt > now);
             expiredStoriesFound = activeStories.length !== storedStories.length;
-            state.stories.push(...activeStories.map(restoreStoryMedia));
+            const uniqueStories = new Map(activeStories.map(story => [story.id, story]));
+            state.stories = state.stories.filter(story => story.handle !== currentUser.handle);
+            state.stories.push(...[...uniqueStories.values()].map(restoreStoryMedia));
         }
     }
     finally {
