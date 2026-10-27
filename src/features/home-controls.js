@@ -8,15 +8,23 @@ import { setView } from '../core/navigation.js';
 import { resumeStory } from './stories.js';
 import { showShareFeedback } from '../components/feedback.js';
 
-export function showHomePanel(title, markup, { minimal = false } = {}) {
+export function showHomePanel(title, markup, { minimal = false, anchor = null } = {}) {
     const panel = document.querySelector('.home-panel');
+    Object.assign(panel.style, { position: '', left: '', top: '' });
     panel.classList.toggle('story-repost-visit-prompt', minimal);
-    if (minimal) panel.setAttribute('aria-label', 'Visit original story');
+    if (minimal) panel.setAttribute('aria-label', title || 'Visit original story');
     else panel.removeAttribute('aria-label');
     document.getElementById('home-panel-title').textContent = title;
     document.querySelector('.home-panel-content').innerHTML = markup;
     document.querySelector('.home-controls-backdrop').hidden = false;
-    (minimal ? panel.querySelector('[data-reposted-open]') : panel.querySelector('.home-panel-close')).focus();
+    if (minimal && anchor?.getBoundingClientRect) {
+        const rect = anchor.getBoundingClientRect();
+        const width = panel.offsetWidth, height = panel.offsetHeight;
+        const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.left + rect.width / 2 - width / 2));
+        const top = rect.bottom + height + 16 <= window.innerHeight ? rect.bottom + 8 : Math.max(8, rect.top - height - 8);
+        Object.assign(panel.style, { position: 'fixed', left: `${left}px`, top: `${top}px` });
+    }
+    (minimal ? panel.querySelector('.home-panel-content button') : panel.querySelector('.home-panel-close')).focus();
 }
 export function openHomeSettings() {
     const owner = getAccount(currentUser.handle);
@@ -74,4 +82,4 @@ export function registerHomeControlEvents() {
     });
 }
 
-export function closeHomePanel() { const panel=document.querySelector('.home-panel');panel.classList.remove('story-repost-visit-prompt');panel.removeAttribute('aria-label');document.querySelector('.home-controls-backdrop').hidden = true; if (!document.querySelector('.story-viewer-backdrop').hidden) resumeStory(); }
+export function closeHomePanel() { const panel=document.querySelector('.home-panel');panel.classList.remove('story-repost-visit-prompt');panel.removeAttribute('aria-label');Object.assign(panel.style,{position:'',left:'',top:''});document.querySelector('.home-controls-backdrop').hidden = true; if (!document.querySelector('.story-viewer-backdrop').hidden) resumeStory(); }

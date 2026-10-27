@@ -1,4 +1,4 @@
-import { canViewMedia, visibleAvatar, mediaNeedsWarning } from '../core/social.js';
+import { canViewMedia, canViewStory, visibleAvatar, mediaNeedsWarning } from '../core/social.js';
 import { findEntity } from '../data/entities.js';
 import { state } from '../core/state.js';
 import { escapeHtml, formatConversationTime } from '../core/utils.js';
@@ -17,6 +17,7 @@ export function getConversationPreview(conversation) {
         return conversation.lastMessage || "Start a conversation";
     if (lastMessage.type === "shared-post") return `${lastMessage.from === "me" ? "You: " : ""}Shared a ${lastMessage.entityType}`;
     if (lastMessage.type === "shared-story") return `${lastMessage.from === "me" ? "You: " : ""}Shared a story`;
+    if (lastMessage.type === 'story-mention') return lastMessage.from === 'me' ? 'You mentioned them in your story' : 'Mentioned you in a story';
     if (lastMessage.type === "meme")
         return `${lastMessage.from === "me" ? "You: " : ""}Shared a meme`;
     if (lastMessage.type === "call")
@@ -55,6 +56,14 @@ export function renderMessages() {
     const canSend = canSendToConversation(conversation);
     const pending = conversation.membershipStatus === 'pending';
     const messageMarkup = (conversation.messages || []).map((message) => {
+        if (message.type === 'story-mention') {
+            const story = state.stories.find(item => item.id === message.storyId && item.handle === message.actor);
+            const incoming = message.recipient === currentUser.handle && message.from !== 'me';
+            const available = story && canViewStory(story) && (!story.expiresAt || story.expiresAt > Date.now());
+            const text = incoming ? `${conversation.user} mentioned you in their story.` : `You mentioned ${conversation.user} in your story.`;
+            const preview = available ? `<button type="button" class="chat-shared-post" data-story-mention-view="${escapeHtml(story.id)}">${story.type === 'video' ? `<video muted playsinline preload="metadata" src="${escapeHtml(story.media)}"></video>` : `<img src="${escapeHtml(story.media)}" alt="Story by ${escapeHtml(story.user)}" />`}<span>View story</span></button>${incoming ? `<button type="button" class="story-mention-repost" data-story-mention-repost="${escapeHtml(story.id)}">Add to your story</button>` : ''}` : '<small>This Story is no longer available.</small>';
+            return `<article class="chat-message ${incoming ? 'from-them' : 'from-me'}"><p>${escapeHtml(text)}</p>${preview}<time>${escapeHtml(formatConversationTime(message.sentAt))}</time></article>`;
+        }
         if (message.type === 'shared-story') {
             const story = message.story;
             if (!story?.media) return '<article class="chat-message">This shared story is unavailable.</article>';

@@ -4,7 +4,8 @@ import { escapeHtml } from '../core/utils.js';
 import { persistSession, unexpiredDrafts } from '../storage/local-session.js';
 import { persistPreferences } from '../storage/preferences.js';
 import { conversations } from '../data/sample-data.js';
-import { mayInteract, canViewMedia } from '../core/social.js';
+import { mayInteract, canViewMedia, canViewStory, getAccount } from '../core/social.js';
+import { setView } from '../core/navigation.js';
 import { appendChatMessage } from './messages.js';
 import { showShareFeedback } from '../components/feedback.js';
 import { storyViewer } from '../core/dom.js';
@@ -45,6 +46,41 @@ import {
     createStoryRepostCredit,
 } from './stories.js';
 
+export function openStoryRepostEditor(activeStory) {
+    if (!mayInteract() || !activeStory || !canViewStory(activeStory) || (activeStory.expiresAt && activeStory.expiresAt <= Date.now())) return false;
+    const isOpenSource = state.activeStorySequence[state.activeStoryIndex]?.id === activeStory.id;
+    const activeStoryMedia = isOpenSource ? document.querySelector('.story-viewer-stage img, .story-viewer-stage video') : null;
+    const activeStoryCanvas = isOpenSource ? document.querySelector('.story-viewer-stage') : null;
+    closeStoryViewer();
+    openStoryCreator();
+    const {
+        id, handle, user, avatar, mine, likes, reactions, viewers, seen,
+        createdAt, expiresAt, audience, closeFriendHandles, fromHighlight,
+        archived, archivedAt, ...originalStory
+    } = activeStory;
+    state.pendingStoryMedia = {
+        ...originalStory,
+        repostSourceEdits: storyComposition(activeStory.edits),
+        edits: storyComposition(),
+        caption: activeStory.caption || '',
+        repostFrameSize: storyNeedsFullCanvasRepost(activeStory, activeStoryMedia, activeStoryCanvas)
+            ? null
+            : getRepostMediaFrameSize(activeStoryMedia, .58),
+        repostedStoryId: activeStory.id,
+        repostedFromHandle: activeStory.handle,
+        repostedFromUser: activeStory.user,
+        repostedFromAvatar: activeStory.avatar,
+        repostedSourcePostId: activeStory.sourcePostId || null,
+        repostedFromCaption: activeStory.caption || '',
+        repostFullCanvas: storyNeedsFullCanvasRepost(activeStory, activeStoryMedia, activeStoryCanvas),
+    };
+    state.activeStoryDraftId = null;
+    document.getElementById('story-caption').value = state.pendingStoryMedia.caption;
+    renderSelectedStory();
+    document.querySelector('.story-create-back').focus();
+    return true;
+}
+
 export function handleStoryMenuClick(event) {
     const reactionPicker = document.querySelector('.story-reaction-picker');
     const reactionButton = document.querySelector('.story-reaction-trigger');
@@ -68,8 +104,6 @@ export function handleStoryMenuClick(event) {
     if (storyOption) {
         if (!mayInteract()) return true;
         const activeStory = state.activeStorySequence[state.activeStoryIndex];
-            const activeStoryMedia = document.querySelector('.story-viewer-stage img, .story-viewer-stage video');
-            const activeStoryCanvas = document.querySelector('.story-viewer-stage');
         document.querySelector(".story-options-menu").hidden = true;
         document.querySelector(".story-viewer .story-options-toggle").setAttribute("aria-expanded", "false");
         if (storyOption.dataset.storyOption === "share") {
@@ -79,33 +113,7 @@ export function handleStoryMenuClick(event) {
             copyStoryLink(activeStory);
         }
         else if (storyOption.dataset.storyOption === "repost") {
-            closeStoryViewer();
-            openStoryCreator();
-            const {
-                id, handle, user, avatar, mine, likes, reactions, viewers, seen,
-                createdAt, expiresAt, audience, closeFriendHandles, fromHighlight,
-                archived, archivedAt, ...originalStory
-            } = activeStory;
-            state.pendingStoryMedia = {
-                ...originalStory,
-                repostSourceEdits: storyComposition(activeStory.edits),
-                edits: storyComposition(),
-                caption: activeStory.caption || '',
-                repostFrameSize: storyNeedsFullCanvasRepost(activeStory, activeStoryMedia, activeStoryCanvas)
-                    ? null
-                    : getRepostMediaFrameSize(activeStoryMedia, .58),
-                repostedStoryId: activeStory.id,
-                repostedFromHandle: activeStory.handle,
-                repostedFromUser: activeStory.user,
-                repostedFromAvatar: activeStory.avatar,
-                repostedSourcePostId: activeStory.sourcePostId || null,
-                repostedFromCaption: activeStory.caption || '',
-                repostFullCanvas: storyNeedsFullCanvasRepost(activeStory, activeStoryMedia, activeStoryCanvas),
-            };
-            state.activeStoryDraftId = null;
-            document.getElementById('story-caption').value = state.pendingStoryMedia.caption;
-            renderSelectedStory();
-            document.querySelector('.story-create-back').focus();
+            openStoryRepostEditor(activeStory);
         }
         else if (storyOption.dataset.storyOption === "report") {
             pauseStory();
@@ -178,6 +186,25 @@ export function handleStoryOwnerClick(event) {
 
 export function handleStoryClick(event) {
     if(handleStoryDraftManagement(event))return true;
+    const mention = event.target.closest('[data-story-mention-handle]');
+    if (mention) {
+        const handle = mention.dataset.storyMentionHandle;
+        if (!getAccount(handle) || state.blockedHandles.has(handle)) return true;
+        pauseStory();
+        showHomePanel('Visit profile', `<button type="button" data-story-mention-profile="${escapeHtml(handle)}">Visit profile</button>`, { minimal: true, anchor: mention });
+        return true;
+    }
+    const mentionProfile = event.target.closest('[data-story-mention-profile]');
+    if (mentionProfile) {
+        const handle = mentionProfile.dataset.storyMentionProfile;
+        if (!getAccount(handle) || state.blockedHandles.has(handle)) return true;
+        closeHomePanel();
+        closeStoryViewer({ fromHistory: true });
+        state.profileHandle = handle;
+        state.activeProfileSection = 'posts';
+        setView('profile');
+        return true;
+    }
     const repostVisit = event.target.closest('.story-repost-visit, .story-reposted-card');
     if (repostVisit) {
         const story = state.activeStorySequence[state.activeStoryIndex];
@@ -194,7 +221,7 @@ export function handleStoryClick(event) {
     if (visitOriginal) {
         const destination = visitOriginal.dataset.repostedOpen;
         closeHomePanel();
-        closeStoryViewer();
+        if (!destination.startsWith('#story-')) closeStoryViewer({ fromHistory: true });
         openMediaFromHash(destination);
         return true;
     }

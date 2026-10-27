@@ -1,4 +1,4 @@
-import { canViewMedia, getAccount, mayInteract } from '../core/social.js';
+import { canViewMedia, canViewStory, getAccount, mayInteract } from '../core/social.js';
 import { openProfileMedia } from './profile.js';
 import { showShareFeedback } from '../components/feedback.js';
 import { setView, pushConversationHistory, returnToConversationList } from '../core/navigation.js';
@@ -10,6 +10,8 @@ import { appendChatMessage, renderMessages, conversationAvatar } from './message
 import { canSendToConversation, canShareToConversation, createLocalGroup, respondToGroupInvitation } from './message-access.js';
 import { showHomePanel } from './home-controls.js';
 import { persistSession } from '../storage/local-session.js';
+import { openStoryRepostEditor } from './stories.events.js';
+import { openStoryGroup, showStoryAtIndex } from './stories.js';
 
 let recorder, recordingStream, recordingTimer, recordingGeneration = 0, pendingAttachment;
 const activeConversation = () => conversations.find(item => item.handle === state.activeConversationHandle);
@@ -63,6 +65,22 @@ async function toggleRecording(button) {
     finally { button.disabled = false; }
 }
 export function handleMessageClick(event) {
+    const mentionAction = event.target.closest('[data-story-mention-view], [data-story-mention-repost]');
+    if (mentionAction) {
+        const storyId = mentionAction.dataset.storyMentionView || mentionAction.dataset.storyMentionRepost;
+        const chat = activeConversation();
+        const message = chat?.messages?.find(item => item.type === 'story-mention' && item.storyId === storyId);
+        const story = state.stories.find(item => item.id === storyId && item.handle === message?.actor);
+        if (!message || !story || !canViewStory(story) || story.expiresAt <= Date.now()) { showShareFeedback('This Story is no longer available.'); return true; }
+        if (mentionAction.dataset.storyMentionRepost) {
+            if (message.recipient === currentUser.handle && message.from !== 'me') openStoryRepostEditor(story);
+        } else {
+            openStoryGroup(story.handle);
+            const index = state.activeStorySequence.findIndex(item => item.id === storyId);
+            if (index >= 0) showStoryAtIndex(index);
+        }
+        return true;
+    }
     if (event.target.closest('[data-create-group]')) { openGroupCreator(); return true; }
     const shared = event.target.closest('[data-shared-id]');
     if (shared) {

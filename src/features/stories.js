@@ -10,6 +10,7 @@ import { persistPreferences } from '../storage/preferences.js';
 import { applyStoryComposition, storyVideoRange } from './story-composition.js';
 import { syncStoryOptionButtons, openStoryExitDialog, closeStoryExitDialog } from './story-options.js';
 import { stopStoryCamera } from './story-camera.js';
+import { recordStoryMentions } from './notifications.js';
 let storyCreatorTrigger;
 let storyHistoryEntryOpen = false;
 
@@ -201,7 +202,9 @@ export function scheduleOrPublishStory(story) {
         }
         state.scheduledStories.delete(id);
         const publishedAt = Date.now();
-        state.stories.push({ ...scheduledStory, createdAt: publishedAt, expiresAt: publishedAt + state.storyLifetimeMs });
+        const publishedStory = { ...scheduledStory, createdAt: publishedAt, expiresAt: publishedAt + state.storyLifetimeMs };
+        state.stories.push(publishedStory);
+        recordStoryMentions(publishedStory);
         renderStories();
         persistActiveStories().then(() => {
             showShareFeedback("Your scheduled story is now live.");
@@ -223,7 +226,7 @@ export function scheduleOrPublishStory(story) {
 export async function addStory(story) {
     if (!mayInteract()) return;
     const createdAt = Date.now();
-    state.stories.push({
+    const publishedStory = {
         ...story,
         id: story.id || `story-${createdAt}`,
         handle: currentUser.handle,
@@ -232,7 +235,9 @@ export async function addStory(story) {
         mine: true,
         createdAt,
         expiresAt: createdAt + state.storyLifetimeMs
-    });
+    };
+    state.stories.push(publishedStory);
+    recordStoryMentions(publishedStory);
     renderStories();
     closeStoryCreator();
     document.getElementById("story-schedule-time").value = "";

@@ -146,7 +146,7 @@ function renderLayer(layer, editing) {
             const ref=(layer.mentions||[]).find(item=>item.handle.toLowerCase()===match[0].toLowerCase());
             const account=ref && state.accountDirectory.find(item=>item.id===ref.id || item.handle.toLowerCase()===ref.handle.toLowerCase());
             if(account && !state.blockedHandles.has(account.handle)){
-                const button=document.createElement('button');button.type='button';button.dataset.profileHandle=account.handle;button.className='story-text-mention';button.textContent=match[0];node.append(button);
+                const button=document.createElement('button');button.type='button';button.dataset.storyMentionHandle=account.handle;button.className='story-text-mention';button.textContent=match[0];node.append(button);
             } else node.append(document.createTextNode(match[0]));
             offset=match.index+match[0].length;
         }

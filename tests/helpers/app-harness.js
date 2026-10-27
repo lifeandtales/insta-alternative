@@ -16,7 +16,7 @@ export function createEnvironment() {
         const classes = new Set();
         const result = {
             innerHTML: '', textContent: '', value: '', hidden: true, dataset: {}, firstChild: {textContent: ''},
-            scrollTop: 0, scrollHeight: 100, children: [], style: {}, isConnected: true,
+            scrollTop: 0, scrollHeight: 100, children: [], style: {setProperty(name, value) { this[name] = value; }}, isConnected: true,
             classList: {
                 add: (...names) => names.forEach(name => classes.add(name)),
                 remove: (...names) => names.forEach(name => classes.delete(name)),
@@ -30,6 +30,7 @@ export function createEnvironment() {
             getAttribute: name => attributes.get(name),
             removeAttribute: name => attributes.delete(name),
             replaceChildren: () => { result.innerHTML = ''; },
+            append: (...nodes) => nodes.forEach(node => { node.parentElement = result; result.children.push(node); }),
             focus() {}, pause() {}, play: async () => {},
             closest: () => null, matches: () => false,
             getBoundingClientRect: () => ({top: 0, bottom: 100, right: 100})

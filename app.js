@@ -51,7 +51,7 @@ import { handleSharingClick } from './src/features/sharing.events.js';
 import { loadPreferences, persistPreferences } from './src/storage/preferences.js';
 import { registerDeletionLock, syncDeletionLock } from './src/core/account-lock.js';
 import { openMediaFromHash } from './src/core/media-links.js';
-import { registerNotificationEvents, updateNotificationBadge } from './src/features/notifications.js';
+import { registerNotificationEvents, updateNotificationBadge, syncIncomingStoryMentions } from './src/features/notifications.js';
 import { opensDirectlyToHome } from './src/core/local-preview.js';
 import { registerStoryToolEvents } from './src/features/story-tools.js';
 import { registerStoryOptionEvents } from './src/features/story-options.js';
@@ -285,7 +285,7 @@ if (document.documentElement.classList.contains("mobile-splash-pending")) {
 }
 setView("home");
 if (opensDirectlyToHome(window.location.href)) enterLocalDemo('', false);
-loadSession().then(() => { setView(state.currentView); openMediaFromHash(); updateNotificationBadge(); }).catch(() => {
+loadSession().then(() => { syncIncomingStoryMentions(); setView(state.currentView); openMediaFromHash(); updateNotificationBadge(); }).catch(() => {
     showShareFeedback('Local content storage is unavailable. New work may not survive closing this page.');
 });
 window.addEventListener?.('hashchange', () => openMediaFromHash());

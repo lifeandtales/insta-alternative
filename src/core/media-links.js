@@ -13,7 +13,7 @@ export function openMediaFromHash(hash = window.location.hash) {
         try { storyId = decodeURIComponent(storyMatch[1]); }
         catch { return false; }
         const story = state.stories.find(item => item.id === storyId);
-        if (!story || !canViewStory(story)) {
+        if (!story || !canViewStory(story) || (story.expiresAt && story.expiresAt <= Date.now())) {
             showShareFeedback('This story is unavailable or you do not have access.');
             return false;
         }

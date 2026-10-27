@@ -310,6 +310,22 @@ export const initialStories = [
         }
     },
     {
+        id: "ari-story-mention-demo",
+        handle: "@aribloom",
+        user: "Ari Bloom",
+        avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80",
+        type: "image",
+        media: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80",
+        durationMs: 30000,
+        edits: {
+            layers: [{
+                id: "ari-mention-mila-demo", type: "text", text: currentUser.handle,
+                mentions: [{ handle: currentUser.handle }],
+                x: .5, y: .76, size: 7, width: .8, rotation: 0, font: "sans", color: "#ffffff"
+            }]
+        }
+    },
+    {
         id: "noah-story-1",
         handle: "@noahvale",
         user: "Noah Vale",
