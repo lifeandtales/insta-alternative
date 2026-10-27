@@ -1,7 +1,7 @@
 import { canViewMedia, getAccount, mayInteract } from '../core/social.js';
 import { openProfileMedia } from './profile.js';
 import { showShareFeedback } from '../components/feedback.js';
-import { setView } from '../core/navigation.js';
+import { setView, pushConversationHistory, returnToConversationList } from '../core/navigation.js';
 import { state } from '../core/state.js';
 import { escapeHtml } from '../core/utils.js';
 import { findEntity } from '../data/entities.js';
@@ -74,9 +74,17 @@ export function handleMessageClick(event) {
     const conversationButton = event.target.closest('[data-open-conversation]');
     if (conversationButton) {
         cancelRecording(); state.activeConversationHandle = conversationButton.dataset.openConversation; state.chatAttachmentPickerOpen = false;
+        pushConversationHistory(state.activeConversationHandle);
         renderMessages(); document.querySelector('.chat-composer input[name="message"]')?.focus(); return true;
     }
-    if (event.target.closest('[data-chat-back]')) { cancelRecording(); state.activeConversationHandle = null; state.chatAttachmentPickerOpen = false; renderMessages(); return true; }
+    if (event.target.closest('[data-chat-back]')) {
+        cancelRecording(); state.chatAttachmentPickerOpen = false;
+        if (!returnToConversationList(state.activeConversationHandle)) {
+            state.activeConversationHandle = null;
+            renderMessages();
+        }
+        return true;
+    }
     const options = event.target.closest('[data-chat-options]');
     if (options) { const menu = document.querySelector('.chat-options-menu'); menu.hidden = !menu.hidden; options.setAttribute('aria-expanded', String(!menu.hidden)); return true; }
     const option = event.target.closest('[data-chat-option]');
@@ -85,7 +93,11 @@ export function handleMessageClick(event) {
         const action = option.dataset.chatOption;
         if (action === 'pin') conversation.pinned = !conversation.pinned;
         if (action === 'mute') conversation.muted = !conversation.muted;
-        if (action === 'unread') { conversation.unread = true; state.activeConversationHandle = null; }
+        if (action === 'unread') {
+            conversation.unread = true;
+            if (returnToConversationList(state.activeConversationHandle)) return true;
+            state.activeConversationHandle = null;
+        }
         if (action === 'manage-group') { openGroupManager(conversation); return true; }
         if (action === 'profile' && !conversation.isGroup) { state.profileHandle = conversation.handle; state.activeProfileSection = 'posts'; setView('profile'); return true; }
         renderMessages(); return true;
@@ -94,7 +106,9 @@ export function handleMessageClick(event) {
     if (invite) {
         const conversation = activeConversation();
         if (conversation && respondToGroupInvitation(conversation, invite.dataset.groupInvite === 'accept')) {
-            if (invite.dataset.groupInvite === 'decline') state.activeConversationHandle = null;
+            if (invite.dataset.groupInvite === 'decline') {
+                if (!returnToConversationList(state.activeConversationHandle)) state.activeConversationHandle = null;
+            }
             renderMessages(); persistSession().catch(() => showShareFeedback('The invitation response could not be saved.'));
         }
         return true;
@@ -152,7 +166,7 @@ export function registerMessageFormEvents() {
             event.preventDefault();
             const group = createLocalGroup(form.elements.groupName.value, [...form.querySelectorAll('input[name="member"]:checked')].map(input => input.value));
             if (!group) { showShareFeedback('Enter a name and choose at least one participant.'); return; }
-            state.activeConversationHandle = group.handle; closePanel(); renderMessages(); persistSession().catch(() => showShareFeedback('The group could not be saved on this device.'));
+            state.activeConversationHandle = group.handle; pushConversationHistory(group.handle); closePanel(); renderMessages(); persistSession().catch(() => showShareFeedback('The group could not be saved on this device.'));
         }
         if (form.matches('.manage-group-form')) {
             event.preventDefault(); const group = conversations.find(item => item.handle === form.dataset.groupHandle);

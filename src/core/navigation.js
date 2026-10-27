@@ -9,14 +9,50 @@ import { renderReels } from '../features/reels.js';
 import { renderStories } from '../features/stories.js';
 import { syncDeletionLock } from './account-lock.js';
 
-export function setView(view) {
+const currentAppHistory = () => window.history.state && typeof window.history.state === 'object'
+    ? window.history.state : {};
+
+function writeAppHistory(view, conversation = null, replace = false) {
+    const next = { ...currentAppHistory(), instaApp: { view, conversation } };
+    window.history[replace ? 'replaceState' : 'pushState'](next, '', window.location.href);
+}
+
+export function pushConversationHistory(handle) {
+    writeAppHistory('messages', handle);
+}
+
+export function returnToConversationList(handle) {
+    const route = currentAppHistory().instaApp;
+    if (route?.view === 'messages' && route.conversation === handle) {
+        window.history.back();
+        return true;
+    }
+    return false;
+}
+
+window.addEventListener('popstate', event => {
+    const route = event.state?.instaApp;
+    const view = viewSections[route?.view] ? route.view : 'home';
+    const conversation = view === 'messages' ? route?.conversation || null : null;
+    if (state.activeConversationHandle !== conversation)
+        state.activeConversationHandle = conversation;
+    if (state.currentView !== view) setView(view, { fromHistory: true });
+    else if (view === 'messages') renderMessages();
+});
+
+export function setView(view, { fromHistory = false } = {}) {
     if (syncDeletionLock()) return;
     if (!viewSections[view])
         return;
     const previousView = state.currentView;
+    if (!fromHistory) {
+        if (previousView !== view) writeAppHistory(view, null);
+        else if (!currentAppHistory().instaApp) writeAppHistory(view, state.activeConversationHandle, true);
+    }
     if (previousView !== view) {
         document.querySelectorAll('video').forEach(video => video.pause());
         if (state.pendingVideoTap) { clearTimeout(state.pendingVideoTap.timer); state.pendingVideoTap = null; }
+        if (view !== 'messages') state.activeConversationHandle = null;
     }
     state.currentView = view;
     const accessNotice = document.getElementById('account-access-notice');
