@@ -463,6 +463,7 @@ export function showStoryAtIndex(index) {
             compositionStage.style.setProperty('--repost-y', `${story.repostPosition.y}%`);
         }
         compositionStage.style.setProperty('--repost-scale', String(story.repostScale || 1));
+        compositionStage.style.setProperty('--repost-rotation', `${story.repostRotation || 0}deg`);
         compositionStage.tabIndex = 0;
         compositionStage.setAttribute('role', 'button');
         compositionStage.setAttribute('aria-label', `Shared Story by ${story.repostedFromUser}. Open the original.`);
@@ -512,8 +513,11 @@ export function showStoryAtIndex(index) {
         startStoryProgress(index);
     }
     if (isRepost) stage.replaceChildren(compositionStage);
-    applyStoryComposition(compositionStage, story);
-    if (isRepost) compositionStage.append(createStoryRepostCredit(story));
+    if (isRepost) {
+        applyStoryComposition(compositionStage, { ...story, edits: story.repostSourceEdits || {} });
+        compositionStage.append(createStoryRepostCredit(story));
+        applyStoryComposition(stage, story);
+    } else applyStoryComposition(stage, story);
     if (story.edits?.video?.muted) storySoundButton.hidden = true;
 }
 

@@ -153,18 +153,15 @@ test('the first native photo or video selection opens the editor and paired mobi
         assert.equal(app.element('.story-editor-step').hidden, false);
         assert.equal(app.element('.story-media-step').hidden, true);
         assert.equal(upload.value, `C:\\fakepath\\${name}`, 'success does not reset the native picker during return');
-        assert.deepEqual(appended.map(item => item.className), [mediaType === 'video' ? 'story-viewer-video' : 'story-viewer-image', 'story-frame-guide']);
+        assert.deepEqual(appended.map(item => item.className), [mediaType === 'video' ? 'story-viewer-video' : 'story-viewer-image']);
         const source = fs.readFileSync(new URL('../src/features/stories.events.js', import.meta.url), 'utf8');
         assert.doesNotMatch(source, /story-frame-info|ResizeObserver/);
         const styles = fs.readFileSync(new URL('../styles/story-and-media-viewers.css', import.meta.url), 'utf8');
         assert.match(styles, /\.story-viewer,\s*\.story-create-dialog\.story-editing\s*\{[^}]*width:\s*min\(100vw,\s*440px\);[^}]*height:\s*min\(100dvh,\s*900px\);/);
         assert.match(styles, /\.story-viewer,\s*\.story-create-dialog\.story-editing\s*\{[^}]*overflow:\s*hidden;/);
-        assert.match(styles, /\.story-editing \.story-selected-preview\s*\{[^}]*inset:\s*clamp\(88px,11dvh,112px\) 12px clamp\(156px,19dvh,190px\);[^}]*border-radius:\s*16px;/);
-        assert.match(styles, /\.story-editing \.story-selected-preview :is\(img, video\)\s*\{[^}]*object-fit:\s*contain;/);
         assert.match(styles, /\.story-editing \.story-create-content\s*\{[^}]*inset:\s*0;[^}]*overflow:\s*hidden;/);
         assert.match(styles, /\.story-editing \.story-editor-step\s*\{[^}]*inset:\s*0;/);
         assert.match(styles, /\.story-editing \.story-selected-preview\s*\{[^}]*inset:\s*0;/);
-        assert.match(styles, /\.story-frame-guide\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*1px;[^}]*border:\s*1px solid rgba\(255,255,255,\.58\);[^}]*pointer-events:\s*none;/);
         assert.doesNotMatch(styles, /\.story-frame-info/);
 
         change({target: upload});

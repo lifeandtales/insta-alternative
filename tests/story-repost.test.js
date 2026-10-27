@@ -1,0 +1,45 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { loadApp } from './helpers/app-harness.js';
+
+test('repost gestures rotate the entire attributed frame and retain rotation when published', async () => {
+    const app = await loadApp();
+    const { state } = app.exportsOf('src/core/state.js');
+    Object.assign(app.context.window, { innerWidth: 390, innerHeight: 844 });
+    const preview = app.element('.story-selected-preview');
+    preview.getBoundingClientRect = () => ({ left: 0, top: 0, width: 390, height: 844 });
+    preview.append = node => { node.parentElement = preview; };
+    let nextId = 0;
+    const nodes = [];
+    app.document.createElement = tag => {
+        const node = app.element(`repost-node-${nextId++}-${tag}`);
+        node.style.setProperty = (key, value) => { node.style[key] = value; };
+        node.append = (...children) => children.forEach(child => { child.parentElement = node; node.children.push(child); });
+        node.offsetWidth = 300; node.offsetHeight = 200;
+        node.getBoundingClientRect = () => ({ left: 45, top: 322, width: 300, height: 200 });
+        node.setPointerCapture = () => {};
+        nodes.push(node);
+        return node;
+    };
+    Object.assign(app.element('.story-viewer-stage img, .story-viewer-stage video'), { naturalWidth: 1200, naturalHeight: 800 });
+    const original = { id: 'source-story', handle: '@aribloom', user: 'Ari Bloom', avatar: 'avatar.png', type: 'image', media: 'source.png', edits: { layers: [{ id: 'original-text', type: 'text', text: 'Original', x: .5, y: .5 }] } };
+    state.activeStorySequence = [original]; state.activeStoryIndex = 0;
+    app.exportsOf('src/features/stories.events.js').handleStoryMenuClick({ target: { closest: selector => selector === '[data-story-option]' ? { dataset: { storyOption: 'repost' } } : null } });
+    const draft = state.pendingStoryMedia;
+    assert.equal(draft.edits.layers.length, 0, 'new text belongs to the outer Story, independently of the source');
+    assert.equal(draft.repostSourceEdits.layers[0].text, 'Original');
+    const frame = nodes.find(node => node.className?.startsWith('story-repost-drag-frame'));
+    const credit = frame.children.find(node => node.className === 'story-repost-credit');
+    const touch = (pointerId, clientX, clientY) => ({ pointerId, clientX, clientY, pointerType: 'touch', preventDefault() {}, stopPropagation() {} });
+    frame.onpointerdown(touch(1, 100, 300));
+    frame.onpointerdown(touch(2, 200, 300));
+    frame.onpointermove(touch(2, 100, 400));
+    assert.equal(draft.repostRotation, 90);
+    assert.equal(frame.style['--repost-rotation'], '90deg');
+    assert.equal(credit.parentElement, frame, 'attribution remains inside the rotated frame');
+    frame.onpointerup(touch(2, 100, 400));
+    frame.onpointermove(touch(1, 120, 320));
+    assert.equal(draft.repostRotation, 90, 'one-finger dragging preserves the chosen rotation');
+    app.exportsOf('src/features/stories.js').scheduleOrPublishStory({ ...draft });
+    assert.equal(state.stories.at(-1).repostRotation, 90);
+});

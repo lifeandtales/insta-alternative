@@ -159,15 +159,19 @@ function renderLayer(layer, editing) {
 export function applyStoryComposition(stage, story, {editing=false}={}) {
     if(!stage?.ownerDocument)return; // The lightweight test DOM does not render media.
     stage.classList.add('story-composition-stage');stage.__compositionStory=story;
-    const edit=storyComposition(story.edits), media=stage.querySelector('img, video');
-    const musicKey=JSON.stringify(edit.music), keepMusic=stage.dataset.storyMusic===musicKey && Boolean(stage.querySelector('.story-composition-audio'));
-    stage.querySelectorAll('.story-composition-layer, .story-draw-layer').forEach(node=>node.remove());
-    if(!keepMusic)stage.querySelectorAll('.story-composition-audio, .story-music-toggle').forEach(node=>{if(node.tagName==='AUDIO')node.pause();node.remove();});
+    const edit=storyComposition(story.edits), media=stage.querySelector(':scope > img, :scope > video');
+    const musicKey=JSON.stringify(edit.music), keepMusic=stage.dataset.storyMusic===musicKey && Boolean(stage.querySelector(':scope > .story-composition-audio'));
+    stage.querySelectorAll(':scope > .story-composition-layer, :scope > .story-draw-layer').forEach(node=>node.remove());
+    if(!keepMusic)stage.querySelectorAll(':scope > .story-composition-audio, :scope > .story-music-toggle').forEach(node=>{if(node.tagName==='AUDIO')node.pause();node.remove();});
     stage.dataset.storyMusic=musicKey;
+    if(!media){
+        const repost=stage.querySelector(':scope > .story-repost-drag-frame, :scope > .story-reposted-card');
+        if(repost)repost.style.filter=compositionMediaStyle(edit).filter;
+    }
     if(media){
         Object.assign(media.style,compositionMediaStyle(edit));media.style.transformOrigin='center';
         if(editing){
-            let guide=stage.querySelector('.story-media-outline');
+            let guide=stage.querySelector(':scope > .story-media-outline');
             if(!guide){guide=document.createElement('div');guide.className='story-media-outline';guide.setAttribute('aria-hidden','true');stage.append(guide);}
             const width=media.clientWidth,height=media.clientHeight,nw=media.naturalWidth||media.videoWidth,nh=media.naturalHeight||media.videoHeight;
             if(width&&height&&nw&&nh){

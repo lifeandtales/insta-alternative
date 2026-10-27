@@ -13,7 +13,7 @@ import { currentUser, posts } from '../data/sample-data.js';
 import { getSupportedStoryFileType } from './create.js';
 import { prepareStoryTools } from './story-tools.js';
 import { setStoryDraftSaving } from './story-options.js';
-import { storyNeedsFullCanvasRepost } from './story-composition.js';
+import { applyStoryComposition, storyComposition, storyNeedsFullCanvasRepost } from './story-composition.js';
 import { captureStoryPhoto, openStoryCamera, startStoryVideoRecording, stopStoryCamera, stopStoryVideoRecording, switchStoryCamera } from './story-camera.js';
 import {
     archiveStoryHighlight,
@@ -88,6 +88,8 @@ export function handleStoryMenuClick(event) {
             } = activeStory;
             state.pendingStoryMedia = {
                 ...originalStory,
+                repostSourceEdits: storyComposition(activeStory.edits),
+                edits: storyComposition(),
                 caption: activeStory.caption || '',
                 repostFrameSize: storyNeedsFullCanvasRepost(activeStory, activeStoryMedia, activeStoryCanvas)
                     ? null
@@ -658,11 +660,14 @@ function renderSelectedStory() {
     playButton.hidden = !story || story.type !== 'video';
     playButton.textContent = '▶';
     playButton.setAttribute('aria-label', 'Play video preview');
+    if (repostFrame && story.repostSourceEdits)
+        applyStoryComposition(repostFrame, { ...story, edits: story.repostSourceEdits }, { editing: true });
     prepareStoryTools();
     if (story?.repostedFromUser && story.repostedFromHandle) {
         const credit = createStoryRepostCredit(story);
         repostFrame.append(credit);
         repostFrame.style.setProperty('--repost-scale', String(story.repostScale || 1));
+        repostFrame.style.setProperty('--repost-rotation', `${story.repostRotation || 0}deg`);
         if (story.repostPosition) {
             repostFrame.style.setProperty('--repost-x', `${story.repostPosition.x}%`);
             repostFrame.style.setProperty('--repost-y', `${story.repostPosition.y}%`);
@@ -676,19 +681,23 @@ function renderSelectedStory() {
         let gesture = null;
         const midpoint = () => {
             const [a, b] = [...pointers.values()];
-            return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, distance: Math.hypot(b.x - a.x, b.y - a.y) };
+            return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, distance: Math.hypot(b.x - a.x, b.y - a.y), angle: Math.atan2(b.y - a.y, b.x - a.x) };
         };
-        const setRepostPose = (centerX, centerY, scale, bounds) => {
+        const setRepostPose = (centerX, centerY, scale, rotation, bounds) => {
             if (state.pendingStoryMedia !== story) return;
             const maxScale = Math.max(.45, Math.min(1.8, (bounds.width - 20) / repostFrame.offsetWidth, (bounds.height - 20) / repostFrame.offsetHeight));
             scale = Math.max(.45, Math.min(maxScale, scale));
-            const visualWidth = repostFrame.offsetWidth * scale;
-            const visualHeight = repostFrame.offsetHeight * scale;
-            const x = Math.max(visualWidth / 2, Math.min(bounds.width - visualWidth / 2, centerX - bounds.left));
-            const y = Math.max(visualHeight / 2, Math.min(bounds.height - visualHeight / 2, centerY - bounds.top));
+            const radians = rotation * Math.PI / 180, cosine = Math.abs(Math.cos(radians)), sine = Math.abs(Math.sin(radians));
+            const visualWidth = (repostFrame.offsetWidth * cosine + repostFrame.offsetHeight * sine) * scale;
+            const visualHeight = (repostFrame.offsetWidth * sine + repostFrame.offsetHeight * cosine) * scale;
+            const halfWidth = Math.min(visualWidth, bounds.width) / 2, halfHeight = Math.min(visualHeight, bounds.height) / 2;
+            const x = Math.max(halfWidth, Math.min(bounds.width - halfWidth, centerX - bounds.left));
+            const y = Math.max(halfHeight, Math.min(bounds.height - halfHeight, centerY - bounds.top));
             story.repostScale = scale;
+            story.repostRotation = ((rotation + 180) % 360 + 360) % 360 - 180;
             story.repostPosition = { x: x / bounds.width * 100, y: y / bounds.height * 100 };
             repostFrame.style.setProperty('--repost-scale', String(scale));
+            repostFrame.style.setProperty('--repost-rotation', `${story.repostRotation}deg`);
             repostFrame.style.setProperty('--repost-x', `${story.repostPosition.x}%`);
             repostFrame.style.setProperty('--repost-y', `${story.repostPosition.y}%`);
             repostFrame.style.setProperty('--repost-tx', `${x - bounds.width / 2}px`);
@@ -699,11 +708,12 @@ function renderSelectedStory() {
             const frameRect = repostFrame.getBoundingClientRect();
             const center = { x: frameRect.left + frameRect.width / 2, y: frameRect.top + frameRect.height / 2 };
             const scale = story.repostScale || 1;
+            const rotation = story.repostRotation || 0;
             if (pointers.size === 1) {
                 const [pointerId, point] = [...pointers.entries()][0];
-                gesture = { mode: 'drag', bounds, center, scale, pointerId, start: point };
+                gesture = { mode: 'drag', bounds, center, scale, rotation, pointerId, start: point };
             } else if (pointers.size === 2) {
-                gesture = { mode: 'pinch', bounds, center, scale, start: midpoint() };
+                gesture = { mode: 'pinch', bounds, center, scale, rotation, start: midpoint() };
             }
         };
         repostFrame.onpointerdown = event => {
@@ -727,6 +737,7 @@ function renderSelectedStory() {
                     gesture.center.x + now.x - gesture.start.x,
                     gesture.center.y + now.y - gesture.start.y,
                     gesture.scale * now.distance / Math.max(1, gesture.start.distance),
+                    gesture.rotation + Math.atan2(Math.sin(now.angle - gesture.start.angle), Math.cos(now.angle - gesture.start.angle)) * 180 / Math.PI,
                     gesture.bounds
                 );
             } else if (pointers.size === 1 && gesture.mode === 'drag') {
@@ -734,6 +745,7 @@ function renderSelectedStory() {
                     gesture.center.x + event.clientX - gesture.start.x,
                     gesture.center.y + event.clientY - gesture.start.y,
                     gesture.scale,
+                    gesture.rotation,
                     gesture.bounds
                 );
             }

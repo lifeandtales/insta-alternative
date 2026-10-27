@@ -512,7 +512,7 @@
 .story-editing .story-selected-preview .story-repost-credit img { width: 36px; height: 36px; max-height: none; flex: 0 0 36px; }
 .story-repost-credit span, .story-repost-credit strong { display: block; }
 .story-repost-credit strong { font-size: .84rem; line-height: 1.15; }
-.story-reposted-card.story-repost-positioned { position: absolute; left: var(--repost-x); top: var(--repost-y); transform: translate(-50%, -50%) scale(var(--repost-scale, 1)); }
+.story-reposted-card.story-repost-positioned { position: absolute; left: var(--repost-x); top: var(--repost-y); transform: translate(-50%, -50%) rotate(var(--repost-rotation, 0deg)) scale(var(--repost-scale, 1)); }
 body.story-repost-open .story-viewer-backdrop { background: rgba(10, 8, 16, 0.92); }
 .story-viewer.story-viewer-reposted { background: #17131d; }
 
@@ -737,7 +737,7 @@ body.video-fullscreen-open {
   top: 50%;
   width: min(78vw, 390px);
   height: min(58dvh, 560px);
-  transform: translate3d(var(--repost-tx, 0px), var(--repost-ty, 0px), 0) translate(-50%, -50%) scale(var(--repost-scale, 1));
+  transform: translate3d(var(--repost-tx, 0px), var(--repost-ty, 0px), 0) translate(-50%, -50%) rotate(var(--repost-rotation, 0deg)) scale(var(--repost-scale, 1));
   overflow: hidden;
   border-radius: 12px;
   cursor: grab;
@@ -745,7 +745,7 @@ body.video-fullscreen-open {
   will-change: transform;
 }
 .story-editing .story-repost-drag-frame.story-repost-positioned { left: 50%; top: 50%; }
-.story-editing .story-repost-full-canvas-frame { left: 50%; top: 50%; width: 100%; height: 100%; transform: translate3d(var(--repost-tx, 0px), var(--repost-ty, 0px), 0) translate(-50%, -50%) scale(var(--repost-scale, 1)); border-radius: 0; background: #17131d; }
+.story-editing .story-repost-full-canvas-frame { left: 50%; top: 50%; width: 100%; height: 100%; transform: translate3d(var(--repost-tx, 0px), var(--repost-ty, 0px), 0) translate(-50%, -50%) rotate(var(--repost-rotation, 0deg)) scale(var(--repost-scale, 1)); border-radius: 0; background: #17131d; }
 .story-editing .story-repost-drag-frame > :is(img, video) { display: block; width: 100%; height: 100%; max-height: none; object-fit: contain; }
 .story-editing .story-repost-drag-frame .story-repost-credit { pointer-events: none; }
 .story-media-preview-error {

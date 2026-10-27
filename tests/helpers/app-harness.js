@@ -15,7 +15,7 @@ export function createEnvironment() {
         const attributes = new Map();
         const classes = new Set();
         const result = {
-            innerHTML: '', textContent: '', value: '', hidden: true, dataset: {},
+            innerHTML: '', textContent: '', value: '', hidden: true, dataset: {}, firstChild: {textContent: ''},
             scrollTop: 0, scrollHeight: 100, children: [], style: {}, isConnected: true,
             classList: {
                 add: (...names) => names.forEach(name => classes.add(name)),
@@ -55,7 +55,23 @@ export function createEnvironment() {
         getItem: key => storage.get(key) ?? null,
         setItem: (key, value) => storage.set(key, value)
     };
-    const window = {setTimeout: () => 1, clearTimeout() {}, location: {href: 'http://localhost:8000/'}};
+    const historyEntries = [null];
+    let historyIndex = 0;
+    const window = {
+        setTimeout: () => 1, clearTimeout() {}, location: {href: 'http://localhost:8000/'},
+        addEventListener: (type, callback) => listeners.push({key: 'window', type, callback}),
+        history: {
+            get state() { return historyEntries[historyIndex]; },
+            replaceState(value) { historyEntries[historyIndex] = value; },
+            pushState(value) { historyEntries.splice(historyIndex + 1); historyEntries.push(value); historyIndex++; },
+            back() {
+                if (!historyIndex) return;
+                historyIndex--;
+                for (const listener of listeners.filter(item => item.key === 'window' && item.type === 'popstate'))
+                    listener.callback({state: historyEntries[historyIndex]});
+            }
+        }
+    };
     const context = vm.createContext({
         document, window, localStorage, Date: FixedDate, Math: math,
         navigator: {}, URL, Blob, console: {error() {}, log() {}},
