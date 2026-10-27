@@ -286,6 +286,30 @@ export const initialStories = [
         durationMs: 30000
     },
     {
+        id: "ari-story-canvas-drawing-demo",
+        handle: "@aribloom",
+        user: "Ari Bloom",
+        avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80",
+        type: "image",
+        media: "https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&w=1200&q=80",
+        caption: "Pen drawing across the full canvas",
+        durationMs: 30000,
+        edits: {
+            layers: [{
+                id: "ari-canvas-pen-demo",
+                type: "draw",
+                mode: "colorful",
+                width: 18,
+                points: [
+                    { x: .04, y: .05 }, { x: .28, y: .11 }, { x: .57, y: .04 }, { x: .93, y: .13 },
+                    { x: .88, y: .31 }, { x: .18, y: .27 }, { x: .08, y: .48 }, { x: .9, y: .55 },
+                    { x: .94, y: .77 }, { x: .12, y: .73 }, { x: .05, y: .94 }, { x: .46, y: .89 },
+                    { x: .83, y: .97 }, { x: .96, y: .86 }
+                ]
+            }]
+        }
+    },
+    {
         id: "noah-story-1",
         handle: "@noahvale",
         user: "Noah Vale",
