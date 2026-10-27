@@ -186,5 +186,6 @@
 .notification-list li { padding: 14px 0; border-top: 1px solid var(--line); }
 .notification-list strong, .notification-empty strong { font-size: .875rem; }
 .notification-list p, .notification-empty p { margin: 6px 0 0; font-size: .8125rem; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
+.notification-story-link { margin-top: 9px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text); font-weight: 700; }
 .notification-empty { padding: 20px 0; text-align: center; }
 body.notifications-open { overflow: hidden; }

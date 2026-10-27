@@ -8,6 +8,7 @@ import { escapeHtml } from '../core/utils.js';
 import { conversations } from '../data/sample-data.js';
 import { getFollowedConnections } from './follows.js';
 import { startStoryProgress } from './stories.js';
+import { canViewStory } from '../core/social.js';
 
 export function openHighlightShareDialog(highlight) {
     if (!mayInteract()) return;
@@ -38,9 +39,14 @@ export function openHighlightShareDialog(highlight) {
 }
 
 export function openShareDialog(post, type = "post") {
-    if (!mayInteract() || !canViewMedia(post)) { showShareFeedback('This post is unavailable to share.'); return; }
-    const recipients = state.accountDirectory.filter(account => account.handle !== currentUser.handle && !state.blockedHandles.has(account.handle) && canViewMedia(post, account.handle)).map(account => ({ handle: account.handle, user: account.name, avatar: visibleAvatar(account.handle, account.avatar) }));
+    const shareable = type === 'story' ? canViewStory(post) : canViewMedia(post);
+    if (!mayInteract() || !shareable) { showShareFeedback('This story is unavailable to share.'); return; }
+    const recipients = state.accountDirectory.filter(account => account.handle !== currentUser.handle && !state.blockedHandles.has(account.handle) && (type === 'story' ? canViewStory(post, account.handle) : canViewMedia(post, account.handle))).map(account => ({ handle: account.handle, user: account.name, avatar: visibleAvatar(account.handle, account.avatar) }));
     state.activeSharePost = post;
+    if (type === 'story') {
+        clearTimeout(state.storyAdvanceTimer);
+        document.querySelector('.story-viewer-stage video')?.pause();
+    }
     state.activeShareType = type;
     state.activeShareHighlight = null;
     state.activeShareConnections = recipients;
@@ -66,7 +72,7 @@ export function closeShareDialog() {
     state.activeShareType = "post";
     state.activeShareHighlight = null;
     state.activeShareConnections = conversations;
-    if (!document.querySelector(".story-viewer-backdrop").hidden && state.activeStoryHighlightId && state.activeStoryIndex >= 0) {
+    if (!document.querySelector(".story-viewer-backdrop").hidden && state.activeStoryIndex >= 0) {
         const video = document.querySelector(".story-viewer-stage video");
         if (video) {
             video.play().catch((error) => {
@@ -80,13 +86,15 @@ export function closeShareDialog() {
 
 export function sendSharedPost() {
     const post = state.activeSharePost;
-    if (!post || !mayInteract() || !canViewMedia(post)) return 0;
+    if (!post || !mayInteract() || !(state.activeShareType === 'story' ? canViewStory(post) : canViewMedia(post))) return 0;
     let sent = 0;
     for (const person of state.activeShareConnections) {
-        if (!state.selectedShareRecipients.has(person.handle) || state.blockedHandles.has(person.handle) || !canViewMedia(post, person.handle)) continue;
+        if (!state.selectedShareRecipients.has(person.handle) || state.blockedHandles.has(person.handle) || !(state.activeShareType === 'story' ? canViewStory(post, person.handle) : canViewMedia(post, person.handle))) continue;
         let chat = conversations.find(item => item.handle === person.handle);
         if (!chat) { chat = { ...person, messages: [] }; conversations.push(chat); }
-        appendChatMessage(chat, { from: 'me', type: 'shared-post', entityType: state.activeShareType, entityId: post.id });
+        appendChatMessage(chat, state.activeShareType === 'story'
+            ? { from: 'me', type: 'shared-story', story: { id: post.id, user: post.user, handle: post.handle, avatar: post.avatar, media: post.media, caption: post.caption || '' } }
+            : { from: 'me', type: 'shared-post', entityType: state.activeShareType, entityId: post.id });
         sent++;
     }
     return sent;

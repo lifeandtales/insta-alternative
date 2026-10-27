@@ -6,12 +6,13 @@ import { escapeHtml, toDateTimeLocalValue } from '../core/utils.js';
 import { currentUser, posts } from '../data/sample-data.js';
 import { updateSoundButton } from '../media/video.js';
 import { persistActiveStories } from '../storage/browser-storage.js';
+import { persistPreferences } from '../storage/preferences.js';
 import { applyStoryComposition, storyVideoRange } from './story-composition.js';
 import { syncStoryOptionButtons, openStoryExitDialog, closeStoryExitDialog } from './story-options.js';
 import { stopStoryCamera } from './story-camera.js';
 let storyCreatorTrigger;
 
-export function getStoryGroups() {
+export function getStoryGroups({ includeMuted = false } = {}) {
     const groupedStories = new Map();
     state.stories.forEach((story) => {
         if (!Number.isFinite(story.expiresAt)) {
@@ -21,12 +22,13 @@ export function getStoryGroups() {
         if (!state.storyExpiryTimers.has(story.id)) {
             state.storyExpiryTimers.set(story.id, window.setTimeout(() => expireStory(story.id), Math.max(0, story.expiresAt - Date.now())));
         }
-        if (!canViewStory(story) || state.mutedStoryHandles.has(story.handle)) return;
+        const muted = state.mutedStoryHandles.has(story.handle);
+        if (!canViewStory(story) || (muted && !includeMuted)) return;
         if (story.expiresAt <= Date.now())
             return;
         if (!story.mine && story.handle !== currentUser.handle && !isFollowing(story.handle))
             return;
-        const group = groupedStories.get(story.handle) || { handle: story.handle, user: story.user, avatar: story.avatar, stories: [] };
+        const group = groupedStories.get(story.handle) || { handle: story.handle, user: story.user, avatar: story.avatar, stories: [], muted };
         group.stories.push(story);
         groupedStories.set(story.handle, group);
     });
@@ -39,8 +41,11 @@ export function expireStory(id) {
     if (!story || story.expiresAt > Date.now())
         return;
     state.stories = state.stories.filter((item) => item.id !== id);
-    const highlightedMedia = new Set(state.storyHighlights.flatMap((highlight) => highlight.stories.map((item) => item.media)));
-    if (story.media.startsWith("blob:") && !highlightedMedia.has(story.media))
+    const retainedMedia = new Set([
+        ...state.storyHighlights.flatMap((highlight) => highlight.stories.map((item) => item.media)),
+        ...state.stories.map(item => item.media),
+    ]);
+    if (story.media.startsWith("blob:") && !retainedMedia.has(story.media))
         URL.revokeObjectURL(story.media);
     if (state.activeStorySequence[state.activeStoryIndex]?.id === id && !state.activeStorySequence[state.activeStoryIndex]?.fromHighlight) {
         closeStoryViewer();
@@ -57,23 +62,33 @@ export function expireStory(id) {
 
 export function renderStories() {
     const list = document.getElementById("stories-list");
-    const groups = getStoryGroups();
+    const groups = getStoryGroups({ includeMuted: true });
     const ownStories = groups.find((group) => group.handle === currentUser.handle);
-    const otherStories = groups.filter((group) => group.handle !== currentUser.handle);
+    const ownStoriesSeen = ownStories?.stories.some((story) => state.seenStoryIds.has(story.id));
+    const otherStories = groups.filter((group) => group.handle !== currentUser.handle && !group.muted);
+    const mutedStories = groups.filter((group) => group.handle !== currentUser.handle && group.muted);
     list.innerHTML = `
     <div class="story-own-group"><button class="story-item story-own" type="button" data-story-owner="${currentUser.handle}">
-      <span class="story-ring ${ownStories ? "has-story" : ""}">
+      <span class="story-ring ${ownStories ? `has-story ${ownStoriesSeen ? "seen-story" : ""}` : ""}">
         <img src="${currentUser.avatar}" alt="" />
         ${ownStories ? "" : '<span class="story-add-badge" aria-hidden="true">+</span>'}
       </span>
       <span>${ownStories ? "Your story" : state.scheduledStories.size ? "Scheduled story" : "Add story"}</span>
     </button>${ownStories ? '<button class="story-add-control" type="button" aria-label="Add story"><span aria-hidden="true">+</span></button>' : ''}</div>
-    ${otherStories.map((group) => `
+    ${otherStories.map((group) => {
+      const allSeen = group.stories.every((story) => state.seenStoryIds.has(story.id));
+      return `
       <button class="story-item" type="button" data-story-owner="${group.handle}">
-        <span class="story-ring has-story"><img src="${group.avatar}" alt="" /></span>
+        <span class="story-ring has-story ${allSeen ? "seen-story" : ""}"><img src="${group.avatar}" alt="" /></span>
         <span>${escapeHtml(group.user)}</span>
       </button>
-    `).join("")}
+    `;
+    }).join("")}
+    ${mutedStories.length ? `<div class="story-muted-section" aria-label="Muted stories"><span class="story-muted-label">Muted stories</span>${mutedStories.map((group) => `
+      <button class="story-item story-muted-item" type="button" data-story-owner="${escapeHtml(group.handle)}" data-story-muted="true" aria-label="${escapeHtml(group.user)}, muted stories">
+        <span class="story-ring has-story story-muted-ring"><img src="${group.avatar}" alt="" /></span>
+        <span>${escapeHtml(group.user)}</span>
+      </button>`).join("")}</div>` : ''}
   `;
 }
 
@@ -114,11 +129,14 @@ export function openStoryCreator() {
 export function setStoryCreationStep(editing) {
     syncStoryOptionButtons();
     const hasMedia = Boolean(editing && state.pendingStoryMedia);
+    const isRepost = Boolean(hasMedia && state.pendingStoryMedia?.repostedFromUser);
     document.querySelector('.story-media-step').hidden = hasMedia;
     document.querySelector('.story-editor-step').hidden = !hasMedia;
     document.querySelector('.story-editor-settings-toggle').hidden = !hasMedia;
     document.querySelector('.story-create-dialog').classList.toggle('story-editing', hasMedia);
+    document.querySelector('.story-create-dialog').classList.toggle('story-repost-editing', isRepost);
     document.querySelector('.story-create-backdrop').classList.toggle('story-editor-open', hasMedia);
+    document.querySelector('.story-create-backdrop').classList.toggle('story-repost-editor-open', isRepost);
     if (!hasMedia) document.querySelector('.story-selected-preview video')?.pause();
     if (!hasMedia) document.querySelectorAll('.story-selected-preview audio').forEach(audio=>audio.pause());
     document.getElementById('story-create-title').textContent = hasMedia ? 'Edit your story' : 'Choose a photo or video';
@@ -237,16 +255,20 @@ export function closeStorySettings() {
 export function removeOwnStories() {
     if (!mayInteract()) return;
     const wasViewingOwnStories = state.activeStoryGroups[state.activeStoryGroupIndex]?.handle === currentUser.handle;
-    const highlightedMedia = new Set(state.storyHighlights.flatMap((highlight) => highlight.stories.map((story) => story.media)));
+    const removedMedia = [];
     state.stories = state.stories.filter((story) => {
         if (story.handle !== currentUser.handle)
             return true;
         clearTimeout(state.storyExpiryTimers.get(story.id));
         state.storyExpiryTimers.delete(story.id);
-        if (story.media.startsWith("blob:") && !highlightedMedia.has(story.media))
-            URL.revokeObjectURL(story.media);
+        if (story.media.startsWith("blob:")) removedMedia.push(story.media);
         return false;
     });
+    const retainedMedia = new Set([
+        ...state.storyHighlights.flatMap((highlight) => highlight.stories.map((story) => story.media)),
+        ...state.stories.map(story => story.media),
+    ]);
+    removedMedia.forEach(media => { if (!retainedMedia.has(media)) URL.revokeObjectURL(media); });
     state.scheduledStories.forEach(({ story, timer }) => {
         clearTimeout(timer);
         if (story.media.startsWith("blob:"))
@@ -270,13 +292,44 @@ export function showStoryOptions(toggle) {
     toggle.setAttribute("aria-expanded", "true");
 }
 
+export function fitRepostMediaFrame(frame, media, maxHeightRatio = 0.64) {
+    const sourceWidth = media.videoWidth || media.naturalWidth;
+    const sourceHeight = media.videoHeight || media.naturalHeight;
+    if (!sourceWidth || !sourceHeight) return;
+    const maxWidth = Math.min(window.innerWidth * 0.78, 390);
+    const maxHeight = Math.min(window.innerHeight * maxHeightRatio, 650);
+    const scale = Math.min(maxWidth / sourceWidth, maxHeight / sourceHeight);
+    frame.style.width = `${Math.round(sourceWidth * scale)}px`;
+    frame.style.height = `${Math.round(sourceHeight * scale)}px`;
+}
+
+export function createStoryRepostCredit(story) {
+    const credit = document.createElement('div');
+    credit.className = 'story-repost-credit';
+    const avatar = document.createElement('img');
+    avatar.src = story.repostedFromAvatar || story.avatar || '';
+    avatar.alt = '';
+    const names = document.createElement('span');
+    const name = document.createElement('strong');
+    name.textContent = story.repostedFromUser || 'Original creator';
+    names.append(name);
+    credit.append(avatar, names);
+    return credit;
+}
+
 export function openStoryGroup(handle) {
     state.activeStoryHighlightId = null;
     if (handle === currentUser.handle && !getStoryGroups().some(group => group.handle === handle)) {
         openStoryCreator();
         return;
     }
-    state.activeStoryGroups = getStoryGroups();
+    const allGroups = getStoryGroups({ includeMuted: true });
+    const targetGroup = allGroups.find(item => item.handle === handle);
+    const targetIsOwn = targetGroup?.handle === currentUser.handle;
+    state.activeStoryGroups = allGroups.filter(item =>
+        (item.handle === currentUser.handle) === targetIsOwn &&
+        (targetIsOwn || Boolean(item.muted) === Boolean(targetGroup?.muted))
+    );
     state.activeStoryGroupIndex = state.activeStoryGroups.findIndex((item) => item.handle === handle);
     if (state.activeStoryGroupIndex < 0)
         return;
@@ -305,20 +358,46 @@ export function showStoryAtIndex(index) {
     state.activeStoryIndex = index;
     const story = state.activeStorySequence[index];
     const isOwner = story.handle === currentUser.handle;
+    document.querySelector('.story-share-button').hidden = isOwner;
+    if (!story.fromHighlight) {
+        if (!(state.seenStoryIds instanceof Set)) state.seenStoryIds = new Set();
+        if (!state.seenStoryIds.has(story.id)) {
+            state.seenStoryIds.add(story.id);
+            persistPreferences();
+            const group = state.activeStoryGroups.find((item) => item.handle === story.handle);
+            if ((isOwner && group) || group?.stories.every((item) => state.seenStoryIds.has(item.id))) renderStories();
+        }
+    }
     const replyForm = document.querySelector('.story-reply-form');
     replyForm.hidden = isOwner || !state.storySettings.allowReplies;
     replyForm.reset();
     document.querySelector('.story-direct-highlight').hidden = !isOwner;
-    document.querySelector('.story-viewers-button').hidden = !isOwner;
+    const viewersButton = document.querySelector('.story-viewers-button');
+    viewersButton.hidden = !isOwner;
+    const viewers = Array.isArray(story.viewers) ? story.viewers : [];
+    viewersButton.textContent = `${viewers.length} ${viewers.length === 1 ? 'view' : 'views'}`;
+    viewersButton.setAttribute('aria-label', `${viewers.length} ${viewers.length === 1 ? 'view' : 'views'}`);
     const likeButton = document.querySelector('.story-like-button');
     likeButton.hidden = isOwner;
     story.likes = story.likes || [];
     story.liked = story.likes.some(person => person.handle === currentUser.handle);
     likeButton.setAttribute('aria-pressed', String(Boolean(story.liked)));
     likeButton.firstChild.textContent = story.liked ? '♥ ' : '♡ ';
-    likeButton.querySelector('.story-like-count').textContent = story.likes.length ? String(story.likes.length) : '';
+    const reactionButton = document.querySelector('.story-reaction-trigger');
+    reactionButton.hidden = isOwner;
+    story.reactions = story.reactions || [];
+    reactionButton.setAttribute('aria-pressed', 'false');
+    reactionButton.setAttribute('aria-label', 'React to story');
+    reactionButton.setAttribute('aria-expanded', 'false');
+    reactionButton.firstChild.textContent = '☺';
+    document.querySelector('.story-reaction-picker').hidden = true;
     const viewer = document.querySelector(".story-viewer");
+    viewer.classList.toggle("story-viewer-fullscreen", !isOwner);
     const stage = viewer.querySelector(".story-viewer-stage");
+    const isRepost = Boolean(story.repostedFromUser && story.repostedFromHandle);
+    stage.classList.toggle('story-reposted-stage', isRepost);
+    viewer.classList.toggle('story-viewer-reposted', isRepost);
+    document.body.classList.toggle('story-repost-open', isRepost);
     stage.querySelectorAll('audio, video').forEach(media=>media.pause());
     const storySoundButton = viewer.querySelector(".story-sound-toggle");
     const storyOptionsToggle = viewer.querySelector(".story-options-toggle");
@@ -329,12 +408,18 @@ export function showStoryAtIndex(index) {
     const ownsActiveHighlight = Boolean(highlight && highlight.handle === currentUser.handle);
     storyOptionsMenu.hidden = true;
     storyOptionsToggle.setAttribute("aria-expanded", "false");
-    storyOptionsToggle.hidden = story.handle !== currentUser.handle && !ownsActiveHighlight;
+    storyOptionsToggle.hidden = false;
     storySettingsToggle.hidden = !isOwner || Boolean(story.fromHighlight);
     viewer.querySelector(".story-highlight-share").hidden = !ownsActiveHighlight;
     storyOptionsMenu.querySelectorAll("[data-story-option]").forEach((button) => {
         button.hidden = story.handle !== currentUser.handle || Boolean(story.fromHighlight);
     });
+    storyOptionsMenu.querySelector('[data-story-option="share"]').hidden = true;
+    storyOptionsMenu.querySelector('[data-story-option="copy-link"]').hidden = isOwner;
+    storyOptionsMenu.querySelector('[data-story-option="repost"]').hidden = isOwner;
+    storyOptionsMenu.querySelector('[data-story-option="mute"]').hidden = isOwner;
+    storyOptionsMenu.querySelector('[data-story-option="mute"]').textContent = state.mutedStoryHandles.has(story.handle) ? 'Unmute stories' : 'Mute stories';
+    storyOptionsMenu.querySelector('[data-story-option="report"]').hidden = isOwner;
     storyOptionsMenu.querySelectorAll("[data-highlight-option]").forEach((button) => {
         button.hidden = !ownsActiveHighlight;
     });
@@ -347,10 +432,25 @@ export function showStoryAtIndex(index) {
     viewer.querySelector(".story-viewer-avatar").src = story.avatar;
     viewer.querySelector(".story-viewer-avatar").alt = `${story.user} profile`;
     viewer.querySelector(".story-viewer-user").textContent = story.user;
-    viewer.querySelector(".story-viewer-caption").textContent = story.caption || "";
+    viewer.querySelector(".story-viewer-caption").textContent = isRepost ? '' : (story.caption || "");
     viewer.querySelector(".story-progress-list").innerHTML = state.activeStorySequence.map((item, itemIndex) => `
     <span class="story-progress-track"><span class="story-progress-fill ${itemIndex < index ? "complete" : ""}"></span></span>
   `).join("");
+    const compositionStage = isRepost ? document.createElement('div') : stage;
+    if (isRepost) {
+        compositionStage.className = `story-reposted-card story-composition-stage${story.repostFullCanvas ? ' story-repost-full-canvas-card' : ''}`;
+        if (story.repostPosition) {
+            compositionStage.classList.add('story-repost-positioned');
+            compositionStage.style.setProperty('--repost-x', `${story.repostPosition.x}%`);
+            compositionStage.style.setProperty('--repost-y', `${story.repostPosition.y}%`);
+        }
+        compositionStage.tabIndex = 0;
+        compositionStage.setAttribute('role', 'button');
+        compositionStage.setAttribute('aria-label', `Shared Story by ${story.repostedFromUser}. Open the original.`);
+        compositionStage.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); compositionStage.click(); }
+        });
+    }
     if (story.type === "video") {
         const video = document.createElement("video");
         video.className = "story-viewer-video";
@@ -359,7 +459,7 @@ export function showStoryAtIndex(index) {
         video.autoplay = true;
         video.muted = true;
         video.playsInline = true;
-        stage.replaceChildren(video);
+        compositionStage.replaceChildren(video);
         video.play().catch((error) => {
             if (error.name !== "AbortError")
                 showShareFeedback("This story video couldn't play.");
@@ -367,6 +467,7 @@ export function showStoryAtIndex(index) {
         state.storyDurationMs = 15000;
         startStoryProgress(index);
         video.addEventListener("loadedmetadata", () => {
+            if (isRepost && !story.repostFullCanvas) fitRepostMediaFrame(compositionStage, video);
             if (index !== state.activeStoryIndex || !Number.isFinite(video.duration) || video.duration <= 0)
                 return;
             state.storyDurationMs = storyVideoRange(story, video.duration).duration * 1000;
@@ -386,11 +487,14 @@ export function showStoryAtIndex(index) {
         image.className = "story-viewer-image";
         image.src = story.media;
         image.alt = story.caption || `${story.user}'s story`;
-        stage.replaceChildren(image);
+        if (isRepost && !story.repostFullCanvas) image.addEventListener('load', () => fitRepostMediaFrame(compositionStage, image), { once: true });
+        compositionStage.replaceChildren(image);
         state.storyDurationMs = story.durationMs || 30000;
         startStoryProgress(index);
     }
-    applyStoryComposition(stage, story);
+    if (isRepost) stage.replaceChildren(compositionStage);
+    applyStoryComposition(compositionStage, story);
+    if (isRepost) compositionStage.append(createStoryRepostCredit(story));
     if (story.edits?.video?.muted) storySoundButton.hidden = true;
 }
 
@@ -422,6 +526,9 @@ export function closeStoryViewer() {
     document.querySelector(".story-sound-toggle").hidden = true;
     document.querySelector(".story-viewer-stage").replaceChildren();
     document.body.classList.remove("story-overlay-open");
+    document.body.classList.remove("story-repost-open");
+    document.querySelector('.story-viewer').classList.remove('story-viewer-reposted');
+    document.querySelector('.story-viewer-stage').classList.remove('story-reposted-stage');
     state.activeStorySequence = [];
     state.activeStoryGroups = [];
     state.activeStoryGroupIndex = -1;

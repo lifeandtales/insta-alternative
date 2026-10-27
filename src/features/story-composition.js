@@ -17,6 +17,35 @@ export function storyComposition(value = {}) {
     };
 }
 
+export function storyNeedsFullCanvasRepost(story, media, canvas) {
+    const layers = storyComposition(story?.edits).layers;
+    if (!layers.length) return false;
+    const canvasRect = canvas?.getBoundingClientRect?.();
+    const canvasWidth = canvasRect?.width || window.innerWidth;
+    const canvasHeight = canvasRect?.height || window.innerHeight;
+    const mediaWidth = media?.naturalWidth || media?.videoWidth;
+    const mediaHeight = media?.naturalHeight || media?.videoHeight;
+    if (!mediaWidth || !mediaHeight || !canvasWidth || !canvasHeight) return true;
+    const edit = storyComposition(story.edits).media;
+    if (edit.fit === 'cover') return false;
+    const scale = Math.min(canvasWidth / mediaWidth, canvasHeight / mediaHeight);
+    const imageWidth = mediaWidth * scale / canvasWidth;
+    const imageHeight = mediaHeight * scale / canvasHeight;
+    const left = (1 - imageWidth) / 2;
+    const top = (1 - imageHeight) / 2;
+    return layers.some(layer => {
+        if (layer.type === 'draw') {
+            const strokeRadius = number(layer.width, 8, 1, 40) / 2000;
+            return (layer.points || []).some(point => point.x - strokeRadius < left || point.x + strokeRadius > left + imageWidth || point.y - strokeRadius < top || point.y + strokeRadius > top + imageHeight);
+        }
+        const x = number(layer.x, .5, 0, 1), y = number(layer.y, .4, 0, 1);
+        const fontSize = number(layer.size, 7, 2, 25);
+        const width = layer.type === 'text' ? Math.min(number(layer.width, .9, .1, .9), Math.max(.04, String(layer.text || '').length * fontSize * .0055)) : .12;
+        const height = fontSize / 100 * canvasWidth / canvasHeight * Math.max(1, String(layer.text || '').split('\n').length) * 1.25;
+        return x - width / 2 < left || x + width / 2 > left + imageWidth || y - height / 2 < top || y + height / 2 > top + imageHeight;
+    });
+}
+
 // Rainbow ink follows traveled Story distance, so adding later pointer samples
 // never changes colors already painted. The same segments drive preview/export.
 export function storyDrawingSegments(points, {cycleLength=180, maxSegmentLength=5}={}) {

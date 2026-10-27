@@ -293,6 +293,52 @@ export const initialStories = [
         type: "video",
         media: "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
         caption: "A short studio tour"
+    },
+    {
+        id: "mila-story-demo-1",
+        handle: currentUser.handle,
+        user: currentUser.name,
+        avatar: currentUser.avatar,
+        type: "image",
+        media: "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?auto=format&fit=crop&w=1200&q=80",
+        durationMs: 30000,
+        mine: true,
+        viewers: [
+            { handle: "@aribloom", name: "Ari Bloom", avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80", viewedAt: sampleUploadTime - 4 * 60000 },
+            { handle: "@noahvale", name: "Noah Vale", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80", viewedAt: sampleUploadTime - 2 * 60000 },
+            { handle: "@avakim", name: "Ava Kim", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80", viewedAt: sampleUploadTime - 3 * 60000 }
+        ],
+        likes: [{ handle: "@noahvale", name: "Noah Vale" }]
+    },
+    {
+        id: "mila-story-demo-2",
+        handle: currentUser.handle,
+        user: currentUser.name,
+        avatar: currentUser.avatar,
+        type: "image",
+        media: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1200&q=80",
+        durationMs: 30000,
+        mine: true,
+        viewers: [
+            { handle: "@aribloom", name: "Ari Bloom", avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80", viewedAt: sampleUploadTime - 5 * 60000 },
+            { handle: "@avakim", name: "Ava Kim", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80", viewedAt: sampleUploadTime - 2 * 60000 }
+        ],
+        likes: [{ handle: "@aribloom", name: "Ari Bloom" }]
+    },
+    {
+        id: "mila-story-demo-3",
+        handle: currentUser.handle,
+        user: currentUser.name,
+        avatar: currentUser.avatar,
+        type: "image",
+        media: "https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&w=1200&q=80",
+        durationMs: 30000,
+        mine: true,
+        viewers: [
+            { handle: "@noahvale", name: "Noah Vale", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80", viewedAt: sampleUploadTime - 3 * 60000 },
+            { handle: "@avakim", name: "Ava Kim", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80", viewedAt: sampleUploadTime - 1 * 60000 }
+        ],
+        likes: [{ handle: "@avakim", name: "Ava Kim" }]
     }
 ];
 export const conversations = [

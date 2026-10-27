@@ -832,6 +832,10 @@ body.profile-post-viewer-open {
 .home-controls-backdrop { position: fixed; inset: 0; z-index: 120; background: #21163788; display: grid; place-items: center; padding: 16px; }
 .home-controls-backdrop[hidden] { display: none; }
 .home-panel { background: var(--surface, white); color: var(--text); width: min(100%, 460px); border-radius: 24px; padding: 20px; max-height: 85dvh; overflow-y: auto; }
+.home-panel.story-repost-visit-prompt { width: auto; max-width: calc(100vw - 32px); padding: 8px; border-radius: 14px; overflow: visible; }
+.home-panel.story-repost-visit-prompt header { display: none; }
+.home-panel.story-repost-visit-prompt .home-panel-content { margin: 0; }
+.home-panel.story-repost-visit-prompt button[data-reposted-open] { min-height: 44px; padding: 10px 16px; border-radius: 10px; background: var(--primary); color: #fff; white-space: nowrap; }
 .home-panel header { display: flex; justify-content: space-between; align-items: center; }
 .home-panel label { display: block; padding: 8px 0; }
 .home-panel select,.home-panel textarea { display: block; width: 100%; padding: 12px; margin: 8px 0; }

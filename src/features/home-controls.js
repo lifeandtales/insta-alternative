@@ -8,11 +8,15 @@ import { setView } from '../core/navigation.js';
 import { resumeStory } from './stories.js';
 import { showShareFeedback } from '../components/feedback.js';
 
-export function showHomePanel(title, markup) {
+export function showHomePanel(title, markup, { minimal = false } = {}) {
+    const panel = document.querySelector('.home-panel');
+    panel.classList.toggle('story-repost-visit-prompt', minimal);
+    if (minimal) panel.setAttribute('aria-label', 'Visit original story');
+    else panel.removeAttribute('aria-label');
     document.getElementById('home-panel-title').textContent = title;
     document.querySelector('.home-panel-content').innerHTML = markup;
     document.querySelector('.home-controls-backdrop').hidden = false;
-    document.querySelector('.home-panel-close').focus();
+    (minimal ? panel.querySelector('[data-reposted-open]') : panel.querySelector('.home-panel-close')).focus();
 }
 export function openHomeSettings() {
     const owner = getAccount(currentUser.handle);
@@ -30,7 +34,7 @@ function renderMuted(handles, type) {
 }
 export function openReportPanel(post, type) {
     state.reportingMedia = { type, id: post.id };
-    showHomePanel('Report post', `<p>Choose a reason. In this local prototype, reports are saved on this device; they are not sent to a moderation service.</p><form class="local-report-form"><label>Reason<select name="reason" required><option value="">Choose a reason</option><option>Spam</option><option>Harassment</option><option>Unsafe content</option><option>Impersonation</option><option>Other</option></select></label><label>Details (optional)<textarea name="details" maxlength="500"></textarea></label><button type="submit">Save local report</button></form>`);
+    showHomePanel(type === 'story' ? 'Report story' : 'Report post', `<p>Choose a reason. In this local prototype, reports are saved on this device; they are not sent to a moderation service.</p><form class="local-report-form"><label>Reason<select name="reason" required><option value="">Choose a reason</option><option>Spam</option><option>Harassment</option><option>Unsafe content</option><option>Impersonation</option><option>Other</option></select></label><label>Details (optional)<textarea name="details" maxlength="500"></textarea></label><button type="submit">Save local report</button></form>`);
 }
 export function registerHomeControlEvents() {
     document.querySelector('.home-panel-close').addEventListener('click', closeHomePanel);
@@ -70,4 +74,4 @@ export function registerHomeControlEvents() {
     });
 }
 
-function closeHomePanel() { document.querySelector('.home-controls-backdrop').hidden = true; if (!document.querySelector('.story-viewer-backdrop').hidden) resumeStory(); }
+export function closeHomePanel() { const panel=document.querySelector('.home-panel');panel.classList.remove('story-repost-visit-prompt');panel.removeAttribute('aria-label');document.querySelector('.home-controls-backdrop').hidden = true; if (!document.querySelector('.story-viewer-backdrop').hidden) resumeStory(); }

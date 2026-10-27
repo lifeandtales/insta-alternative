@@ -16,6 +16,7 @@ export function getConversationPreview(conversation) {
     if (!lastMessage)
         return conversation.lastMessage || "Start a conversation";
     if (lastMessage.type === "shared-post") return `${lastMessage.from === "me" ? "You: " : ""}Shared a ${lastMessage.entityType}`;
+    if (lastMessage.type === "shared-story") return `${lastMessage.from === "me" ? "You: " : ""}Shared a story`;
     if (lastMessage.type === "meme")
         return `${lastMessage.from === "me" ? "You: " : ""}Shared a meme`;
     if (lastMessage.type === "call")
@@ -54,6 +55,11 @@ export function renderMessages() {
     const canSend = canSendToConversation(conversation);
     const pending = conversation.membershipStatus === 'pending';
     const messageMarkup = (conversation.messages || []).map((message) => {
+        if (message.type === 'shared-story') {
+            const story = message.story;
+            if (!story?.media) return '<article class="chat-message">This shared story is unavailable.</article>';
+            return `<article class="chat-message ${message.from === 'me' ? 'from-me' : 'from-them'}"><div class="chat-shared-post"><img src="${escapeHtml(story.media)}" alt="Story shared by ${escapeHtml(story.user)}" /><strong>${escapeHtml(story.user)}</strong>${story.caption ? `<p>${escapeHtml(story.caption)}</p>` : ''}<span>Shared story · preview on this device</span></div></article>`;
+        }
         if (message.type === 'shared-post') {
             const entity = findEntity(message.entityType, message.entityId);
             if (!entity || !canViewMedia(entity)) return '<article class="chat-message">This shared post is unavailable.</article>';

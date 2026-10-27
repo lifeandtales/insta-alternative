@@ -29,6 +29,7 @@ export const state = {
     activeSharePost: null,
     activeShareType: "post",
     activeShareHighlight: null,
+    localStoryNotifications: [],
     activeShareConnections: conversations,
     profileHandle: currentUser.handle,
     activeProfileSection: "posts",

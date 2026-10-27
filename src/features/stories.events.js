@@ -1,7 +1,8 @@
 import { handleStoryDraftManagement } from './story-drafts.js';
-import { showHomePanel } from './home-controls.js';
+import { closeHomePanel, showHomePanel } from './home-controls.js';
 import { escapeHtml } from '../core/utils.js';
 import { persistSession, unexpiredDrafts } from '../storage/local-session.js';
+import { persistPreferences } from '../storage/preferences.js';
 import { conversations } from '../data/sample-data.js';
 import { mayInteract, canViewMedia } from '../core/social.js';
 import { appendChatMessage } from './messages.js';
@@ -12,6 +13,7 @@ import { currentUser, posts } from '../data/sample-data.js';
 import { getSupportedStoryFileType } from './create.js';
 import { prepareStoryTools } from './story-tools.js';
 import { setStoryDraftSaving } from './story-options.js';
+import { storyNeedsFullCanvasRepost } from './story-composition.js';
 import { captureStoryPhoto, openStoryCamera, startStoryVideoRecording, stopStoryCamera, stopStoryVideoRecording, switchStoryCamera } from './story-camera.js';
 import {
     archiveStoryHighlight,
@@ -20,12 +22,16 @@ import {
     openHighlightPicker,
 } from './highlights.js';
 import { openHighlightShareDialog } from './sharing.js';
+import { openShareDialog } from './sharing.js';
+import { openReportPanel } from './home-controls.js';
+import { copyStoryLink, openMediaFromHash } from '../core/media-links.js';
 import {
     pauseStory,
     resumeStory,
     closeStoryCreator,
     closeStorySettings,
     closeStoryViewer,
+    renderStories,
     openStoryCreator,
     openStoryGroup,
     openStorySettings,
@@ -34,9 +40,18 @@ import {
     showStoryAtIndex,
     showStoryOptions,
     setStoryCreationStep,
+    fitRepostMediaFrame,
+    createStoryRepostCredit,
 } from './stories.js';
 
 export function handleStoryMenuClick(event) {
+    const reactionPicker = document.querySelector('.story-reaction-picker');
+    const reactionButton = document.querySelector('.story-reaction-trigger');
+    if (!reactionPicker.hidden && !event.target.closest('.story-reaction-picker, .story-reaction-trigger')) {
+        reactionPicker.hidden = true;
+        reactionButton.setAttribute('aria-expanded', 'false');
+        resumeStory();
+    }
     const storyOptionsToggle = event.target.closest(".story-options-toggle");
     if (storyOptionsToggle) {
         const menu = document.querySelector(".story-options-menu");
@@ -51,9 +66,55 @@ export function handleStoryMenuClick(event) {
     const storyOption = event.target.closest("[data-story-option]");
     if (storyOption) {
         if (!mayInteract()) return true;
+        const activeStory = state.activeStorySequence[state.activeStoryIndex];
+            const activeStoryMedia = document.querySelector('.story-viewer-stage img, .story-viewer-stage video');
+            const activeStoryCanvas = document.querySelector('.story-viewer-stage');
         document.querySelector(".story-options-menu").hidden = true;
         document.querySelector(".story-viewer .story-options-toggle").setAttribute("aria-expanded", "false");
-        if (storyOption.dataset.storyOption === "remove") {
+        if (storyOption.dataset.storyOption === "share") {
+            openShareDialog(activeStory, 'story');
+        }
+        else if (storyOption.dataset.storyOption === "copy-link") {
+            copyStoryLink(activeStory);
+        }
+        else if (storyOption.dataset.storyOption === "repost") {
+            closeStoryViewer();
+            openStoryCreator();
+            const {
+                id, handle, user, avatar, mine, likes, reactions, viewers, seen,
+                createdAt, expiresAt, audience, closeFriendHandles, fromHighlight,
+                archived, archivedAt, ...originalStory
+            } = activeStory;
+            state.pendingStoryMedia = {
+                ...originalStory,
+                caption: activeStory.caption || '',
+                repostedStoryId: activeStory.id,
+                repostedFromHandle: activeStory.handle,
+                repostedFromUser: activeStory.user,
+                repostedFromAvatar: activeStory.avatar,
+                repostedSourcePostId: activeStory.sourcePostId || null,
+                repostedFromCaption: activeStory.caption || '',
+                repostFullCanvas: storyNeedsFullCanvasRepost(activeStory, activeStoryMedia, activeStoryCanvas),
+            };
+            state.activeStoryDraftId = null;
+            document.getElementById('story-caption').value = state.pendingStoryMedia.caption;
+            renderSelectedStory();
+            document.querySelector('.story-create-back').focus();
+        }
+        else if (storyOption.dataset.storyOption === "report") {
+            pauseStory();
+            openReportPanel(activeStory, 'story');
+        }
+        else if (storyOption.dataset.storyOption === "mute") {
+            const wasMuted = state.mutedStoryHandles.has(activeStory.handle);
+            if (wasMuted) state.mutedStoryHandles.delete(activeStory.handle);
+            else state.mutedStoryHandles.add(activeStory.handle);
+            persistPreferences();
+            closeStoryViewer();
+            renderStories();
+            showShareFeedback(wasMuted ? `Stories from ${activeStory.user} are unmuted.` : `Stories from ${activeStory.user} are muted. You can unmute them in Story and feed settings.`);
+        }
+        else if (storyOption.dataset.storyOption === "remove") {
             removeOwnStories();
         }
         else if (storyOption.dataset.storyOption === "schedule") {
@@ -111,6 +172,26 @@ export function handleStoryOwnerClick(event) {
 
 export function handleStoryClick(event) {
     if(handleStoryDraftManagement(event))return true;
+    const repostVisit = event.target.closest('.story-repost-visit, .story-reposted-card');
+    if (repostVisit) {
+        const story = state.activeStorySequence[state.activeStoryIndex];
+        if (!story?.repostedFromUser) return true;
+        const targetType = story.repostedSourcePostId ? 'post' : 'story';
+        const destination = targetType === 'post' ? `#post-${Number(story.repostedSourcePostId)}` : `#story-${encodeURIComponent(story.repostedStoryId || '')}`;
+        pauseStory();
+        showHomePanel('',
+            `<button type="button" class="primary-btn" data-reposted-open="${escapeHtml(destination)}">Visit original story</button>`,
+            { minimal: true });
+        return true;
+    }
+    const visitOriginal = event.target.closest('[data-reposted-open]');
+    if (visitOriginal) {
+        const destination = visitOriginal.dataset.repostedOpen;
+        closeHomePanel();
+        closeStoryViewer();
+        openMediaFromHash(destination);
+        return true;
+    }
     const openCamera = event.target.closest('.story-open-camera');
     if (openCamera) {
         if (!mayInteract()) return true;
@@ -298,6 +379,11 @@ export function handleStoryClick(event) {
         closeStoryViewer();
         return true;
     }
+    if (event.target.closest('.story-share-button')) {
+        const story = state.activeStorySequence[state.activeStoryIndex];
+        if (story) openShareDialog(story, 'story');
+        return true;
+    }
     if (event.target.closest('.story-nav') && Date.now() < (state.suppressStoryNavigationUntil || 0)) return true;
     if (event.target.closest('.story-like-button')) {
         if (!mayInteract()) { showShareFeedback('Approval is required to like a story.'); return true; }
@@ -308,13 +394,27 @@ export function handleStoryClick(event) {
         story.liked = !liked;
         const button = document.querySelector('.story-like-button');
         button.firstChild.textContent = story.liked ? '♥ ' : '♡ ';
-        button.querySelector('.story-like-count').textContent = story.likes.length ? String(story.likes.length) : '';
         button.setAttribute('aria-pressed', String(story.liked));
         return true;
     }
     if (event.target.closest('.story-viewers-button')) {
         const story = state.activeStorySequence[state.activeStoryIndex];
-        if (story.handle === currentUser.handle) { pauseStory(); showHomePanel('Story viewers and likes', `<h3>Viewers</h3>${(story.viewers || []).map(person => `<p>${escapeHtml(person.name || person.handle)}</p>`).join('') || '<p>No viewers yet.</p>'}<h3>Likes (${(story.likes || []).length})</h3>${(story.likes || []).map(person => `<p>${escapeHtml(person.name || person.handle)}</p>`).join('') || '<p>No likes yet.</p>'}`); }
+        if (story.handle === currentUser.handle) {
+            pauseStory();
+            const likes = Array.isArray(story.likes) ? story.likes : [];
+            const viewers = [...(Array.isArray(story.viewers) ? story.viewers : [])].sort((a, b) => {
+                const aLiked = likes.some(person => person.handle === a.handle);
+                const bLiked = likes.some(person => person.handle === b.handle);
+                return Number(bLiked) - Number(aLiked) || (b.viewedAt || 0) - (a.viewedAt || 0);
+            });
+            const list = viewers.map(person => {
+                const liked = likes.some(like => like.handle === person.handle);
+                const name = escapeHtml(person.name || person.handle || 'Viewer');
+                const avatar = person.avatar ? `<img src="${escapeHtml(person.avatar)}" alt="" />` : '';
+                return `<li class="story-viewer-row">${avatar}<span>${name}</span>${liked ? '<span class="story-viewer-liked" aria-label="Liked your story">♥</span>' : ''}</li>`;
+            }).join('');
+            showHomePanel(`${viewers.length} ${viewers.length === 1 ? 'view' : 'views'}`, `<ul class="story-viewers-list">${list || '<li>No viewers yet.</li>'}</ul>`);
+        }
         return true;
     }
     if (event.target.closest(".story-nav-previous")) {
@@ -329,6 +429,49 @@ export function handleStoryClick(event) {
 }
 
 export function registerStoryGestureEvents() {
+    const reactionButton = document.querySelector('.story-reaction-trigger');
+    const reactionPicker = document.querySelector('.story-reaction-picker');
+    reactionButton.addEventListener('click', event => {
+        event.stopPropagation();
+        reactionPicker.hidden = !reactionPicker.hidden;
+        const isOpen = !reactionPicker.hidden;
+        reactionButton.setAttribute('aria-expanded', String(isOpen));
+        if (isOpen) {
+            pauseStory();
+            reactionPicker.querySelector('button')?.focus();
+        } else {
+            reactionButton.focus();
+            resumeStory();
+        }
+    });
+    reactionPicker.addEventListener('click', event => {
+        const option = event.target.closest('[data-story-reaction]');
+        if (!option) return;
+        event.stopPropagation();
+        if (!mayInteract()) { showShareFeedback('Approval is required to react to a story.'); return; }
+        const story = state.activeStorySequence[state.activeStoryIndex];
+        if (!story || story.handle === currentUser.handle) return;
+        story.reactions = story.reactions || [];
+        const existingIndex = story.reactions.findIndex(person => person.handle === currentUser.handle);
+        const emoji = option.dataset.storyReaction;
+        const existing = existingIndex >= 0 ? story.reactions[existingIndex] : null;
+        if (existing) story.reactions[existingIndex] = { ...existing, emoji };
+        else story.reactions.push({handle:currentUser.handle,name:currentUser.name,avatar:currentUser.avatar,emoji});
+        let chat = conversations.find(item => item.handle === story.handle);
+        if (!chat) {
+            chat = { handle: story.handle, user: story.user, avatar: story.avatar, messages: [] };
+            conversations.push(chat);
+        }
+        appendChatMessage(chat, { from: 'me', type: 'text', text: `You reacted with ${emoji} to ${story.user}'s story.`, storyId: story.id, storyReaction: emoji });
+        persistSession().catch(() => showShareFeedback('The story reaction message could not be saved on this device.'));
+        reactionButton.firstChild.textContent = '☺';
+        reactionButton.setAttribute('aria-pressed', 'false');
+        reactionButton.setAttribute('aria-label', 'React to story');
+        reactionPicker.hidden = true;
+        reactionButton.setAttribute('aria-expanded', 'false');
+        reactionButton.focus();
+        resumeStory();
+    });
     document.querySelector('.story-reply-form').addEventListener('submit', event => {
         event.preventDefault();
         const story = state.activeStorySequence[state.activeStoryIndex];
@@ -452,7 +595,15 @@ function renderSelectedStory() {
     const story = state.pendingStoryMedia;
     setStoryCreationStep(Boolean(story));
     const container = document.querySelector('.story-selected-preview');
+    container.classList.toggle('story-reposted-preview', Boolean(story?.repostedFromUser));
+    container.classList.toggle('story-repost-full-canvas', Boolean(story?.repostFullCanvas));
     container.replaceChildren();
+    const repostFrame = story?.repostedFromUser ? document.createElement('div') : null;
+    if (repostFrame) {
+        repostFrame.className = `story-repost-drag-frame${story.repostFullCanvas ? ' story-repost-full-canvas-frame' : ''}`;
+        container.append(repostFrame);
+    }
+    const mediaFrame = repostFrame || container;
     if (story) {
         const media = document.createElement(story.type === 'video' ? 'video' : 'img');
         media.alt = 'Selected story';
@@ -474,6 +625,7 @@ function renderSelectedStory() {
         if (story.type === 'video') {
             media.controls = true; media.playsInline = true; media.preload = 'metadata';
             if (story.poster) media.poster = story.poster;
+            if (story.repostedFromUser && !story.repostFullCanvas) media.addEventListener('loadedmetadata', () => fitRepostMediaFrame(mediaFrame, media, .58), { once: true });
             const update = () => {
                 const button = document.querySelector('.story-preview-play');
                 button.textContent = media.paused ? '▶' : 'Ⅱ';
@@ -481,7 +633,10 @@ function renderSelectedStory() {
             };
             media.addEventListener('play', update); media.addEventListener('pause', update); media.addEventListener('ended', update);
         }
-        container.append(media);
+        else if (story.repostedFromUser && !story.repostFullCanvas) {
+            media.addEventListener('load', () => fitRepostMediaFrame(mediaFrame, media, .58), { once: true });
+        }
+        mediaFrame.append(media);
         media.src = story.media;
     }
     const playButton = document.querySelector('.story-preview-play');
@@ -489,6 +644,43 @@ function renderSelectedStory() {
     playButton.textContent = '▶';
     playButton.setAttribute('aria-label', 'Play video preview');
     prepareStoryTools();
+    if (story?.repostedFromUser && story.repostedFromHandle) {
+        const credit = createStoryRepostCredit(story);
+        repostFrame.append(credit);
+        if (story.repostPosition) {
+            repostFrame.style.setProperty('--repost-x', `${story.repostPosition.x}%`);
+            repostFrame.style.setProperty('--repost-y', `${story.repostPosition.y}%`);
+            repostFrame.classList.add('story-repost-positioned');
+        }
+        repostFrame.onpointerdown = event => {
+            if (event.button !== 0 || !event.isPrimary) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const card = event.currentTarget;
+            const bounds = card.parentElement.getBoundingClientRect();
+            const frameRect = card.getBoundingClientRect();
+            const offsetX = event.clientX - frameRect.left;
+            const offsetY = event.clientY - frameRect.top;
+            card.setPointerCapture(event.pointerId);
+            card.onpointermove = move => {
+                move.stopPropagation();
+                if (!card.hasPointerCapture(move.pointerId)) return;
+                const x = Math.max(frameRect.width / 2, Math.min(bounds.width - frameRect.width / 2, move.clientX - bounds.left - offsetX + frameRect.width / 2));
+                const y = Math.max(frameRect.height / 2, Math.min(bounds.height - frameRect.height / 2, move.clientY - bounds.top - offsetY + frameRect.height / 2));
+                const position = { x: x / bounds.width * 100, y: y / bounds.height * 100 };
+                card.style.setProperty('--repost-x', `${position.x}%`);
+                card.style.setProperty('--repost-y', `${position.y}%`);
+                card.classList.add('story-repost-positioned', 'story-repost-dragging');
+                state.pendingStoryMedia.repostPosition = position;
+            };
+            card.onpointerup = card.onpointercancel = move => {
+                move.stopPropagation();
+                if (card.hasPointerCapture(move.pointerId)) card.releasePointerCapture(move.pointerId);
+                card.onpointermove = card.onpointerup = card.onpointercancel = null;
+                card.classList.remove('story-repost-dragging');
+            };
+        };
+    }
     document.querySelector('.story-publish-selected').disabled = !story;
     document.querySelector('.story-save-draft').disabled = !story;
 }

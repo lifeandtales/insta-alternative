@@ -51,7 +51,7 @@ import { handleSharingClick } from './src/features/sharing.events.js';
 import { loadPreferences, persistPreferences } from './src/storage/preferences.js';
 import { registerDeletionLock, syncDeletionLock } from './src/core/account-lock.js';
 import { openMediaFromHash } from './src/core/media-links.js';
-import { registerNotificationEvents } from './src/features/notifications.js';
+import { registerNotificationEvents, updateNotificationBadge } from './src/features/notifications.js';
 import { opensDirectlyToHome } from './src/core/local-preview.js';
 import { registerStoryToolEvents } from './src/features/story-tools.js';
 import { registerStoryOptionEvents } from './src/features/story-options.js';
@@ -137,6 +137,16 @@ document.addEventListener('click', event => {
         document.getElementById('welcome-title').focus?.();
     }
 });
+document.addEventListener('beforeinput', event => {
+    const input = event.target;
+    if (!input.matches('.welcome-password-wrap input') || !input.closest('[data-entry-form]')) return;
+    if (/\s/.test(event.data || '')) event.preventDefault();
+});
+document.addEventListener('paste', event => {
+    const input = event.target;
+    if (!input.matches('.welcome-password-wrap input') || !input.closest('[data-entry-form]')) return;
+    if (/\s/.test(event.clipboardData?.getData('text') || '')) event.preventDefault();
+});
 document.addEventListener('change', event => {
     if (event.target.id !== 'signup-verification-file') return;
     const input = event.target;
@@ -161,16 +171,6 @@ document.addEventListener('change', event => {
     const filename = (file.name.split(/[\\/]/).pop() || 'Selected file').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f]/g, '').slice(0, 100);
     details.textContent = `${filename || 'Selected file'} · ${(file.size / (1024 * 1024)).toFixed(1)} MB`;
     selection.hidden = false;
-});
-document.addEventListener('beforeinput', event => {
-    const input = event.target;
-    if (!input.matches('.welcome-password-wrap input') || !input.closest('[data-entry-form]')) return;
-    if (/\s/.test(event.data || '')) event.preventDefault();
-});
-document.addEventListener('paste', event => {
-    const input = event.target;
-    if (!input.matches('.welcome-password-wrap input') || !input.closest('[data-entry-form]')) return;
-    if (/\s/.test(event.clipboardData?.getData('text') || '')) event.preventDefault();
 });
 document.addEventListener('submit', event => {
     const form = event.target.closest('[data-entry-form]');
@@ -285,7 +285,7 @@ if (document.documentElement.classList.contains("mobile-splash-pending")) {
 }
 setView("home");
 if (opensDirectlyToHome(window.location.href)) enterLocalDemo('', false);
-loadSession().then(() => { setView(state.currentView); openMediaFromHash(); }).catch(() => {
+loadSession().then(() => { setView(state.currentView); openMediaFromHash(); updateNotificationBadge(); }).catch(() => {
     showShareFeedback('Local content storage is unavailable. New work may not survive closing this page.');
 });
 window.addEventListener?.('hashchange', () => openMediaFromHash());

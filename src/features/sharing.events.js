@@ -37,7 +37,7 @@ export function handleSharingClick(event) {
         }
         else if (state.activeSharePost && names.length) {
             const sent = sendSharedPost();
-            showShareFeedback(`${sent} chat preview${sent === 1 ? "" : "s"} added on this device.`);
+            showShareFeedback(`${sent} ${state.activeShareType === 'story' ? 'story share' : 'chat preview'}${sent === 1 ? "" : "s"} added on this device.`);
         }
         closeShareDialog();
     }

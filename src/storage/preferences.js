@@ -7,7 +7,7 @@ const setFields = ['hiddenPostKeys', 'mutedPostHandles', 'mutedStoryHandles', 'b
     'closeFriendHandles', 'followedAccountHandles', 'seenStoryIds'];
 const scalarFields = ['accountDirectory', 'followRequests', 'incomingFollowRequests', 'groupJoinMode',
     'viewerAgeBand', 'verificationStatus', 'contentAudience', 'audienceReview', 'usernameChanges',
-    'reservedUsernames', 'deletionRequestedAt', 'verificationResubmittedAt'];
+    'reservedUsernames', 'deletionRequestedAt', 'verificationResubmittedAt', 'localStoryNotifications'];
 
 export function loadPreferences() {
     initializeSocialState();

@@ -27,6 +27,7 @@ import {
     closeStoryCreator,
     closeStorySettings,
     closeStoryViewer,
+    resumeStory,
     showStoryAtIndex,
 } from '../features/stories.js';
 import { closeVideoFullscreen, handleVideoTap } from '../media/video.js';
@@ -101,6 +102,15 @@ export function registerKeyboardEvents() {
             closeStoryCreator();
         if (event.key === "Escape" && !document.querySelector(".story-settings-backdrop").hidden)
             closeStorySettings();
+        if (event.key === "Escape" && !document.querySelector(".story-reaction-picker").hidden) {
+            const picker = document.querySelector(".story-reaction-picker");
+            const button = document.querySelector(".story-reaction-trigger");
+            picker.hidden = true;
+            button.setAttribute("aria-expanded", "false");
+            button.focus();
+            resumeStory();
+            return;
+        }
         if (event.key === "Escape" && !document.querySelector(".story-viewer-backdrop").hidden)
             closeStoryViewer();
         if (event.key === "ArrowRight" && !document.querySelector(".story-viewer-backdrop").hidden)
