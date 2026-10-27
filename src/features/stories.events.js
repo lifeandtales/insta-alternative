@@ -647,39 +647,88 @@ function renderSelectedStory() {
     if (story?.repostedFromUser && story.repostedFromHandle) {
         const credit = createStoryRepostCredit(story);
         repostFrame.append(credit);
+        repostFrame.style.setProperty('--repost-scale', String(story.repostScale || 1));
         if (story.repostPosition) {
             repostFrame.style.setProperty('--repost-x', `${story.repostPosition.x}%`);
             repostFrame.style.setProperty('--repost-y', `${story.repostPosition.y}%`);
             repostFrame.classList.add('story-repost-positioned');
         }
+        const pointers = new Map();
+        let gesture = null;
+        const midpoint = () => {
+            const [a, b] = [...pointers.values()];
+            return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, distance: Math.hypot(b.x - a.x, b.y - a.y) };
+        };
+        const setRepostPose = (centerX, centerY, scale, bounds) => {
+            if (state.pendingStoryMedia !== story) return;
+            const maxScale = Math.max(.45, Math.min(1.8, (bounds.width - 20) / repostFrame.offsetWidth, (bounds.height - 20) / repostFrame.offsetHeight));
+            scale = Math.max(.45, Math.min(maxScale, scale));
+            const visualWidth = repostFrame.offsetWidth * scale;
+            const visualHeight = repostFrame.offsetHeight * scale;
+            const x = Math.max(visualWidth / 2, Math.min(bounds.width - visualWidth / 2, centerX - bounds.left));
+            const y = Math.max(visualHeight / 2, Math.min(bounds.height - visualHeight / 2, centerY - bounds.top));
+            story.repostScale = scale;
+            story.repostPosition = { x: x / bounds.width * 100, y: y / bounds.height * 100 };
+            repostFrame.style.setProperty('--repost-scale', String(scale));
+            repostFrame.style.setProperty('--repost-x', `${story.repostPosition.x}%`);
+            repostFrame.style.setProperty('--repost-y', `${story.repostPosition.y}%`);
+            repostFrame.classList.add('story-repost-positioned');
+        };
+        const beginGesture = () => {
+            const bounds = repostFrame.parentElement.getBoundingClientRect();
+            const frameRect = repostFrame.getBoundingClientRect();
+            const center = { x: frameRect.left + frameRect.width / 2, y: frameRect.top + frameRect.height / 2 };
+            const scale = story.repostScale || 1;
+            if (pointers.size === 1) {
+                const [pointerId, point] = [...pointers.entries()][0];
+                gesture = { mode: 'drag', bounds, center, scale, pointerId, start: point };
+            } else if (pointers.size === 2) {
+                gesture = { mode: 'pinch', bounds, center, scale, start: midpoint() };
+            }
+        };
         repostFrame.onpointerdown = event => {
-            if (event.button !== 0 || !event.isPrimary) return;
+            if (event.pointerType === 'mouse' && event.button !== 0) return;
             event.preventDefault();
             event.stopPropagation();
-            const card = event.currentTarget;
-            const bounds = card.parentElement.getBoundingClientRect();
-            const frameRect = card.getBoundingClientRect();
-            const offsetX = event.clientX - frameRect.left;
-            const offsetY = event.clientY - frameRect.top;
-            card.setPointerCapture(event.pointerId);
-            card.onpointermove = move => {
-                move.stopPropagation();
-                if (!card.hasPointerCapture(move.pointerId)) return;
-                const x = Math.max(frameRect.width / 2, Math.min(bounds.width - frameRect.width / 2, move.clientX - bounds.left - offsetX + frameRect.width / 2));
-                const y = Math.max(frameRect.height / 2, Math.min(bounds.height - frameRect.height / 2, move.clientY - bounds.top - offsetY + frameRect.height / 2));
-                const position = { x: x / bounds.width * 100, y: y / bounds.height * 100 };
-                card.style.setProperty('--repost-x', `${position.x}%`);
-                card.style.setProperty('--repost-y', `${position.y}%`);
-                card.classList.add('story-repost-positioned', 'story-repost-dragging');
-                state.pendingStoryMedia.repostPosition = position;
-            };
-            card.onpointerup = card.onpointercancel = move => {
-                move.stopPropagation();
-                if (card.hasPointerCapture(move.pointerId)) card.releasePointerCapture(move.pointerId);
-                card.onpointermove = card.onpointerup = card.onpointercancel = null;
-                card.classList.remove('story-repost-dragging');
-            };
+            repostFrame.setPointerCapture(event.pointerId);
+            pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+            beginGesture();
+            repostFrame.classList.add('story-repost-dragging');
         };
+        repostFrame.onpointermove = event => {
+            if (!pointers.has(event.pointerId) || !gesture || state.pendingStoryMedia !== story) return;
+            event.preventDefault();
+            event.stopPropagation();
+            pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+            if (pointers.size === 2 && gesture.mode === 'pinch') {
+                const now = midpoint();
+                setRepostPose(
+                    gesture.center.x + now.x - gesture.start.x,
+                    gesture.center.y + now.y - gesture.start.y,
+                    gesture.scale * now.distance / Math.max(1, gesture.start.distance),
+                    gesture.bounds
+                );
+            } else if (pointers.size === 1 && gesture.mode === 'drag') {
+                setRepostPose(
+                    gesture.center.x + event.clientX - gesture.start.x,
+                    gesture.center.y + event.clientY - gesture.start.y,
+                    gesture.scale,
+                    gesture.bounds
+                );
+            }
+        };
+        const finishPointer = event => {
+            if (!pointers.has(event.pointerId)) return;
+            event.stopPropagation();
+            pointers.delete(event.pointerId);
+            if (pointers.size === 1) beginGesture();
+            else if (!pointers.size) {
+                gesture = null;
+                repostFrame.classList.remove('story-repost-dragging');
+            }
+        };
+        repostFrame.onpointerup = finishPointer;
+        repostFrame.onpointercancel = finishPointer;
     }
     document.querySelector('.story-publish-selected').disabled = !story;
     document.querySelector('.story-save-draft').disabled = !story;

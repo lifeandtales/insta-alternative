@@ -396,7 +396,6 @@ export function showStoryAtIndex(index) {
     const stage = viewer.querySelector(".story-viewer-stage");
     const isRepost = Boolean(story.repostedFromUser && story.repostedFromHandle);
     stage.classList.toggle('story-reposted-stage', isRepost);
-    viewer.classList.toggle('story-viewer-reposted', isRepost);
     document.body.classList.toggle('story-repost-open', isRepost);
     stage.querySelectorAll('audio, video').forEach(media=>media.pause());
     const storySoundButton = viewer.querySelector(".story-sound-toggle");
@@ -444,6 +443,7 @@ export function showStoryAtIndex(index) {
             compositionStage.style.setProperty('--repost-x', `${story.repostPosition.x}%`);
             compositionStage.style.setProperty('--repost-y', `${story.repostPosition.y}%`);
         }
+        compositionStage.style.setProperty('--repost-scale', String(story.repostScale || 1));
         compositionStage.tabIndex = 0;
         compositionStage.setAttribute('role', 'button');
         compositionStage.setAttribute('aria-label', `Shared Story by ${story.repostedFromUser}. Open the original.`);
@@ -527,7 +527,6 @@ export function closeStoryViewer() {
     document.querySelector(".story-viewer-stage").replaceChildren();
     document.body.classList.remove("story-overlay-open");
     document.body.classList.remove("story-repost-open");
-    document.querySelector('.story-viewer').classList.remove('story-viewer-reposted');
     document.querySelector('.story-viewer-stage').classList.remove('story-reposted-stage');
     state.activeStorySequence = [];
     state.activeStoryGroups = [];
