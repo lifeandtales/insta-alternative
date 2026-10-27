@@ -75,7 +75,7 @@ export function handleMessageClick(event) {
         if (mentionAction.dataset.storyMentionRepost) {
             if (message.recipient === currentUser.handle && message.from !== 'me') openStoryRepostEditor(story);
         } else {
-            openStoryGroup(story.handle);
+            openStoryGroup(story.handle, { allowUnfollowed: true });
             const index = state.activeStorySequence.findIndex(item => item.id === storyId);
             if (index >= 0) showStoryAtIndex(index);
         }

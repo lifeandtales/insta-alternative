@@ -280,3 +280,12 @@
 
 
 .reel-demo-credit { display: block; margin-top: 8px; font-size: .65rem; opacity: .8; line-height: 1.35; }
+.hashtag-page-header { margin-bottom: 24px; }
+.hashtag-page-header h2 { margin: 12px 0 6px; overflow-wrap: anywhere; }
+.hashtag-results-page > section { margin-bottom: 24px; }
+.hashtag-results-page h3 { margin: 0 0 12px; }
+.hashtag-story-list { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 12px; }
+.hashtag-story-tile { flex: 0 0 110px; display: grid; gap: 8px; padding: 0; background: transparent; color: var(--text); text-align: left; }
+.hashtag-story-tile img { width: 110px; height: 154px; object-fit: cover; border-radius: 12px; }
+.hashtag-story-tile span { font-size: .8rem; font-weight: 600; }
+.hashtag-empty { padding: 16px 0; color: var(--muted); }

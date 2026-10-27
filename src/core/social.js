@@ -99,8 +99,17 @@ export function mediaNeedsWarning(item) {
     return Boolean(item.sensitive || item.audience === 'adult' || getAccount(item.handle)?.contentAudience === 'adult');
 }
 
-export function canViewStory(story, viewerHandle = currentUser.handle) {
+export function canViewStory(story, viewerHandle = currentUser.handle, visited = new Set()) {
     if (!canViewMedia(story, viewerHandle)) return false;
+    if (story.repostedFromHandle && !canViewAccount(story.repostedFromHandle, viewerHandle)) return false;
+    if (story.repostedStoryId) {
+        if (visited.has(story.id)) return false;
+        const source = state.stories.find(item => item.id === story.repostedStoryId);
+        if (source) {
+            const chain = new Set(visited); chain.add(story.id);
+            if (!canViewStory(source, viewerHandle, chain)) return false;
+        }
+    }
     if (story.sourcePostId) {
         const source = [...posts, ...reels].find(item => item.id === story.sourcePostId);
         if (!source || !canViewMedia(source, viewerHandle)) return false;

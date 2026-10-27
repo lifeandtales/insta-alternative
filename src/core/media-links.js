@@ -17,7 +17,7 @@ export function openMediaFromHash(hash = window.location.hash) {
             showShareFeedback('This story is unavailable or you do not have access.');
             return false;
         }
-        openStoryGroup(story.handle);
+        openStoryGroup(story.handle, { allowUnfollowed: true });
         const storyIndex = state.activeStorySequence.findIndex(item => item.id === storyId);
         if (storyIndex >= 0) showStoryAtIndex(storyIndex);
         return storyIndex >= 0;

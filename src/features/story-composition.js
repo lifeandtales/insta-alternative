@@ -139,10 +139,15 @@ function renderLayer(layer, editing) {
     node.style.letterSpacing=`${font.spacing}em`;node.style.textTransform=font.transform;
     if(layer.type==='sticker'){node.style.backgroundColor=layer.background||'#9277eb';node.style.color=layer.color||'#ffffff';}
     const text=String(layer.text||'');
-    if(layer.type==='text' && !editing){
+    if((layer.type==='text' || layer.type==='hashtag') && !editing){
         let offset=0;
-        for(const match of text.matchAll(/@[a-zA-Z0-9._]+/g)){
+        for(const match of text.matchAll(/@[a-zA-Z0-9._]+|#[\p{L}\p{N}_]+/gu)){
             node.append(document.createTextNode(text.slice(offset,match.index)));
+            if (match[0].startsWith('#')) {
+                const button=document.createElement('button');button.type='button';button.dataset.storyHashtag=match[0].slice(1);button.className='story-text-hashtag';button.textContent=match[0];node.append(button);
+                offset=match.index+match[0].length;
+                continue;
+            }
             const ref=(layer.mentions||[]).find(item=>item.handle.toLowerCase()===match[0].toLowerCase());
             const account=ref && state.accountDirectory.find(item=>item.id===ref.id || item.handle.toLowerCase()===ref.handle.toLowerCase());
             if(account && !state.blockedHandles.has(account.handle)){

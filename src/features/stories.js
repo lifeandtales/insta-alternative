@@ -21,7 +21,7 @@ window.addEventListener('popstate', () => {
         closeStoryViewer({ fromHistory: true });
 });
 
-export function getStoryGroups({ includeMuted = false } = {}) {
+export function getStoryGroups({ includeMuted = false, includeHandle = null } = {}) {
     const groupedStories = new Map();
     state.stories.forEach((story) => {
         if (!Number.isFinite(story.expiresAt)) {
@@ -35,7 +35,7 @@ export function getStoryGroups({ includeMuted = false } = {}) {
         if (!canViewStory(story) || (muted && !includeMuted)) return;
         if (story.expiresAt <= Date.now())
             return;
-        if (!story.mine && story.handle !== currentUser.handle && !isFollowing(story.handle))
+        if (!story.mine && story.handle !== currentUser.handle && story.handle !== includeHandle && !isFollowing(story.handle))
             return;
         const group = groupedStories.get(story.handle) || { handle: story.handle, user: story.user, avatar: story.avatar, stories: [], muted };
         group.stories.push(story);
@@ -338,13 +338,13 @@ export function createStoryRepostCredit(story) {
     return credit;
 }
 
-export function openStoryGroup(handle) {
+export function openStoryGroup(handle, { allowUnfollowed = false } = {}) {
     state.activeStoryHighlightId = null;
     if (handle === currentUser.handle && !getStoryGroups().some(group => group.handle === handle)) {
         openStoryCreator();
         return;
     }
-    const allGroups = getStoryGroups({ includeMuted: true });
+    const allGroups = getStoryGroups({ includeMuted: true, includeHandle: allowUnfollowed ? handle : null });
     const targetGroup = allGroups.find(item => item.handle === handle);
     const targetIsOwn = targetGroup?.handle === currentUser.handle;
     state.activeStoryGroups = allGroups.filter(item =>

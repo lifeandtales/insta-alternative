@@ -154,7 +154,7 @@ export function registerNotificationEvents() {
             updateNotificationBadge();
             const story = state.stories.find(item => item.id === storyId);
             if (!story || !canViewStory(story) || story.expiresAt <= Date.now()) { showShareFeedback('This Story is no longer available.'); return; }
-            openStoryGroup(story.handle);
+            openStoryGroup(story.handle, { allowUnfollowed: true });
             const index = state.activeStorySequence.findIndex(item => item.id === storyId);
             if (index >= 0) showStoryAtIndex(index);
             return;

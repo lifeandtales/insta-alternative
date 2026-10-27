@@ -319,7 +319,7 @@ export const initialStories = [
         durationMs: 30000,
         edits: {
             layers: [{
-                id: "ari-mention-mila-demo", type: "text", text: currentUser.handle,
+                id: "ari-mention-mila-demo", type: "text", text: `${currentUser.handle}\n#idea`,
                 mentions: [{ handle: currentUser.handle }],
                 x: .5, y: .76, size: 7, width: .8, rotation: 0, font: "sans", color: "#ffffff"
             }]

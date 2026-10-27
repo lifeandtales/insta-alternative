@@ -4,9 +4,19 @@ import { setView } from '../core/navigation.js';
 import { state } from '../core/state.js';
 import { handleExploreSearchInput, renderExplore, renderExploreSearchResults } from './explore.js';
 import { persistJoinedCommunities } from '../storage/browser-storage.js';
-import { mayInteract } from '../core/social.js';
+import { mayInteract, canViewStory } from '../core/social.js';
+import { openStoryGroup, showStoryAtIndex } from './stories.js';
 
 export function handleExploreClick(event) {
+    const hashtagStory = event.target.closest('[data-hashtag-story]');
+    if (hashtagStory) {
+        const story = state.stories.find(item => item.id === hashtagStory.dataset.hashtagStory);
+        if (!story || !canViewStory(story) || (story.expiresAt && story.expiresAt <= Date.now())) { showShareFeedback('This Story is no longer available.'); return true; }
+        openStoryGroup(story.handle, { allowUnfollowed: true });
+        const index = state.activeStorySequence.findIndex(item => item.id === story.id);
+        if (index >= 0) showStoryAtIndex(index);
+        return true;
+    }
     const searchCategory = event.target.closest("[data-search-kind]");
     if (searchCategory) {
         if (searchCategory.dataset.searchKind === "community") {

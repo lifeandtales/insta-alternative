@@ -186,6 +186,25 @@ export function handleStoryOwnerClick(event) {
 
 export function handleStoryClick(event) {
     if(handleStoryDraftManagement(event))return true;
+    const hashtag = event.target.closest('[data-story-hashtag]');
+    if (hashtag) {
+        const tag = hashtag.dataset.storyHashtag;
+        if (!/^[\p{L}\p{N}_]+$/u.test(tag)) return true;
+        pauseStory();
+        showHomePanel(`View #${tag}`, `<button type="button" data-story-hashtag-open="${escapeHtml(tag)}">View #${escapeHtml(tag)}</button>`, { minimal: true, anchor: hashtag });
+        return true;
+    }
+    const openHashtag = event.target.closest('[data-story-hashtag-open]');
+    if (openHashtag) {
+        const tag = openHashtag.dataset.storyHashtagOpen;
+        if (!/^[\p{L}\p{N}_]+$/u.test(tag)) return true;
+        closeHomePanel();
+        closeStoryViewer({ fromHistory: true });
+        state.activeCommunityId = null;
+        state.activeExploreFilter = { type: 'hashtag', value: tag };
+        setView('explore');
+        return true;
+    }
     const mention = event.target.closest('[data-story-mention-handle]');
     if (mention) {
         const handle = mention.dataset.storyMentionHandle;
