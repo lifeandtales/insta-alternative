@@ -54,6 +54,7 @@ export const state = {
     storyLifetimeMs: 24 * 60 * 60 * 1000,
     activeStorySequence: [],
     activeStoryGroups: [],
+    activeStoryHashtag: null,
     activeStoryGroupIndex: -1,
     activeStoryIndex: -1,
     storyDurationMs: 0,

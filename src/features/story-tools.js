@@ -1,3 +1,4 @@
+import { storyEmojiCatalog } from '../data/story-emojis.js';
 import { storyFilterPresets, storyAdjustments, adjustmentFromSlider, adjustmentToSlider, createStoryEditSession } from './story-edit-session.js';
 import { state } from '../core/state.js';
 import { mayInteract } from '../core/social.js';
@@ -11,6 +12,7 @@ export const storyColorSwatches=[
     ['Black','#000000'],['Charcoal','#262626'],['Dark gray','#4a4a4a'],['Gray','#6b7280'],['Slate gray','#9ca3af'],['Medium gray','#c5c5c5'],['Light gray','#e5e5e5'],['Pale gray','#f5f5f5'],['White','#ffffff'],
     ['Light red','#ff8a80'],['Red','#f44336'],['Dark red','#b71c1c'],['Light orange','#ffcc80'],['Orange','#ff9800'],['Dark orange','#e65100'],['Light yellow','#fff59d'],['Yellow','#ffeb3b'],['Dark yellow','#f9a825'],['Light green','#a5d6a7'],['Green','#4caf50'],['Dark green','#1b5e20'],['Light blue','#90caf9'],['Blue','#2196f3'],['Dark blue','#0d47a1'],['Light indigo','#9fa8da'],['Indigo','#3f51b5'],['Dark indigo','#1a237e'],['Light violet','#ce93d8'],['Violet','#9c27b0'],['Dark violet','#4a148c']
 ].map(([name,color])=>({name,color}));
+let stickerQueries={emojis:'',stickers:'',gifs:''};
 const storyEmojiChoices=['🙂','😂','😍','🥳','❤️','✨','🔥','🌈','🌸','☀️','🎉','💯','👏','🙌','🦋','🌿','⭐','💫','🎂','☕','📍','✈️','🏖️','🎵'];
 const storyStickerChoices=[
     {id:'good-vibes',text:'GOOD VIBES',background:'#ef72b0',color:'#ffffff'},
@@ -131,12 +133,26 @@ function closeStickerPicker(){
     document.querySelector('.story-tool-options').replaceChildren();
     document.querySelector('[data-story-tool="sticker"]').focus();
 }
+export function searchStoryEmojis(query){
+    const terms=query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if(!terms.length)return storyEmojiChoices.map(emoji=>[emoji,storyEmojiCatalog.find(item=>item[0]===emoji)?.[1]||emoji]);
+    return storyEmojiCatalog.filter(([emoji,name])=>terms.every(term=>emoji.includes(term)||name.toLowerCase().includes(term)));
+}
+function stickerResults(section){
+    const query=stickerQueries[section];
+    if(section==='gifs')return '<p class="story-sticker-empty" role="status">GIF search will be available when the catalog is connected.</p>';
+    if(section==='stickers'){
+        const matches=storyStickerChoices.filter(item=>item.text.toLowerCase().includes(query.trim().toLowerCase()));
+        return matches.length?`<div class="story-static-sticker-grid">${matches.map(item=>`<button type="button" data-story-sticker-label="${item.id}" style="background:${item.background};color:${item.color}">${item.text}</button>`).join('')}</div>`:'<p role="status">No stickers found. Try another search.</p>';
+    }
+    const matches=searchStoryEmojis(query);
+    return matches.length?`<div class="story-sticker-picker">${matches.map(([emoji,name])=>`<button type="button" data-story-sticker="${emoji}" aria-label="Add ${escapeHtml(name)}" title="${escapeHtml(name)}">${emoji}</button>`).join('')}</div>`:'<p role="status">No emojis found. Try another search.</p>';
+}
 function renderStickerPicker(section='emojis'){
+    if(!stickerView)stickerQueries={emojis:'',stickers:'',gifs:''};
     stickerView=section;
-    const content=section==='gifs'?'<div class="story-sticker-empty" aria-hidden="true"></div>'
-        :section==='stickers'?`<div class="story-static-sticker-grid">${storyStickerChoices.map(item=>`<button type="button" data-story-sticker-label="${item.id}" style="background:${item.background};color:${item.color}">${item.text}</button>`).join('')}</div>`
-        :`<div class="story-sticker-picker">${storyEmojiChoices.map(emoji=>`<button type="button" data-story-sticker="${emoji}" aria-label="Add ${emoji}">${emoji}</button>`).join('')}</div>`;
-    const options=document.querySelector('.story-tool-options');options.innerHTML=`<div class="story-sticker-section-tabs" role="tablist" aria-label="Story stickers, emojis and GIFs">${[['stickers','Stickers'],['emojis','Emojis'],['gifs','GIFs']].map(([key,label])=>`<button type="button" id="story-sticker-tab-${key}" role="tab" data-story-sticker-section="${key}" aria-controls="story-sticker-panel" aria-selected="${section===key}" aria-pressed="${section===key}" tabindex="${section===key?0:-1}">${label}</button>`).join('')}</div><div class="story-sticker-section" id="story-sticker-panel" role="tabpanel" aria-labelledby="story-sticker-tab-${section}">${content}</div>`;
+    const label={emojis:'Search emojis',stickers:'Search stickers',gifs:'Search GIFs'}[section];
+    const options=document.querySelector('.story-tool-options');options.innerHTML=`<div class="story-sticker-section-tabs" role="tablist" aria-label="Story stickers, emojis and GIFs">${[['stickers','Stickers'],['emojis','Emojis'],['gifs','GIFs']].map(([key,label])=>`<button type="button" id="story-sticker-tab-${key}" role="tab" data-story-sticker-section="${key}" aria-controls="story-sticker-panel" aria-selected="${section===key}" aria-pressed="${section===key}" tabindex="${section===key?0:-1}">${label}</button>`).join('')}</div><input class="story-sticker-search" type="search" data-story-sticker-search="${section}" aria-label="${label}" placeholder="${label}" value="${escapeHtml(stickerQueries[section])}" autocomplete="off"><div class="story-sticker-section" id="story-sticker-panel" role="tabpanel" aria-labelledby="story-sticker-tab-${section}">${stickerResults(section)}</div>`;
 }
 function resetStoryMode(){
     toolSession=null;drawMode=null;moveMode=false;textDraft=null;
@@ -407,6 +423,7 @@ export function registerStoryToolEvents(){
     });
     document.addEventListener('submit',event=>{if(!event.target.matches('.story-tool-form'))return;event.preventDefault();if(['text','location'].includes(toolSession?.kind)&&event.target.matches('.story-inline-form,.story-location-inline-form'))return;if(pending()&&mayInteract())applyTool(event.target);});
     document.addEventListener('input',event=>{
+        const search=event.target.closest('[data-story-sticker-search]');if(search&&stickerView){stickerQueries[stickerView]=search.value;document.getElementById('story-sticker-panel').innerHTML=stickerResults(stickerView);return;}
         const adjust=event.target.closest('[data-story-adjustment]');if(adjust){updateStoryAdjustment(adjust.dataset.storyAdjustment,adjust.value);document.querySelector('[data-story-adjust-value]').textContent=`${adjust.value}%`;return;}
         if(event.target.closest('[data-story-draw-width]')&&drawMode){const percent=clamp(Number(event.target.value),0,100);drawMode.width=storyDrawingWidthFromPercent(percent);event.target.setAttribute('aria-valuetext',`${Math.round(percent)}%`);const output=document.querySelector('[data-story-draw-size]');if(output)output.textContent=`${Math.round(percent)}%`;return;}
         const form=event.target.closest('.story-tool-form');if(form?.matches('.story-inline-form'))syncInlineTextStyle();if(!form || form.dataset.tool!=='text' || event.target.name!=='text')return;

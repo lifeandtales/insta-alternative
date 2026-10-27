@@ -5,8 +5,8 @@ import { escapeHtml, formatCount, newestFirst, normalizeSearchText } from '../co
 import { communities, conversations, currentUser, demoViewCounts, posts, reels } from '../data/sample-data.js';
 import { isFollowed } from './follows.js';
 import { observePostVideos } from '../media/video.js';
-import { visibleAvatar, canViewMedia, canViewStory, mediaNeedsWarning } from '../core/social.js';
-import { extractHashtags, hashtagKey, storyHashtags } from '../core/hashtags.js';
+import { visibleAvatar, canViewMedia, mediaNeedsWarning } from '../core/social.js';
+import { extractHashtags, hashtagKey, getPublicHashtagStories, isPublicHashtagItem } from '../core/hashtags.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -116,10 +116,10 @@ export function getHashtagResults(tag, now = Date.now()) {
     const key = hashtagKey(tag);
     if (!key || !/^[\p{L}\p{N}_]+$/u.test(key)) return { posts: [], stories: [] };
     const matches = tags => tags.some(value => hashtagKey(value) === key);
-    const matchingPosts = posts.filter(post => !post.reel && canViewMedia(post) && matches(extractHashtags(post.caption)));
-    const matchingStories = state.stories.filter(story => !story.fromHighlight && (!story.expiresAt || story.expiresAt > now) && canViewStory(story) && matches(storyHashtags(story)));
-    return { posts: newestFirst(matchingPosts), stories: newestFirst([...new Map(matchingStories.map(story => [story.id, story])).values()]) };
+    const matchingPosts = posts.filter(post => !post.reel && isPublicHashtagItem(post) && canViewMedia(post) && matches(extractHashtags(post.caption)));
+    return { posts: newestFirst(matchingPosts), stories: getPublicHashtagStories(tag, now) };
 }
+
 
 function renderHashtagPage(tag) {
     const results = getHashtagResults(tag);
@@ -130,7 +130,7 @@ function renderHashtagPage(tag) {
     viewHeading.hidden = true;
     exploreCommunityView.innerHTML = `
       <header class="hashtag-page-header"><button type="button" class="community-back" data-community-back>← Explore</button><h2>#${escapeHtml(tag)}</h2><p>${results.posts.length} ${results.posts.length === 1 ? 'post' : 'posts'} · ${results.stories.length} ${results.stories.length === 1 ? 'Story' : 'Stories'}</p></header>
-      <section aria-label="Stories with this hashtag"><h3>Stories</h3>${results.stories.length ? `<div class="hashtag-story-list">${results.stories.map(story => `<button type="button" class="hashtag-story-tile" data-hashtag-story="${escapeHtml(story.id)}" aria-label="View ${escapeHtml(story.user)}'s Story"><img src="${escapeHtml(story.type === 'video' ? story.poster || story.avatar : story.media)}" alt="" /><span>${escapeHtml(story.user)}</span></button>`).join('')}</div>` : '<p class="hashtag-empty">No active Stories with this hashtag yet.</p>'}</section>
+      <section aria-label="Stories with this hashtag"><h3>Stories</h3><button type="button" class="hashtag-story-entry" data-hashtag-stories="${escapeHtml(tag)}" aria-label="Watch #${escapeHtml(tag)} Stories" ${results.stories.length ? '' : 'disabled'}><span class="hashtag-story-ring ${results.stories.length && results.stories.every(story => state.seenStoryIds.has(story.id)) ? 'seen' : ''}"><span>#${escapeHtml(tag)}</span></span><span>${results.stories.length} ${results.stories.length === 1 ? 'Story' : 'Stories'}</span></button>${results.stories.length ? '' : '<p class="hashtag-empty">No active public Stories with this hashtag yet.</p>'}</section>
       <section aria-label="Posts with this hashtag"><h3>Posts</h3>${results.posts.length ? `<div class="media-grid hashtag-post-grid">${results.posts.map(renderExploreTile).join('')}</div>` : '<p class="hashtag-empty">No posts with this hashtag yet.</p>'}</section>`;
     observePostVideos(exploreCommunityView);
 }

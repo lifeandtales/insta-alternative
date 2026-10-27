@@ -40,8 +40,8 @@ test('hashtag results match exact tags across posts and active Stories while enf
     assert.deepEqual(Array.from(results.stories, item => item.id), ['visible']);
     state.followedAccountHandles.add('@private_tag');
     results = getHashtagResults('idea', now);
-    assert.ok(results.posts.some(item => item.id === 9003));
-    assert.ok(results.stories.some(item => item.id === 'private'));
+    assert.ok(!results.posts.some(item => item.id === 9003), 'following a private account does not make its content public');
+    assert.ok(!results.stories.some(item => item.id === 'private'));
     state.blockedHandles.add('@private_tag');
     assert.deepEqual(Array.from(getHashtagResults('idea', now).stories, item => item.id), ['visible']);
 });
@@ -56,9 +56,51 @@ test('hashtag confirmation opens the combined page and public Story results work
     assert.equal(state.activeExploreFilter.value, 'idea');
     assert.match(app.element('#community-view').innerHTML, /Stories with this hashtag/);
     assert.match(app.element('#community-view').innerHTML, /Posts with this hashtag/);
-    assert.match(app.element('#community-view').innerHTML, /data-hashtag-story="public-idea"/);
+    assert.match(app.element('#community-view').innerHTML, /data-hashtag-stories="idea"/);
+    assert.equal((app.element('#community-view').innerHTML.match(/data-hashtag-stories=/g) || []).length, 1);
     app.element('.story-reply-form').reset = () => {};
-    app.exportsOf('src/features/explore.events.js').handleExploreClick({target:{closest:selector => selector === '[data-hashtag-story]' ? {dataset:{hashtagStory:'public-idea'}} : null}});
+    app.exportsOf('src/features/explore.events.js').handleExploreClick({target:{closest:selector => selector === '[data-hashtag-stories]' ? {dataset:{hashtagStories:'idea'}} : null}});
     assert.equal(state.activeStorySequence[state.activeStoryIndex].id, 'public-idea');
     assert.equal(app.element('.story-viewer-backdrop').hidden, false);
+});
+
+test('the hashtag icon plays matching Stories across accounts and returns to the hashtag page', async () => {
+    const app = await loadApp();
+    const {state} = app.exportsOf('src/core/state.js');
+    const {currentUser} = app.exportsOf('src/data/sample-data.js');
+    const now = 1792738800000;
+    const make = (id, handle, tag, createdAt) => ({id,handle,user:handle,avatar:'avatar.png',type:'image',media:'fixture.png',createdAt,expiresAt:now+10000,edits:{layers:[{type:'text',text:`#${tag}`}]} });
+    state.stories = [make('ari-new','@aribloom','idea',now-1),make('noah','@noahvale','idea',now-2),make('ari-old','@aribloom','idea',now-3),make('unrelated','@aribloom','other',now)];
+    state.activeExploreFilter = {type:'hashtag',value:'idea'};
+    app.exportsOf('src/core/navigation.js').setView('explore');
+    app.element('.story-reply-form').reset = () => {};
+    const stories = app.exportsOf('src/features/stories.js');
+    assert.equal(stories.openHashtagStories('idea', app.exportsOf('src/features/explore.js').renderExplore), true);
+    assert.deepEqual(Array.from(state.activeStorySequence, item => item.id), ['ari-new','noah','ari-old']);
+    stories.showStoryAtIndex(1);
+    assert.equal(state.activeStorySequence[state.activeStoryIndex].handle, '@noahvale');
+    stories.showStoryAtIndex(0);
+    assert.equal(state.activeStorySequence[state.activeStoryIndex].id, 'ari-new');
+    stories.showStoryAtIndex(2);
+    stories.showStoryAtIndex(3);
+    assert.equal(app.element('.story-viewer-backdrop').hidden, true);
+    assert.equal(state.currentView, 'explore');
+    assert.equal(state.activeExploreFilter.value, 'idea');
+    assert.match(app.element('#community-view').innerHTML, /hashtag-story-ring seen/);
+    assert.equal(state.seenStoryIds.has('unrelated'), false);
+});
+
+test('the public hashtag sequence skips newly expired Stories and ignores uploads older than 24 hours', async () => {
+    const app = await loadApp();
+    const {state} = app.exportsOf('src/core/state.js');
+    const now = 1792738800000;
+    const make = (id, createdAt) => ({id,handle:'@aribloom',user:'Ari Bloom',avatar:'a.png',type:'image',media:'fixture.png',createdAt,edits:{layers:[{type:'text',text:'#idea'}]}});
+    state.stories = [make('first',now-1),make('expires-next',now-2),make('third',now-3),make('too-old',now-25*3600000)];
+    app.element('.story-reply-form').reset = () => {};
+    const stories = app.exportsOf('src/features/stories.js');
+    stories.openHashtagStories('idea');
+    state.stories.find(item => item.id === 'expires-next').expiresAt = now-1;
+    stories.showStoryAtIndex(1);
+    assert.deepEqual(Array.from(state.activeStorySequence, item => item.id), ['first','third']);
+    assert.equal(state.activeStorySequence[state.activeStoryIndex].id, 'third');
 });

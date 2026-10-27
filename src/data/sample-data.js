@@ -335,6 +335,16 @@ export const initialStories = [
         caption: "A short studio tour"
     },
     {
+        id: "noah-story-hashtag-demo",
+        handle: "@noahvale",
+        user: "Noah Vale",
+        avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80",
+        type: "image",
+        media: "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?auto=format&fit=crop&w=1200&q=80",
+        durationMs: 30000,
+        edits: { layers: [{ id: "noah-idea-demo", type: "text", text: "#idea", x: .5, y: .76, size: 7, width: .8, rotation: 0, font: "sans", color: "#ffffff" }] }
+    },
+    {
         id: "mila-story-demo-1",
         handle: currentUser.handle,
         user: currentUser.name,

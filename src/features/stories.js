@@ -11,8 +11,10 @@ import { applyStoryComposition, storyVideoRange } from './story-composition.js';
 import { syncStoryOptionButtons, openStoryExitDialog, closeStoryExitDialog } from './story-options.js';
 import { stopStoryCamera } from './story-camera.js';
 import { recordStoryMentions } from './notifications.js';
+import { getPublicHashtagStories } from '../core/hashtags.js';
 let storyCreatorTrigger;
 let storyHistoryEntryOpen = false;
+let hashtagViewerClosed = null;
 
 window.addEventListener('popstate', () => {
     if (!storyHistoryEntryOpen) return;
@@ -57,7 +59,8 @@ export function expireStory(id) {
     if (story.media.startsWith("blob:") && !retainedMedia.has(story.media))
         URL.revokeObjectURL(story.media);
     if (state.activeStorySequence[state.activeStoryIndex]?.id === id && !state.activeStorySequence[state.activeStoryIndex]?.fromHighlight) {
-        closeStoryViewer();
+        if (state.activeStoryHashtag) showStoryAtIndex(state.activeStoryIndex);
+        else closeStoryViewer();
     }
     persistActiveStories().catch((error) => {
         console.error("Could not update expired stories in browser storage", error);
@@ -339,6 +342,8 @@ export function createStoryRepostCredit(story) {
 }
 
 export function openStoryGroup(handle, { allowUnfollowed = false } = {}) {
+    state.activeStoryHashtag = null;
+    hashtagViewerClosed = null;
     state.activeStoryHighlightId = null;
     if (handle === currentUser.handle && !getStoryGroups().some(group => group.handle === handle)) {
         openStoryCreator();
@@ -365,8 +370,37 @@ export function openStoryGroup(handle, { allowUnfollowed = false } = {}) {
     showStoryAtIndex(0);
 }
 
+export function openHashtagStories(tag, onClose = null) {
+    const stories = getPublicHashtagStories(tag);
+    if (!stories.length) { showShareFeedback('No active public Stories with this hashtag.'); return false; }
+    state.activeStoryHighlightId = null;
+    state.activeStoryHashtag = tag;
+    hashtagViewerClosed = onClose;
+    state.activeStoryGroups = [{ hashtag: tag, stories }];
+    state.activeStoryGroupIndex = 0;
+    state.activeStorySequence = stories;
+    state.activeStoryIndex = 0;
+    if (!storyHistoryEntryOpen) {
+        window.history.pushState({ ...(window.history.state || {}), instaStoryViewer: true }, '', window.location.href);
+        storyHistoryEntryOpen = true;
+    }
+    document.querySelector('.story-viewer-backdrop').hidden = false;
+    document.body.classList.add('story-overlay-open');
+    showStoryAtIndex(0);
+    return true;
+}
+
 export function showStoryAtIndex(index) {
     if (state.deletionRequestedAt) { closeStoryViewer(); return; }
+    if (state.activeStoryHashtag) {
+        const available = new Set(getPublicHashtagStories(state.activeStoryHashtag).map(story => story.id));
+        const previous = state.activeStorySequence;
+        const removedBeforeTarget = previous.slice(0, Math.max(0, index)).filter(story => !available.has(story.id)).length;
+        state.activeStorySequence = previous.filter(story => available.has(story.id));
+        if (!state.activeStorySequence.length) { closeStoryViewer(); return; }
+        state.activeStoryGroups[0].stories = state.activeStorySequence;
+        index -= removedBeforeTarget;
+    }
     if (index < 0 || index >= state.activeStorySequence.length) {
         const nextGroupIndex = state.activeStoryGroupIndex + (index < 0 ? -1 : 1);
         if (nextGroupIndex < 0 || nextGroupIndex >= state.activeStoryGroups.length) {
@@ -548,6 +582,7 @@ export function startStoryProgress(index) {
 }
 
 export function closeStoryViewer({ fromHistory = false } = {}) {
+    const wasHashtagViewer = Boolean(state.activeStoryHashtag);
     const returnToPreviousPage = storyHistoryEntryOpen && !fromHistory;
     storyHistoryEntryOpen = false;
     clearTimeout(state.storyAdvanceTimer);
@@ -564,6 +599,10 @@ export function closeStoryViewer({ fromHistory = false } = {}) {
     state.activeStoryGroupIndex = -1;
     state.activeStoryIndex = -1;
     state.activeStoryHighlightId = null;
+    state.activeStoryHashtag = null;
+    const onClose = hashtagViewerClosed;
+    hashtagViewerClosed = null;
+    if (wasHashtagViewer && state.currentView === 'explore') onClose?.();
     if (returnToPreviousPage) window.history.back();
 }
 

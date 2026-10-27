@@ -54,9 +54,9 @@ test('Back in a focused mode discards that mode and stays in the Story editor',a
 
 test('media alignment outline follows contained landscape media rather than the full Story frame',async()=>{
     const app=await loadApp();const stage=app.element('.story-selected-preview');stage.ownerDocument={};
-    const media=stage.querySelector('img, video');Object.assign(media,{clientWidth:400,clientHeight:700,naturalWidth:800,naturalHeight:400,offsetLeft:0,offsetTop:0});
+    const media=stage.querySelector(':scope > img, :scope > video');Object.assign(media,{clientWidth:400,clientHeight:700,naturalWidth:800,naturalHeight:400,offsetLeft:0,offsetTop:0});
     app.exportsOf('src/features/story-composition.js').applyStoryComposition(stage,{edits:{media:{x:10,y:5,zoom:1,rotation:90}}},{editing:true});
-    const style=stage.querySelector('.story-media-outline').style;
+    const style=stage.querySelector(':scope > .story-media-outline').style;
     assert.equal(style.width,'400px');assert.equal(style.height,'200px');assert.equal(style.top,'250px');
     assert.equal(style.transform,'translate(40px, 35px) scale(1) rotate(90deg)');
 });
@@ -86,7 +86,7 @@ test('video trim preserves mute/volume and the main Story sound button toggles m
     assert.equal(app.element('.story-preview-sound').getAttribute('aria-label'),'Mute video sound');
 });
 
-test('Story sticker picker opens on Emojis and keeps Stickers, Emojis and blank GIFs separate',async()=>{
+test('Story sticker picker opens on Emojis and keeps Stickers, Emojis and GIFs separate',async()=>{
     const app=await loadApp();const {state}=app.exportsOf('src/core/state.js');
     state.pendingStoryMedia={type:'image',media:'fixture.png'};
     const tools=app.exportsOf('src/features/story-tools.js');tools.prepareStoryTools();
@@ -108,7 +108,7 @@ test('Story sticker picker opens on Emojis and keeps Stickers, Emojis and blank 
     markup=app.element('.story-tool-options').innerHTML;
     assert.equal(app.element('.story-tools-backdrop').classList.contains('story-sticker-picker-active'),true);
     assert.match(markup,/data-story-sticker-section="gifs"[^>]*aria-selected="true"/);
-    assert.match(markup,/role="tabpanel" aria-labelledby="story-sticker-tab-gifs"><div class="story-sticker-empty" aria-hidden="true"><\/div><\/div>/);
+    assert.match(markup,/Search GIFs/);assert.match(markup,/GIF search will be available/);
     assert.doesNotMatch(markup,/img|suggest|trending|file|data-story-sticker=/i);
     click({target:makeTarget('.story-tools-back')});
     assert.equal(app.element('.story-tools-backdrop').classList.contains('story-tool-active'),false);
@@ -327,4 +327,30 @@ test('video trim rejects times past the first four minutes before changing the s
     const submit=app.listeners.find(l=>l.key==='document'&&l.type==='submit'&&l.callback.toString().includes('applyTool')).callback;
     submit({target:form,preventDefault(){}});
     assert.match(error.textContent,/first 240/);assert.equal(state.pendingStoryMedia.edits,undefined);
+});
+
+
+test('emoji names and symbols search the full catalog; sticker and GIF searches keep separate queries',async()=>{
+    const app=await loadApp();const {state}=app.exportsOf('src/core/state.js');state.pendingStoryMedia={type:'image',media:'fixture.png'};
+    const tools=app.exportsOf('src/features/story-tools.js');tools.prepareStoryTools();
+    assert.ok(tools.searchStoryEmojis('butterfly').some(item=>item[0]==='🦋'));
+    assert.ok(tools.searchStoryEmojis('giraffe').some(item=>item[0]==='🦒'));
+    assert.ok(tools.searchStoryEmojis('🦒').some(item=>item[0]==='🦒'));
+    assert.equal(tools.searchStoryEmojis('zzznomatchzzz').length,0);
+    const click=app.listeners.find(l=>l.key==='document'&&l.type==='click'&&l.callback.toString().includes('story-undo')).callback;
+    const target=(selector,dataset={})=>({dataset,closest:s=>s===selector?{dataset,focus(){}}:null});
+    click({target:target('[data-story-tool]',{storyTool:'sticker'})});
+    assert.match(app.element('.story-tool-options').innerHTML,/type="search"[^>]*aria-label="Search emojis"/);
+    const input=app.listeners.find(l=>l.key==='document'&&l.type==='input'&&l.callback.toString().includes('story-sticker-search')).callback;
+    input({target:{closest:s=>s==='[data-story-sticker-search]'?{value:'giraffe'}:null}});
+    assert.match(app.element('#story-sticker-panel').innerHTML,/🦒/);
+    click({target:target('[data-story-sticker-section]',{storyStickerSection:'stickers'})});
+    input({target:{closest:s=>s==='[data-story-sticker-search]'?{value:'vibes'}:null}});
+    assert.match(app.element('#story-sticker-panel').innerHTML,/GOOD VIBES/);assert.doesNotMatch(app.element('#story-sticker-panel').innerHTML,/LOVE THIS/);
+    click({target:target('[data-story-sticker-section]',{storyStickerSection:'gifs'})});
+    assert.match(app.element('.story-tool-options').innerHTML,/Search GIFs/);
+    input({target:{closest:s=>s==='[data-story-sticker-search]'?{value:'dancing'}:null}});
+    assert.match(app.element('#story-sticker-panel').innerHTML,/catalog is connected/);
+    click({target:target('[data-story-sticker-section]',{storyStickerSection:'emojis'})});
+    assert.match(app.element('.story-tool-options').innerHTML,/value="giraffe"/);
 });

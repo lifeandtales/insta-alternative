@@ -1034,3 +1034,6 @@ body.video-fullscreen-open {
 .story-export-hint { font-size: .8rem; color: #68616f; }
 .story-export-dialog > button { width: 100%; min-height: 44px; padding: 10px; margin-top: 8px; border-radius: 12px; background: #8538d5; color: white; }
 .story-export-dialog > button[hidden] { display: none; }
+
+.story-sticker-search { flex: 0 0 auto; display: block; box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px 14px; margin: 0 0 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface, #fff); color: var(--text); font: inherit; }
+.story-sticker-search:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
