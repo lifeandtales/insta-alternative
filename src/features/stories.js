@@ -292,15 +292,22 @@ export function showStoryOptions(toggle) {
     toggle.setAttribute("aria-expanded", "true");
 }
 
-export function fitRepostMediaFrame(frame, media, maxHeightRatio = 0.64) {
-    const sourceWidth = media.videoWidth || media.naturalWidth;
-    const sourceHeight = media.videoHeight || media.naturalHeight;
-    if (!sourceWidth || !sourceHeight) return;
+export function getRepostMediaFrameSize(media, maxHeightRatio = 0.64) {
+    const sourceWidth = media?.videoWidth || media?.naturalWidth;
+    const sourceHeight = media?.videoHeight || media?.naturalHeight;
+    if (!sourceWidth || !sourceHeight) return null;
     const maxWidth = Math.min(window.innerWidth * 0.78, 390);
     const maxHeight = Math.min(window.innerHeight * maxHeightRatio, 650);
     const scale = Math.min(maxWidth / sourceWidth, maxHeight / sourceHeight);
-    frame.style.width = `${Math.round(sourceWidth * scale)}px`;
-    frame.style.height = `${Math.round(sourceHeight * scale)}px`;
+    return { width: Math.round(sourceWidth * scale), height: Math.round(sourceHeight * scale) };
+}
+
+export function fitRepostMediaFrame(frame, media, maxHeightRatio = 0.64) {
+    const size = getRepostMediaFrameSize(media, maxHeightRatio);
+    if (!size) return null;
+    frame.style.width = `${size.width}px`;
+    frame.style.height = `${size.height}px`;
+    return size;
 }
 
 export function createStoryRepostCredit(story) {

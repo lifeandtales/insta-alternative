@@ -41,6 +41,7 @@ import {
     showStoryOptions,
     setStoryCreationStep,
     fitRepostMediaFrame,
+    getRepostMediaFrameSize,
     createStoryRepostCredit,
 } from './stories.js';
 
@@ -88,6 +89,9 @@ export function handleStoryMenuClick(event) {
             state.pendingStoryMedia = {
                 ...originalStory,
                 caption: activeStory.caption || '',
+                repostFrameSize: storyNeedsFullCanvasRepost(activeStory, activeStoryMedia, activeStoryCanvas)
+                    ? null
+                    : getRepostMediaFrameSize(activeStoryMedia, .58),
                 repostedStoryId: activeStory.id,
                 repostedFromHandle: activeStory.handle,
                 repostedFromUser: activeStory.user,
@@ -601,6 +605,11 @@ function renderSelectedStory() {
     const repostFrame = story?.repostedFromUser ? document.createElement('div') : null;
     if (repostFrame) {
         repostFrame.className = `story-repost-drag-frame${story.repostFullCanvas ? ' story-repost-full-canvas-frame' : ''}`;
+        if (story.repostFrameSize) {
+            repostFrame.style.width = `${story.repostFrameSize.width}px`;
+            repostFrame.style.height = `${story.repostFrameSize.height}px`;
+            repostFrame.dataset.frameLocked = 'true';
+        } else if (story.repostFullCanvas) repostFrame.dataset.frameLocked = 'true';
         container.append(repostFrame);
     }
     const mediaFrame = repostFrame || container;
@@ -625,7 +634,10 @@ function renderSelectedStory() {
         if (story.type === 'video') {
             media.controls = true; media.playsInline = true; media.preload = 'metadata';
             if (story.poster) media.poster = story.poster;
-            if (story.repostedFromUser && !story.repostFullCanvas) media.addEventListener('loadedmetadata', () => fitRepostMediaFrame(mediaFrame, media, .58), { once: true });
+            if (story.repostedFromUser && !story.repostFullCanvas) media.addEventListener('loadedmetadata', () => {
+                if (!story.repostFrameSize) story.repostFrameSize = fitRepostMediaFrame(mediaFrame, media, .58);
+                if (story.repostFrameSize) mediaFrame.dataset.frameLocked = 'true';
+            }, { once: true });
             const update = () => {
                 const button = document.querySelector('.story-preview-play');
                 button.textContent = media.paused ? '▶' : 'Ⅱ';
@@ -634,7 +646,10 @@ function renderSelectedStory() {
             media.addEventListener('play', update); media.addEventListener('pause', update); media.addEventListener('ended', update);
         }
         else if (story.repostedFromUser && !story.repostFullCanvas) {
-            media.addEventListener('load', () => fitRepostMediaFrame(mediaFrame, media, .58), { once: true });
+            media.addEventListener('load', () => {
+                if (!story.repostFrameSize) story.repostFrameSize = fitRepostMediaFrame(mediaFrame, media, .58);
+                if (story.repostFrameSize) mediaFrame.dataset.frameLocked = 'true';
+            }, { once: true });
         }
         mediaFrame.append(media);
         media.src = story.media;
@@ -693,6 +708,7 @@ function renderSelectedStory() {
         };
         repostFrame.onpointerdown = event => {
             if (event.pointerType === 'mouse' && event.button !== 0) return;
+            if (repostFrame.dataset.frameLocked !== 'true') return;
             event.preventDefault();
             event.stopPropagation();
             repostFrame.setPointerCapture(event.pointerId);
