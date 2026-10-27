@@ -11,6 +11,14 @@ import { applyStoryComposition, storyVideoRange } from './story-composition.js';
 import { syncStoryOptionButtons, openStoryExitDialog, closeStoryExitDialog } from './story-options.js';
 import { stopStoryCamera } from './story-camera.js';
 let storyCreatorTrigger;
+let storyHistoryEntryOpen = false;
+
+window.addEventListener('popstate', () => {
+    if (!storyHistoryEntryOpen) return;
+    storyHistoryEntryOpen = false;
+    if (!document.querySelector('.story-viewer-backdrop').hidden)
+        closeStoryViewer({ fromHistory: true });
+});
 
 export function getStoryGroups({ includeMuted = false } = {}) {
     const groupedStories = new Map();
@@ -342,6 +350,10 @@ export function openStoryGroup(handle) {
         return;
     state.activeStorySequence = state.activeStoryGroups[state.activeStoryGroupIndex].stories;
     state.activeStoryIndex = 0;
+    if (!storyHistoryEntryOpen) {
+        window.history.pushState({ ...(window.history.state || {}), instaStoryViewer: true }, '', window.location.href);
+        storyHistoryEntryOpen = true;
+    }
     document.querySelector(".story-viewer-backdrop").hidden = false;
     document.body.classList.add("story-overlay-open");
     showStoryAtIndex(0);
@@ -525,7 +537,9 @@ export function startStoryProgress(index) {
     state.storyAdvanceTimer = window.setTimeout(() => showStoryAtIndex(index + 1), state.storyDurationMs);
 }
 
-export function closeStoryViewer() {
+export function closeStoryViewer({ fromHistory = false } = {}) {
+    const returnToPreviousPage = storyHistoryEntryOpen && !fromHistory;
+    storyHistoryEntryOpen = false;
     clearTimeout(state.storyAdvanceTimer);
     document.querySelector(".story-viewer-backdrop").hidden = true;
     document.querySelector(".story-viewer-stage video")?.pause();
@@ -540,6 +554,7 @@ export function closeStoryViewer() {
     state.activeStoryGroupIndex = -1;
     state.activeStoryIndex = -1;
     state.activeStoryHighlightId = null;
+    if (returnToPreviousPage) window.history.back();
 }
 
 // Hold pauses both the visual progress and playback without restarting the story.
