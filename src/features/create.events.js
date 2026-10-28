@@ -5,7 +5,7 @@ import { createMenuBackdrop, createUploadBackdrop } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { mayInteract } from '../core/social.js';
 import {
-    dismissCreateExit, syncCreateCaptionPreview, finalizeCreateMedia, setCreateDetails, renderCreatePreview, saveCreateDraft, resumeCreateDraft, startCreateEditing, renderCreateTags, searchCreateTagAccounts,
+    reorderCreateMedia, removeCreateMedia, syncCreateMediaSelection, dismissCreateExit, syncCreateCaptionPreview, finalizeCreateMedia, setCreateDetails, renderCreatePreview, saveCreateDraft, resumeCreateDraft, startCreateEditing, renderCreateTags, searchCreateTagAccounts,
     closeCreateMenu,
     closeCreateUpload,
     getSupportedStoryFileType,
@@ -28,6 +28,10 @@ export function handleOpenCreateClick(event) {
 
 export function handleCreateUploadClick(event) {
     if(event.target.closest('.create-keep-editing')){dismissCreateExit();document.querySelector('.create-upload-close').focus();return true;}
+    if(event.target.closest('.create-reorder-toggle')){state.createReorderOpen=!state.createReorderOpen;renderCreatePreview();return true;}
+    if(event.target.closest('.create-remove-media')){removeCreateMedia();document.querySelector(state.createMediaItems.length?'.create-remove-media':'.create-add-media').focus();return true;}
+    const move=event.target.closest('[data-create-move-from]');
+    if(move){reorderCreateMedia(Number(move.dataset.createMoveFrom),Number(move.dataset.createMoveTo));document.querySelector(`.create-reorder-panel [data-create-active="${state.createActiveIndex||0}"]`)?.focus();return true;}
     if(event.target.closest('.create-next')){finalizeCreateMedia();return true;}
     if(event.target.closest('.create-back-to-edit')){setCreateDetails(false);return true;}
     if(event.target.closest('.create-add-media')){state.createAppending=true;document.getElementById('post-upload').value='';document.getElementById('post-upload').click();return true;}
@@ -103,7 +107,7 @@ export function registerMediaUploadEvents() {
         }
         if(!state.createAppending)state.createMediaItems.forEach(item=>{if(item.url?.startsWith('blob:'))URL.revokeObjectURL(item.url);});
         const incoming=files.map(file => ({ type: getSupportedStoryFileType(file), url: URL.createObjectURL(file), fit: 'contain', x: 50, y: 50, originalAudioMuted:false, ratio:state.createMediaType==='reel'?'9/16':'original', layout:state.createMediaType==='reel'?'reel':'post' }));
-        if(state.createAppending){state.createMediaItems.push(...incoming);state.createAppending=false;state.createFinalizedItems=null;renderCreatePreview();return;}
+        if(state.createAppending){state.createMediaItems=[...state.createMediaItems,...incoming];state.createAppending=false;if(state.createCoverIndex===null)state.createCoverIndex=0;syncCreateMediaSelection();renderCreatePreview();return;}
         state.createMediaItems = incoming;
         state.createCoverIndex = null;
         state.createMediaFile = files[0];

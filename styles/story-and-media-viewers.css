@@ -1192,3 +1192,18 @@ button.caption-hashtag:focus-visible { outline:2px solid currentColor; outline-o
 .post-carousel > .carousel-index.counter-hidden { opacity:0; }
 @media (prefers-reduced-motion:reduce) { .post-carousel > .carousel-index { transition:none; } }
 .create-editor-actions { grid-template-columns:1fr; }
+.create-reorder-panel[hidden],.create-tool-tabs[hidden] { display:none; }
+.create-selection-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.create-selection-actions button { min-height:44px; padding:10px; border:1px solid #c7aedf; border-radius:10px; background:#f4edfb; color:#58218a; font-weight:600; }
+.create-selection-actions .create-remove-media { background:#fff2f2; color:#9d2222; border-color:#e2bcbc; }
+.create-selection-actions button:disabled { color:#766c7c; background:#eeeaf0; border-color:#d1c9d6; }
+.create-reorder-panel { border:1px solid #d8cce1; border-radius:12px; padding:12px; }
+.create-reorder-panel h3 { margin:0 0 10px; font-size:1rem; }
+.create-reorder-panel ol { display:grid; gap:8px; list-style:none; margin:0; padding:0; }
+.create-reorder-panel li { display:grid; grid-template-columns:minmax(0,1fr) 44px 44px; gap:8px; padding:6px; border:1px solid #e0d7e7; border-radius:10px; }
+.create-reorder-panel .create-order-current { border-color:#7134a8; background:#f4edfb; }
+.create-reorder-panel button { min-height:44px; border-radius:8px; background:#eee3fa; color:#58218a; font-weight:600; }
+.create-reorder-panel button[data-create-active] { display:flex; gap:10px; align-items:center; padding:4px; text-align:left; background:transparent; }
+.create-reorder-panel img { width:42px; height:42px; object-fit:cover; border-radius:6px; }
+.create-reorder-panel button:disabled { color:#8a8290; background:#eeeaf0; }
+.create-media-empty { padding:32px 18px; text-align:center; }

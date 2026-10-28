@@ -60,7 +60,7 @@ export function openCreateUpload(type) {
     dismissCreateExit();
     hideCaptionSuggestions();
     state.createMediaItems = [];
-    state.createActiveIndex = 0; state.createTool = "edit"; state.createDetailsOpen = false; state.createFinalizedItems = null; state.createAppending = false;
+    state.createReorderOpen = false; state.createActiveIndex = 0; state.createTool = "edit"; state.createDetailsOpen = false; state.createFinalizedItems = null; state.createAppending = false;
     document.getElementById("create-schedule").value = "";
     document.querySelector(".create-editor-fields").hidden = true;
     document.querySelector(".create-media-editing").hidden = false;
@@ -271,15 +271,59 @@ export function setCreateDetails(details) {
     document.getElementById('create-upload-title').focus();
     return true;
 }
+export function syncCreateMediaSelection() {
+    const first=state.createMediaItems[0];
+    state.createMediaUrl=first?.url||'';
+    state.createMediaFile=first?{type:first.type==='video'?'video/mp4':'image/jpeg'}:null;
+    state.createFinalizedItems=null;
+}
+export function reorderCreateMedia(from,to) {
+    const items=[...state.createMediaItems];
+    if(!mayInteract()||state.createDetailsOpen||state.createFinalizing||!Number.isInteger(from)||!Number.isInteger(to)||from<0||to<0||from>=items.length||to>=items.length||from===to)return false;
+    const active=items[state.createActiveIndex||0],cover=items[state.createCoverIndex];
+    const [moved]=items.splice(from,1);items.splice(to,0,moved);state.createMediaItems=items;
+    state.createActiveIndex=items.indexOf(active);state.createCoverIndex=cover?items.indexOf(cover):0;
+    syncCreateMediaSelection();renderCreatePreview();return true;
+}
+export function removeCreateMedia(index=state.createActiveIndex||0) {
+    if(!mayInteract()||state.createDetailsOpen||state.createFinalizing||!Number.isInteger(index)||index<0||index>=state.createMediaItems.length)return false;
+    const items=[...state.createMediaItems],active=items[state.createActiveIndex||0],cover=items[state.createCoverIndex],removed=items.splice(index,1)[0];
+    state.createMediaItems=items;state.createActiveIndex=items.includes(active)?items.indexOf(active):Math.min(index,Math.max(0,items.length-1));
+    state.createCoverIndex=items.length?(items.includes(cover)?items.indexOf(cover):Math.min(index,items.length-1)):null;
+    if(items.length<2)state.createReorderOpen=false;
+    const retained=[...state.draftItems,...posts,...reels].some(entity=>entity.media===removed.url||entity.video===removed.url||entity.videoUrl===removed.url||[...(entity.items||[]),...(entity.mediaItems||[])].some(item=>item.url===removed.url));
+    if(removed.url?.startsWith('blob:')&&!retained)URL.revokeObjectURL(removed.url);
+    syncCreateMediaSelection();renderCreatePreview();return true;
+}
+function renderCreateMediaOrder() {
+    const items=state.createMediaItems,index=state.createActiveIndex||0;
+    const reorder=document.querySelector('.create-reorder-toggle'),remove=document.querySelector('.create-remove-media'),panel=document.querySelector('.create-reorder-panel');
+    reorder.disabled=items.length<2;reorder.setAttribute('aria-expanded',String(Boolean(state.createReorderOpen&&items.length>1)));
+    remove.disabled=!items.length;remove.textContent=items[index]?.type==='video'?'Remove video':'Remove image';
+    remove.setAttribute('aria-label',items.length?`Remove ${items[index].type==='video'?'video':'image'} ${index+1}`:'Remove media');
+    panel.hidden=!state.createReorderOpen||items.length<2;
+    panel.innerHTML=panel.hidden?'':`<h3>Post order</h3><ol>${items.map((item,i)=>`<li class="${i===index?'create-order-current':''}"><button type="button" data-create-active="${i}" aria-label="Select ${item.type==='video'?'video':'image'} ${i+1}">${item.type==='image'?`<img src="${escapeHtml(item.url)}" alt="" />`:'<span aria-hidden="true">▶</span>'}<span>${i+1}. ${item.type==='video'?'Video':'Image'}${i===state.createCoverIndex?' · Cover':''}</span></button><button type="button" data-create-move-from="${i}" data-create-move-to="${i-1}" aria-label="Move item ${i+1} earlier" ${i===0?'disabled':''}>←</button><button type="button" data-create-move-from="${i}" data-create-move-to="${i+1}" aria-label="Move item ${i+1} later" ${i===items.length-1?'disabled':''}>→</button></li>`).join('')}</ol>`;
+}
+
 export function renderCreatePreview() {
     const preview = document.querySelector('.create-upload-preview');
     const controls = document.querySelector('.create-media-controls');
     const index = Math.max(0, Math.min(state.createMediaItems.length - 1, state.createActiveIndex || 0));
     state.createActiveIndex = index;
     const item = state.createMediaItems[index];
-    preview.hidden = !item;
+    renderCreateMediaOrder();
+    document.querySelector('.create-next').disabled=!item||Boolean(state.createFinalizing);
+    document.querySelector('.create-add-media').hidden=state.createDetailsOpen||(state.createMediaType==='reel'&&Boolean(item));
+    document.querySelector('.create-add-media').textContent=state.createMediaType==='reel'?'＋ Add video':'＋ Add media · up to 20';
+    document.querySelector('.create-add-media').disabled=state.createMediaItems.length>=(state.createMediaType==='reel'?1:20);
+    document.querySelector('.create-tool-tabs').hidden=!item;
+    preview.hidden = false;
     controls.hidden = !item;
-    if (!item) return;
+    if (!item) {
+        preview.innerHTML='<p class="create-media-empty">Add a photo or video to continue.</p>';
+        controls.replaceChildren();document.querySelector('.create-media-tabs').replaceChildren();
+        document.querySelector('.create-publish-button').disabled=true;return;
+    }
     const edit = mediaEdits(item), tool = state.createTool || 'edit';
     document.querySelectorAll('[data-create-tool]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.createTool===tool)));
     preview.innerHTML = `<div class="upload-media-item">${renderEditedMedia(item, {preview:true,alt:`Media ${index+1}`})}</div>`;
@@ -300,8 +344,6 @@ export function renderCreatePreview() {
         if (item.type === 'video') media.addEventListener('volumechange', () => { if (item.originalAudioMuted && !media.muted) media.muted = true; });
     }
     document.querySelector('.create-media-tabs').innerHTML = state.createMediaItems.map((entry, i) => `<button type="button" data-create-active="${i}" aria-pressed="${i===index}">${entry.type === 'video' ? 'Video' : 'Image'} ${i+1}</button>`).join('');
-    document.querySelector('.create-add-media').hidden = state.createDetailsOpen || state.createMediaType === 'reel';
-    document.querySelector('.create-add-media').disabled = state.createMediaItems.length >= 20;
     const range = (key,label,min,max,value) => `<label>${label}<input type="range" data-create-edit="${key}" min="${min}" max="${max}" value="${value}" /></label>`;
     const options = (key,label,values,current) => `<label>${label}<select data-create-edit="${key}">${values.map(([value,text])=>`<option value="${value}" ${value===current?'selected':''}>${text}</option>`).join('')}</select></label>`;
     let fields = '';

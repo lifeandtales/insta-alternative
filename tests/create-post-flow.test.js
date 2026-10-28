@@ -131,3 +131,20 @@ test('regular posts cannot become excessively tall or wide, including old Origin
     assert.equal(mediaAspect({ratio:'9/16',layout:'reel'}),9/16);
     assert.match(renderEditedMedia({type:'image',url:'long.jpg',ratio:'original',naturalRatio:.1}),/aspect-ratio:0.75/);
 });
+
+test('reordering preserves edits, current selection, cover identity and the first media type',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js'),create=app.exportsOf('src/features/create.js');create.openCreateUpload('post');
+    const photo={type:'image',url:'one.jpg',text:'Keep me',filter:'warm'},video={type:'video',url:'two.mp4',originalAudioMuted:true},last={type:'image',url:'three.jpg'};
+    state.createMediaItems=[photo,video,last];state.createCoverIndex=1;state.createActiveIndex=0;create.startCreateEditing();
+    assert.equal(create.reorderCreateMedia(1,0),true);assert.equal(state.createMediaItems[0],video);assert.equal(state.createCoverIndex,0);assert.equal(state.createActiveIndex,1);assert.equal(state.createMediaFile.type,'video/mp4');assert.equal(state.createMediaUrl,'two.mp4');assert.equal(state.createMediaItems[1].text,'Keep me');
+    create.setCreateDetails(true);assert.equal(state.createFinalizedItems[0].originalAudioMuted,true);assert.equal(create.reorderCreateMedia(0,1),false);
+});
+
+test('removing an item preserves the others, replaces a removed cover and supports an empty editor',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js'),create=app.exportsOf('src/features/create.js');create.openCreateUpload('post');
+    state.createMediaItems=[{type:'video',url:'one.mp4'},{type:'image',url:'two.jpg',text:'Keep'}];state.createCoverIndex=0;create.startCreateEditing();
+    assert.equal(create.removeCreateMedia(0),true);assert.equal(state.createMediaItems.length,1);assert.equal(state.createMediaFile.type,'image/jpeg');assert.equal(state.createCoverIndex,0);assert.equal(state.createMediaItems[0].text,'Keep');
+    assert.equal(create.removeCreateMedia(0),true);assert.equal(state.createMediaItems.length,0);assert.equal(state.createCoverIndex,null);assert.equal(state.createMediaUrl,'');assert.equal(app.element('.create-next').disabled,true);assert.equal(app.element('.create-add-media').hidden,false);
+    state.createAppending=true;const file=new Blob(['fixture'],{type:'image/jpeg'});app.listeners.find(listener=>listener.key==='#post-upload'&&listener.type==='change').callback({target:{files:[file]}});
+    assert.equal(state.createMediaItems.length,1);assert.equal(state.createCoverIndex,0);assert.ok(state.createMediaFile);assert.equal(app.element('.create-next').disabled,false);
+});
