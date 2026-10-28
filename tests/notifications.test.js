@@ -86,3 +86,34 @@ test('an incoming Story like notifies once and retains that exact Story thumbnai
     assert.match(html,/data-story-notice="liked-photo"[^>]*disabled><img src="liked-photo.jpg"/);
     const saved=JSON.parse(app.storage.get('insta-preferences-v1'));assert.equal(saved.localStoryNotifications[0].storyPreview.media,'liked-photo.jpg');
 });
+
+test('likes group by exact content and unique people while mentions always remain separate',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js'),{currentUser}=app.exportsOf('src/data/sample-data.js');
+    const notifications=app.exportsOf('src/features/notifications.js');
+    app.exportsOf('src/data/sample-data.js').conversations.forEach(chat=>chat.unread=false);state.incomingFollowRequests=[];state.localApprovalNotices=[];
+    const notice=(actor,storyId,createdAt,extra={})=>({recipient:currentUser.handle,actor,actorName:actor,storyId,createdAt,read:false,...extra});
+    state.localStoryNotifications=[
+        notice('Ari','same',100),notice('Noah','same',200),notice('Noah','same',150),notice('Ava','same',250),notice('Theo','same',300),notice('Lena','same',350),
+        notice('Ari','different',400),
+        notice('Ari',undefined,500,{kind:'post-like',postId:'same'}),notice('Noah',undefined,550,{kind:'post-like',postId:'same'}),
+        notice('Ari','mention-a',600,{kind:'story-mention'}),notice('Noah','mention-a',650,{kind:'story-mention'}),notice('Ari','mention-b',700,{kind:'story-mention'})
+    ];
+    const items=notifications.availableLocalNotifications();
+    assert.equal(items.length,6);
+    const story=items.find(item=>item.storyId==='same');assert.equal(story.otherCount,4);assert.equal(story.actor,'Lena');assert.equal(story.createdAt,350);
+    assert.equal(items.find(item=>item.storyId==='different').otherCount,0);
+    assert.equal(items.find(item=>item.kind==='post-like').otherCount,1);
+    assert.equal(items.filter(item=>item.kind==='story-mention').length,3);
+    notifications.updateNotificationBadge();assert.equal(app.element('.home-notifications .notification-badge').textContent,'6');
+    notifications.openNotifications(app.element('.home-notifications'));assert.match(app.element('.notifications-content').innerHTML,/\+4 others/);
+    assert.equal(app.element('.home-notifications .notification-badge').hidden,true);
+});
+
+test('a new liker updates the existing card and unread count without duplicating the card',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js'),{currentUser}=app.exportsOf('src/data/sample-data.js');
+    const notifications=app.exportsOf('src/features/notifications.js');
+    state.localStoryNotifications=[{recipient:currentUser.handle,storyId:'one',actor:'@aribloom',actorName:'Ari',createdAt:100,read:true}];
+    notifications.recordIncomingStoryLike({id:'one',handle:currentUser.handle,type:'image',media:'one.jpg'},{handle:'@noahvale',name:'Noah'});
+    const items=notifications.availableLocalNotifications().filter(item=>item.storyId==='one');assert.equal(items.length,1);assert.equal(items[0].otherCount,1);assert.equal(items[0].read,false);
+    assert.equal(app.element('.home-notifications .notification-badge').textContent,'1');
+});

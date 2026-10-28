@@ -1,7 +1,8 @@
+import { openProfileMedia } from './profile.js';
 import { setView } from '../core/navigation.js';
 import { state } from '../core/state.js';
-import { conversations, currentUser } from '../data/sample-data.js';
-import { getAccount, canViewStory } from '../core/social.js';
+import { conversations, currentUser, posts } from '../data/sample-data.js';
+import { getAccount, canViewStory, canViewMedia } from '../core/social.js';
 import { escapeHtml } from '../core/utils.js';
 import { persistPreferences } from '../storage/preferences.js';
 import { openStoryGroup, showStoryAtIndex } from './stories.js';
@@ -32,6 +33,23 @@ function notificationTime(item){
     const timestamp=notificationTimestamp(item);
     return timestamp?`<time class="notification-time" datetime="${new Date(timestamp).toISOString()}">${formatNotificationAge(timestamp)}</time>`:'';
 }
+export function groupLikeNotifications(notices){
+    const groups=new Map(),items=[];
+    for(const notice of [...notices].sort((a,b)=>notificationTimestamp(b)-notificationTimestamp(a))){
+        const kind=notice.kind||(notice.postId!=null?'post-like':'story-like');
+        const target=kind==='post-like'?notice.postId:notice.storyId;
+        if(!['story-like','post-like'].includes(kind)||target==null){items.push({...notice});continue;}
+        const key=JSON.stringify([notice.recipient,kind,target]);
+        let group=groups.get(key);
+        if(!group){group={...notice,kind,actors:[],otherCount:0,read:true};groups.set(key,group);items.push(group);}
+        if(notice.actor&&!group.actors.includes(notice.actor))group.actors.push(notice.actor);
+        group.otherCount=Math.max(0,group.actors.length-1);
+        group.read=group.read&&Boolean(notice.read);
+        group.storyPreview ||= notice.storyPreview;
+    }
+    return items;
+}
+
 function renderNotificationItem(item){
     let thumbnail='';
     if(item.storyId){
@@ -43,7 +61,15 @@ function renderNotificationItem(item){
         const content=image?`<img src="${escapeHtml(image)}" alt="" loading="lazy" />`:preview?.type==='video'&&preview.media?`<video src="${escapeHtml(preview.media)}" muted playsinline preload="metadata" aria-hidden="true"></video>`:`<span aria-hidden="true">${available?'▶':'◷'}</span>`;
         thumbnail=`<button type="button" class="notification-story-link" data-story-notice="${escapeHtml(item.storyId)}" aria-label="${escapeHtml(label)}" ${available?'':'disabled'}>${content}</button>`;
     }
-    return `<li class="notification-card"><div class="notification-copy"><div class="notification-item-heading"><strong>${escapeHtml(item.title)}</strong>${notificationTime(item)}</div><p>${escapeHtml(item.text)}</p></div>${thumbnail}</li>`;
+    if(item.kind==='post-like'&&item.postId!=null){
+        const post=posts.find(post=>String(post.id)===String(item.postId));
+        const available=post&&canViewMedia(post);
+        const preview=available?post:(item.recipient===currentUser.handle&&item.storyPreview?.owner===currentUser.handle?item.storyPreview:null);
+        const image=preview?.poster||preview?.media;
+        thumbnail=`<button type="button" class="notification-story-link" data-post-notice="${escapeHtml(String(item.postId))}" aria-label="${escapeHtml(available?`View post: ${item.text}`:'Post unavailable')}" ${available?'':'disabled'}>${image?`<img src="${escapeHtml(image)}" alt="" loading="lazy" />`:'<span aria-hidden="true">◷</span>'}</button>`;
+    }
+    const others=item.otherCount?`<p class="notification-others">+${item.otherCount} ${item.otherCount===1?'other':'others'}</p>`:'';
+    return `<li class="notification-card"><div class="notification-copy"><div class="notification-item-heading"><strong>${escapeHtml(item.title)}</strong>${notificationTime(item)}</div><p>${escapeHtml(item.text)}</p>${others}</div>${thumbnail}</li>`;
 }
 
 export function availableLocalNotifications() {
@@ -58,10 +84,10 @@ export function availableLocalNotifications() {
     const approvals = (state.localApprovalNotices || []).filter(notice => notice.recipient === currentUser.handle).map(notice => ({
         createdAt: notice.createdAt || 0, title: 'Follow request approved', text: 'A follow request was approved in this local preview.'
     }));
-    const storyLikes = (state.localStoryNotifications || []).filter(notice => notice.recipient === currentUser.handle && !state.blockedHandles.has(notice.actor)).sort((left, right) => (right.createdAt || 0) - (left.createdAt || 0)).map(notice => ({
+    const storyLikes = groupLikeNotifications((state.localStoryNotifications || []).filter(notice => notice.recipient === currentUser.handle && !state.blockedHandles.has(notice.actor))).map(notice => ({
         ...notice,
-        title: notice.kind === 'story-mention' ? 'Story mention' : 'Story like',
-        text: notice.kind === 'story-mention' ? `${notice.actorName || notice.actor} mentioned you in their story.` : `${notice.actorName || notice.actor} liked your story.`
+        title: notice.kind === 'story-mention' ? 'Story mention' : notice.kind==='post-like'?'Post like':'Story like',
+        text: notice.kind === 'story-mention' ? `${notice.actorName || notice.actor} mentioned you in their story.` : `${notice.actorName || notice.actor} liked your ${notice.kind==='post-like'?'post':'story'}.`
     }));
     return [...storyLikes, ...requests, ...unread, ...approvals].sort((left,right)=>notificationTimestamp(right)-notificationTimestamp(left));
 }
@@ -134,6 +160,14 @@ export function recordIncomingStoryLike(story, actor) {
     return true;
 }
 
+export function recordIncomingPostLike(post,actor){
+    if(!post||post.handle!==currentUser.handle||!actor?.handle||actor.handle===currentUser.handle)return false;
+    state.localStoryNotifications ||= [];
+    if(state.localStoryNotifications.some(notice=>notice.kind==='post-like'&&notice.postId===post.id&&notice.actor===actor.handle&&notice.recipient===currentUser.handle))return false;
+    state.localStoryNotifications.push({kind:'post-like',recipient:currentUser.handle,postId:post.id,actor:actor.handle,actorName:actor.name||actor.handle,createdAt:Date.now(),read:false,storyPreview:storyNotificationPreview(post)});
+    saveNotificationPreviews();updateNotificationBadge();return true;
+}
+
 function ensureDemoStoryLike() {
     const ownStory=state.stories.find(story=>story.handle===currentUser.handle&&!story.fromHighlight&&(!story.expiresAt||story.expiresAt>Date.now()));
     if(!ownStory)return;
@@ -153,7 +187,7 @@ function ensureDemoStoryLike() {
 export function updateNotificationBadge() {
     const badge = document.querySelector('.home-notifications .notification-badge');
     if (!badge) return;
-    const count = (state.localStoryNotifications || []).filter(notice => notice.recipient === currentUser.handle && !notice.read).length;
+    const count = groupLikeNotifications((state.localStoryNotifications || []).filter(notice => notice.recipient === currentUser.handle && !state.blockedHandles.has(notice.actor))).filter(notice=>!notice.read).length;
     badge.hidden = count === 0;
     badge.textContent = count ? (count > 9 ? '9+' : String(count)) : '';
     document.querySelector('.home-notifications')?.setAttribute('aria-label', count ? `Notifications, ${count} unread` : 'Notifications');
@@ -198,6 +232,8 @@ export function registerNotificationEvents() {
     const page = document.getElementById('notifications-page');
     updateNotificationBadge();
     page.addEventListener('click', event => {
+        const postLink=event.target.closest('[data-post-notice]');
+        if(postLink){const post=posts.find(post=>String(post.id)===postLink.dataset.postNotice);if(post&&canViewMedia(post))openProfileMedia('post',post.id,postLink,{singleItem:true});return;}
         const storyLink = event.target.closest('[data-story-notice]');
         if (storyLink) {
             const storyId = storyLink.dataset.storyNotice;
