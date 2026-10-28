@@ -93,11 +93,17 @@ function showCenterGuides(snap){guideRevision++;preview().classList.toggle('stor
 function fadeAlignmentGuides(){const revision=guideRevision;setTimeout(()=>{if(revision===guideRevision)clearAlignmentGuides();},650);}
 
 
-export function updateStoryEditorDrag(point=null){
+export function updateStoryEditorDrag(point=null,item=null){
     const footer=document.querySelector('.story-editor-controls');
     const rect=footer.getBoundingClientRect();
-    const threshold=document.querySelector('.story-create-dialog').classList.contains('story-footer-drag-over')?48:24;
-    const over=Boolean(point && !footer.hidden && point.clientY>=rect.top-threshold && point.clientY<=rect.bottom && point.clientX>=rect.left && point.clientX<=rect.right);
+    const faded=document.querySelector('.story-create-dialog').classList.contains('story-footer-drag-over');
+    const bounds=item?.getBoundingClientRect();
+    // Use the visible object's transformed bounds, not the finger or the full media element's letterbox.
+    const hasBounds=bounds && bounds.width>0 && bounds.height>0;
+    const buffer=faded?16:0;
+    const over=Boolean(point && !footer.hidden && (hasBounds
+        ? bounds.bottom>=rect.top-buffer && bounds.top<=rect.bottom+buffer && bounds.right>=rect.left-buffer && bounds.left<=rect.right+buffer
+        : point.clientY>=rect.top-(faded?48:24) && point.clientY<=rect.bottom && point.clientX>=rect.left && point.clientX<=rect.right));
     document.querySelector('.story-create-dialog').classList.toggle('story-footer-drag-over',over);
 }
 function ensureHistory(){
@@ -512,8 +518,8 @@ export function registerStoryToolEvents(){
                 gesture.deleteDrop=updateDeleteTarget(event);
             }
         }
-        if(gesture.mode!=='draw')updateStoryEditorDrag(event);
         gesture.next=e;applyStoryComposition(stage,{...pending(),edits:e},{editing:true});
+        if(gesture.mode!=='draw')updateStoryEditorDrag(event,stage.querySelector(gesture.layer?`[data-layer-id="${gesture.layer}"]`:':scope > .story-media-outline'));
         if(gesture.layer){const selected=stage.querySelector(`[data-layer-id="${gesture.layer}"]`);selected?.classList.add('story-layer-selected');if(gesture.overlayAngleSnapped)selected?.classList.add('story-overlay-angle-snapped');}
     });
     stage.addEventListener('pointerup',event=>{

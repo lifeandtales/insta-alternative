@@ -771,14 +771,13 @@ function renderSelectedStory() {
             pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
             beginGesture();
             repostFrame.classList.add('story-repost-dragging');
-            updateStoryEditorDrag(event);
+            updateStoryEditorDrag(event,repostFrame);
         };
         repostFrame.onpointermove = event => {
             if (!pointers.has(event.pointerId) || !gesture || state.pendingStoryMedia !== story) return;
             event.preventDefault();
             event.stopPropagation();
             pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-            updateStoryEditorDrag(event);
             if (pointers.size === 2 && gesture.mode === 'pinch') {
                 const now = midpoint();
                 setRepostPose(
@@ -797,12 +796,13 @@ function renderSelectedStory() {
                     gesture.bounds
                 );
             }
+            updateStoryEditorDrag(event,repostFrame);
         };
         const finishPointer = event => {
             if (!pointers.has(event.pointerId)) return;
             event.stopPropagation();
             pointers.delete(event.pointerId);
-            if (pointers.size === 1) {beginGesture();const [point]=pointers.values();updateStoryEditorDrag({clientX:point.x,clientY:point.y});}
+            if (pointers.size === 1) {beginGesture();const [point]=pointers.values();updateStoryEditorDrag({clientX:point.x,clientY:point.y},repostFrame);}
             else if (!pointers.size) {
                 gesture = null;
                 repostFrame.classList.remove('story-repost-dragging');

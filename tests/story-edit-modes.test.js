@@ -402,3 +402,19 @@ test('footer controls fade only during a drag near their area and restore on rel
     state.pendingStoryMedia={type:'image',media:'next.png'};tools.prepareStoryTools();
     assert.equal(dialog.classList.contains('story-footer-drag-over'),false);
 });
+
+test('any transformed object edge triggers the footer fade even when its center and finger remain above it',async()=>{
+    const app=await loadApp(),tools=app.exportsOf('src/features/story-tools.js'),dialog=app.element('.story-create-dialog'),footer=app.element('.story-editor-controls');
+    footer.hidden=false;footer.getBoundingClientRect=()=>({left:0,top:600,right:400,bottom:800});
+    const finger={clientX:200,clientY:300};
+    let bounds={left:100,top:200,right:300,bottom:599,width:200,height:399};
+    const item={getBoundingClientRect:()=>bounds};
+    tools.updateStoryEditorDrag(finger,item);assert.equal(dialog.classList.contains('story-footer-drag-over'),false);
+    bounds={...bounds,bottom:600,height:400};
+    tools.updateStoryEditorDrag(finger,item);assert.equal(dialog.classList.contains('story-footer-drag-over'),true,'touching the footer with an edge is enough');
+    bounds={left:401,top:300,right:501,bottom:700,width:100,height:400};
+    tools.updateStoryEditorDrag();tools.updateStoryEditorDrag(finger,item);assert.equal(dialog.classList.contains('story-footer-drag-over'),false,'no horizontal intersection');
+    bounds={left:350,top:450,right:450,bottom:650,width:100,height:200};
+    tools.updateStoryEditorDrag(finger,item);assert.equal(dialog.classList.contains('story-footer-drag-over'),true,'a rotated corner crossing the footer triggers fading');
+    tools.updateStoryEditorDrag();assert.equal(dialog.classList.contains('story-footer-drag-over'),false,'release restores controls even while the object remains underneath');
+});
