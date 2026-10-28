@@ -1,3 +1,4 @@
+import { closeProfileMedia } from './profile.js';
 import { showShareFeedback } from '../components/feedback.js';
 import { exploreSearchInput, exploreSearchResults } from '../core/dom.js';
 import { setView } from '../core/navigation.js';
@@ -15,6 +16,7 @@ export function handleExploreClick(event) {
     }
     const searchCategory = event.target.closest("[data-search-kind]");
     if (searchCategory) {
+        if(searchCategory.classList.contains('caption-hashtag'))closeProfileMedia();
         if (searchCategory.dataset.searchKind === "community") {
             state.activeCommunityId = searchCategory.dataset.searchValue;
             state.activeExploreFilter = null;

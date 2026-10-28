@@ -17,7 +17,7 @@ import {
     closeMediaDeleteConfirmation,
     closeMediaEditor,
     closeProfileMedia,
-    deleteProfileMedia,
+    movePublishedMediaToDraft, deleteProfileMedia,
     openProfileMedia,
     renderProfile,
     updateProfileMediaAfterEdit,
@@ -108,14 +108,23 @@ export function registerProfileEditorEvents() {
         catch { showShareFeedback('The post updated in this preview, but local storage could not save the thumbnail.'); return; }
         showShareFeedback(`${type === "reel" ? "Reel" : "Post"} updated.`);
     });
-    document.querySelector(".media-delete-confirm").addEventListener("click", () => {
+    document.querySelector('.media-move-draft').addEventListener('click',async()=>{
+        if(!state.activeMediaDelete)return;
+        const {type,id,origin}=state.activeMediaDelete,buttons=document.querySelectorAll('.media-delete-dialog button');
+        buttons.forEach(button=>button.disabled=true);
+        try {if(await movePublishedMediaToDraft(type,id,{fromHome:origin==='home'}))closeMediaDeleteConfirmation();}
+        finally {buttons.forEach(button=>button.disabled=false);}
+    });
+    document.querySelector(".media-delete-confirm").addEventListener("click", async () => {
         if (!state.activeMediaDelete)
             return;
-        const { type, id } = state.activeMediaDelete;
+        const { type, id, origin } = state.activeMediaDelete;
         closeMediaDeleteConfirmation();
-        if (!deleteProfileMedia(type, id)) {
-            showShareFeedback("This media is no longer available to delete.");
+        if (!deleteProfileMedia(type, id, {fromHome:origin==='home'})) {
+            showShareFeedback("This media is no longer available to delete.");return;
         }
+        try {await persistSession();}
+        catch {showShareFeedback('Deleted in this preview, but saving failed. Keep this page open.');}
     });
     document.querySelector(".media-edit-close").addEventListener("click", closeMediaEditor);
     document.querySelector(".media-edit-cancel").addEventListener("click", closeMediaEditor);

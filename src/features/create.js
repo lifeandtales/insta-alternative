@@ -1,3 +1,4 @@
+import { hideCaptionSuggestions } from './caption-suggestions.js';
 import { recordPostMentions } from './notifications.js';
 import { renderCaption } from '../components/caption.js';
 import { POST_FILTERS, bindPostFilterSwipe, bindPostTextGestures, mediaEdits, mediaFilter, mediaAspect, mediaFit, renderEditedMedia } from './post-media.js';
@@ -56,6 +57,8 @@ export function startCreateEditing(){
 
 export function openCreateUpload(type) {
     if (!mayInteract()) return;
+    dismissCreateExit();
+    hideCaptionSuggestions();
     state.createMediaItems = [];
     state.createActiveIndex = 0; state.createTool = "edit"; state.createDetailsOpen = false; state.createFinalizedItems = null; state.createAppending = false;
     document.getElementById("create-schedule").value = "";
@@ -103,15 +106,18 @@ export function openCreateUpload(type) {
     document.querySelector(".create-upload-close").focus();
 }
 
+export function dismissCreateExit() {
+    const dialog=document.querySelector('.create-exit-dialog');
+    if(dialog.open)dialog.close();dialog.hidden=true;
+}
 export function closeCreateUpload(discard = false) {
     if (!discard && state.createMediaItems.length && !document.querySelector('.create-editor-step').hidden) {
-        document.querySelector('.create-editor-fields').hidden=false;
-        document.querySelector('.create-save-draft').textContent = 'Save draft before closing · or discard';
-        document.querySelector('.create-upload-hint').hidden=false;
-        document.querySelector('.create-upload-hint').innerHTML = 'Keep your work for 7 days, or <button type="button" class="create-discard">Discard changes</button>.';
-        document.querySelector('.create-save-draft').focus();
-        return;
+        hideCaptionSuggestions();
+        const dialog=document.querySelector('.create-exit-dialog');dialog.hidden=false;
+        if(!dialog.open)dialog.showModal?.();
+        document.querySelector('.create-keep-editing').focus();return;
     }
+    dismissCreateExit();hideCaptionSuggestions();
     createUploadBackdrop.hidden = true;
     const mediaIsSaved = state.draftItems.some(draft => draft.items?.some(item => item.url === state.createMediaUrl));
     if (state.createMediaUrl && !mediaIsSaved)
@@ -148,6 +154,7 @@ export async function publishCreatedMedia() {
             poster: cover,
             cover,
             video: state.createMediaUrl,
+            coverIndex: state.createCoverIndex,
             mediaItems: state.createFinalizedItems.map(item => ({...item})),
             originalAudioMuted: state.createFinalizedItems[0].originalAudioMuted === true,
             taggedUsers: document.getElementById('create-tags').value.split(',').map(value=>value.trim()).filter(Boolean).map(normalizeHandle),
@@ -172,6 +179,7 @@ export async function publishCreatedMedia() {
             location: document.getElementById('create-location').value.trim(),
             taggedHandles: document.getElementById('create-tags').value.split(',').map(value => value.trim()).filter(Boolean).map(normalizeHandle),
             taggedUsers: document.getElementById('create-tags').value.split(',').map(value => value.trim()).filter(Boolean).map(normalizeHandle),
+            coverIndex: state.createCoverIndex,
             mediaItems: state.createFinalizedItems.map(item => ({ ...item })),
             cover,
             avatar: currentUser.avatar,
@@ -347,6 +355,7 @@ export function resumeCreateDraft(id) {
     if (!mayInteract()) return;
     const draft = unexpiredDrafts(state.draftItems).find(item => item.id === id);
     if (!draft) return;
+    state.createOriginView=state.currentView;
     openCreateUpload(draft.type);
     state.activeDraftId = draft.id;
     state.createMediaItems = draft.items.map(item => ({ ...item, layout:draft.type==='reel'?'reel':'post' }));

@@ -1,3 +1,5 @@
+import { feed } from '../core/dom.js';
+import { currentUser } from '../data/sample-data.js';
 import { openReportPanel } from './home-controls.js';
 import { state } from '../core/state.js';
 import { changeFollow, isFollowing, mediaKey, mayInteract, canViewMedia } from '../core/social.js';
@@ -19,12 +21,12 @@ export function handlePostOption(option, post, type, control) {
         return;
     }
     if (option === "edit" || option === "delete") {
-        if (!canManageProfileMedia(type, post, control))
-            return;
+        const fromHome=option==='delete'&&state.currentView==='home'&&post.handle===currentUser.handle&&feed.contains(control);
+        if (!fromHome&&!canManageProfileMedia(type, post, control))return;
         if (option === "edit")
             openMediaEditor(type, post);
         else
-            openMediaDeleteConfirmation(type, post);
+            openMediaDeleteConfirmation(type, post, { fromHome });
         return;
     }
     if (option === "download") {

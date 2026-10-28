@@ -1,10 +1,11 @@
+import { registerCaptionSuggestions } from './caption-suggestions.js';
 import { persistSession } from '../storage/local-session.js';
 import { showShareFeedback } from '../components/feedback.js';
 import { createMenuBackdrop, createUploadBackdrop } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { mayInteract } from '../core/social.js';
 import {
-    syncCreateCaptionPreview, finalizeCreateMedia, setCreateDetails, renderCreatePreview, saveCreateDraft, resumeCreateDraft, startCreateEditing, renderCreateTags, searchCreateTagAccounts,
+    dismissCreateExit, syncCreateCaptionPreview, finalizeCreateMedia, setCreateDetails, renderCreatePreview, saveCreateDraft, resumeCreateDraft, startCreateEditing, renderCreateTags, searchCreateTagAccounts,
     closeCreateMenu,
     closeCreateUpload,
     getSupportedStoryFileType,
@@ -26,6 +27,8 @@ export function handleOpenCreateClick(event) {
 }
 
 export function handleCreateUploadClick(event) {
+    if(event.target.closest('.create-keep-editing')){dismissCreateExit();document.querySelector('.create-upload-close').focus();return true;}
+    if(event.target.closest('.create-confirm-save')){dismissCreateExit();saveCreateDraft();return true;}
     if(event.target.closest('.create-next')){finalizeCreateMedia();return true;}
     if(event.target.closest('.create-back-to-edit')){setCreateDetails(false);return true;}
     if(event.target.closest('.create-add-media')){state.createAppending=true;document.getElementById('post-upload').value='';document.getElementById('post-upload').click();return true;}
@@ -75,6 +78,9 @@ export function handleCreateUploadClick(event) {
 }
 
 export function registerMediaUploadEvents() {
+    registerCaptionSuggestions(syncCreateCaptionPreview);
+    document.querySelector('.create-exit-dialog').addEventListener('cancel',event=>{event.preventDefault();event.stopPropagation();dismissCreateExit();});
+    document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.querySelector('.create-exit-dialog').open){event.preventDefault();event.stopImmediatePropagation();dismissCreateExit();document.querySelector('.create-upload-close').focus();}},true);
     document.getElementById('create-tag-search').addEventListener('input',renderCreateTags);
     document.getElementById('create-caption').addEventListener('input',syncCreateCaptionPreview);
     document.getElementById('create-caption').addEventListener('scroll',syncCreateCaptionPreview);

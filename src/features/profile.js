@@ -1,3 +1,5 @@
+import { persistSession, unexpiredDrafts } from '../storage/local-session.js';
+import { setView } from '../core/navigation.js';
 import { showShareFeedback } from '../components/feedback.js';
 import { renderPostCards } from '../components/post-card.js';
 import {
@@ -134,6 +136,7 @@ export function renderProfile() {
     const taggedPosts = posts.filter((post) => accessible && canViewMedia(post) && (post.taggedUsers || []).some(handle => normalizeHandle(handle) === normalizeHandle(state.profileHandle)));
     const taggedReels = reels.filter((reel) => accessible && canViewMedia(reel) && (reel.taggedUsers || []).some(handle => normalizeHandle(handle) === normalizeHandle(state.profileHandle)));
     const isOwnProfile = state.profileHandle === currentUser.handle;
+    const drafts=isOwnProfile?unexpiredDrafts(state.draftItems):[];
     const canViewHighlights = accessible;
     const savedCollection = isOwnProfile
         ? [
@@ -165,7 +168,7 @@ export function renderProfile() {
         </div>
         <p>${escapeHtml(user.bio)}</p>
         <div class="profile-links">${(user.links || []).map(link => `<button type="button" data-profile-link="${escapeHtml(link)}">${escapeHtml(link)}</button>`).join('')}</div>
-        ${isOwnProfile ? '<button class="profile-create-button" type="button" aria-label="Create a post or reel"><span aria-hidden="true">+</span> post</button>' : ""}
+        ${isOwnProfile ? `<button class="profile-create-button" type="button" aria-label="Create a post or reel"><span aria-hidden="true">+</span> post</button><button class="profile-drafts-button" type="button" data-profile-section="drafts" aria-pressed="${state.activeProfileSection==='drafts'}">Drafts · ${drafts.length}</button>` : ""}
       </div>
     </header>
     ${accessible ? '' : `<p class="private-profile-note">${state.blockedHandles.has(state.profileHandle) ? 'This account is blocked. Unblock it from Settings to restore search and request access.' : 'This account is private. Send a follow request to view their profile photo and content.'}</p>`}
@@ -191,6 +194,7 @@ export function renderProfile() {
         ${savedCollection.length ? savedCollection.map(({ type, entity }) => renderSavedTile(type, entity)).join("") : '<p class="empty-profile-posts">Posts and reels you save will appear here.</p>'}
       </div>
     </section>` : ""}
+    ${isOwnProfile?`<section class="profile-section-content" data-profile-content="drafts" ${state.activeProfileSection==='drafts'?'':'hidden'}><h3>Drafts</h3><p>Saved on this device for 7 days from the last save.</p><div class="media-grid profile-draft-grid">${drafts.length?drafts.map(draft=>`<button type="button" class="profile-draft-tile" data-resume-draft="${escapeHtml(draft.id)}">${draft.thumbnail?`<img src="${escapeHtml(draft.thumbnail)}" alt="Draft preview" />`:draft.items[0]?.type==='image'?`<img src="${escapeHtml(draft.items[0].url)}" alt="Draft preview" />`:'<span aria-hidden="true">▶</span>'}<strong>${escapeHtml(draft.caption||'Untitled '+draft.type)}</strong><span>Continue editing</span></button>`).join(''):'<p>No drafts yet.</p>'}</div></section>`:''}
     <section class="profile-section-content" data-profile-content="tags" ${state.activeProfileSection === "tags" ? "" : "hidden"}>
       <div class="media-grid profile-media-grid">
         ${[...taggedPosts.map((post) => ({ type: "post", entity: post })), ...taggedReels.map((reel) => ({ type: "reel", entity: reel }))]
@@ -245,11 +249,11 @@ export function closeMediaEditor() {
         trigger.focus();
 }
 
-export function openMediaDeleteConfirmation(type, entity) {
-    if (!mayInteract() || !canViewMedia(entity)) return;
-    state.activeMediaDelete = { type, id: entity.id };
-    document.getElementById("media-delete-title").textContent = type === "reel" ? "Delete reel?" : "Delete post?";
-    document.getElementById("media-delete-message").textContent = "This can't be undone. The media will be removed from your profile and saved collection.";
+export function openMediaDeleteConfirmation(type, entity, { fromHome = false } = {}) {
+    if (!mayInteract() || !canViewMedia(entity) || entity.handle!==currentUser.handle) return;
+    state.activeMediaDelete = { type, id: entity.id, origin:fromHome?'home':'profile' };
+    document.getElementById("media-delete-title").textContent = type === "reel" ? "Remove reel?" : "Remove post?";
+    document.getElementById("media-delete-message").textContent = "Move it to drafts to keep editing, or delete it permanently. Either choice removes it from your published posts.";
     mediaDeleteBackdrop.hidden = false;
     document.getElementById("media-delete-cancel").focus();
 }
@@ -266,10 +270,10 @@ export function updateProfileMediaAfterEdit(type, id) {
     renderProfileViewerAt(type, id);
 }
 
-export function deleteProfileMedia(type, id) {
+export function deleteProfileMedia(type, id, { fromHome = false } = {}) {
     if (!mayInteract()) return false;
     const entity = findEntity(type, id);
-    if (!entity || entity.handle !== currentUser.handle || state.profileHandle !== currentUser.handle)
+    if (!entity || entity.handle !== currentUser.handle || (fromHome ? state.currentView!=='home' : state.profileHandle !== currentUser.handle))
         return false;
     const collection = type === "reel" ? reels : posts;
     const previousIndex = getProfileMediaCollection().findIndex((item) => item.type === type && item.entity.id === id);
@@ -279,6 +283,7 @@ export function deleteProfileMedia(type, id) {
     collection.splice(entityIndex, 1);
     state.savedItems.delete(getSavedItemKey(type, id));
     const persisted = persistSavedItems();
+    if(fromHome){setView('home');showShareFeedback(persisted?'Your post was deleted.':"Your post was deleted, but saved collection storage couldn't be updated.");return true;}
     renderProfile();
     const nextCollection = getProfileMediaCollection();
     if (!nextCollection.length) {
@@ -292,4 +297,23 @@ export function deleteProfileMedia(type, id) {
     renderProfileViewerAt(nextItem.type, nextItem.entity.id);
     showShareFeedback(persisted ? "Your media was deleted." : "Your media was deleted, but saved collection storage couldn't be updated.");
     return true;
+}
+
+export function draftFromPublishedMedia(type, entity, now=Date.now()) {
+    const items=entity.mediaItems?.length?entity.mediaItems.map(item=>({...item})):[{type:type==='reel'||entity.mediaType==='video'?'video':'image',url:type==='reel'?entity.video:entity.mediaType==='video'?entity.videoUrl:entity.media,fit:'contain',x:50,y:50,ratio:'original',layout:type==='reel'?'reel':'post'}];
+    return {id:`draft-${type}-${entity.id}-${now}`,type,savedAt:now,sourceId:entity.id,items,coverIndex:Math.min(entity.coverIndex||0,items.length-1),caption:entity.caption||'',location:entity.location||'',tags:(entity.taggedUsers||entity.taggedHandles||[]).join(','),thumbnail:entity.cover||entity.poster||'',schedule:''};
+}
+export async function movePublishedMediaToDraft(type,id,{fromHome=false}={}) {
+    if(!mayInteract()||state.movingMediaToDraft)return false;
+    const entity=findEntity(type,id);
+    if(!entity||entity.handle!==currentUser.handle||!canViewMedia(entity)||(fromHome?state.currentView!=='home':state.profileHandle!==currentUser.handle))return false;
+    const collection=type==='reel'?reels:posts,index=collection.indexOf(entity),previousDrafts=state.draftItems;
+    if(index<0)return false;
+    state.movingMediaToDraft=true;
+    state.draftItems=[...unexpiredDrafts(previousDrafts),draftFromPublishedMedia(type,entity)];collection.splice(index,1);
+    try {await persistSession();}
+    catch {collection.splice(index,0,entity);state.draftItems=previousDrafts;state.movingMediaToDraft=false;showShareFeedback('Could not save the draft. Your published post is unchanged.');return false;}
+    state.movingMediaToDraft=false;state.savedItems.delete(getSavedItemKey(type,id));persistSavedItems();
+    closeProfileMedia();setView(state.currentView);
+    showShareFeedback('Moved to drafts. Find it on your profile; saved for 7 days.');return true;
 }

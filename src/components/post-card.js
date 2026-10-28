@@ -53,10 +53,8 @@ export function renderPostCards(items, target = feed) {
         <div class="post-options-wrap">
           <button class="post-options" type="button" data-action="post-options" data-entity-type="${post.reel ? "reel" : "post"}" aria-label="${post.reel ? "Reel" : "Post"} options" aria-expanded="false">•••</button>
           <div class="post-options-menu" hidden>
-            ${canManageMedia && post.handle === currentUser.handle ? `
-              <button type="button" data-post-option="edit">Edit</button>
-              <button type="button" data-post-option="delete">Delete</button>
-            ` : ""}
+            ${canManageMedia && post.handle === currentUser.handle ? '<button type="button" data-post-option="edit">Edit</button>' : ''}
+            ${(canManageMedia || target === feed) && post.handle === currentUser.handle ? '<button type="button" data-post-option="delete">Delete</button>' : ''}
             <button type="button" data-post-option="download">Download</button>
             <button type="button" data-post-option="copy-link">Copy link</button>
             ${post.handle !== currentUser.handle ? `

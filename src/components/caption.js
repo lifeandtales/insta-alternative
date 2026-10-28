@@ -15,10 +15,18 @@ export function captionMentions(value) {
 }
 export function renderCaption(value,{interactive=true}={}) {
     const caption=String(value||'');let end=0,html='';
-    for(const mention of captionMentions(caption)) {
-        html+=escapeHtml(caption.slice(end,mention.start));
-        html+=interactive?`<button type="button" class="caption-mention" data-profile-handle="${escapeHtml(mention.handle)}" aria-label="Visit profile ${escapeHtml(mention.label)}">${escapeHtml(mention.label)}</button>`:`<span class="caption-mention">${escapeHtml(mention.label)}</span>`;
-        end=mention.end;
+    const tokens=captionMentions(caption).map(mention=>({...mention,kind:'mention'}));
+    for(const match of caption.matchAll(/#[\p{L}\p{N}_]+/gu)) {
+        if(/[\p{L}\p{N}_]/u.test(caption[match.index-1]||''))continue;
+        tokens.push({start:match.index,end:match.index+match[0].length,label:match[0],kind:'hashtag'});
+    }
+    for(const token of tokens.sort((a,b)=>a.start-b.start)) {
+        if(token.start<end)continue;
+        html+=escapeHtml(caption.slice(end,token.start));
+        const name=token.kind==='mention'?'caption-mention':'caption-hashtag';
+        const attributes=token.kind==='mention'?`data-profile-handle="${escapeHtml(token.handle)}" aria-label="Visit profile ${escapeHtml(token.label)}"`:`data-search-kind="hashtag" data-search-value="${escapeHtml(token.label.slice(1))}" aria-label="View hashtag ${escapeHtml(token.label)}"`;
+        html+=interactive?`<button type="button" class="${name}" ${attributes}>${escapeHtml(token.label)}</button>`:`<span class="${name}">${escapeHtml(token.label)}</span>`;
+        end=token.end;
     }
     return html+escapeHtml(caption.slice(end));
 }

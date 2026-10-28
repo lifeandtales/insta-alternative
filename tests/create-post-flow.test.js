@@ -38,7 +38,7 @@ test('closing after file selection does not focus hidden save controls; edits st
     create.openCreateUpload('post');state.createMediaItems=[{type:'image',url:'fixture.jpg',fit:'contain',x:50,y:50}];state.createMediaUrl='fixture.jpg';
     create.closeCreateUpload();assert.equal(app.element('.create-upload-backdrop').hidden,true);
     create.openCreateUpload('post');state.createMediaItems=[{type:'image',url:'fixture.jpg',fit:'contain',x:50,y:50}];state.createMediaUrl='fixture.jpg';
-    create.startCreateEditing();create.closeCreateUpload();assert.equal(app.element('.create-upload-backdrop').hidden,false);assert.equal(app.element('.create-upload-hint').hidden,false);assert.match(app.element('.create-upload-hint').innerHTML,/Discard changes/);
+    create.startCreateEditing();create.closeCreateUpload();assert.equal(app.element('.create-upload-backdrop').hidden,false);assert.equal(app.element('.create-exit-dialog').hidden,false);create.closeCreateUpload(true);assert.equal(app.element('.create-upload-backdrop').hidden,true);
 });
 
 test('Next freezes per-item media edits and keeps caption and sharing on the details step',async()=>{
