@@ -7,6 +7,7 @@ import { showShareFeedback } from '../components/feedback.js';
 import { applyStoryComposition, storyComposition, compositionHistory, STORY_VIDEO_LIMIT_SECONDS } from './story-composition.js';
 import { storyFontStyles, getStoryFontStyle } from './story-fonts.js';
 
+const mediaPointers=new Map();
 let storyRef, history, selectedLayer, gesture, drawMode, toolSession, activeAdjustment='brightness', moveMode=false, stickerView=null, textDraft=null;
 export const storyColorSwatches=[
     ['Black','#000000'],['Charcoal','#262626'],['Dark gray','#4a4a4a'],['Gray','#6b7280'],['Slate gray','#9ca3af'],['Medium gray','#c5c5c5'],['Light gray','#e5e5e5'],['Pale gray','#f5f5f5'],['White','#ffffff'],
@@ -94,6 +95,8 @@ function fadeAlignmentGuides(){const revision=guideRevision;setTimeout(()=>{if(r
 
 function ensureHistory(){
     if(storyRef!==pending()){
+        for(const pointerId of mediaPointers.keys()){if(preview().hasPointerCapture?.(pointerId))preview().releasePointerCapture(pointerId);}
+        mediaPointers.clear();gesture=null;
         clearAlignmentGuides();hideDeleteTarget();closeInlineText();resetStoryMode();storyRef=pending();history=storyRef?compositionHistory(storyRef.edits):null;selectedLayer=null;drawMode=null;moveMode=false;
     }
     return history;
@@ -451,7 +454,7 @@ export function registerStoryToolEvents(){
         },160);
     },true);
     const stage=preview();
-    const pointers=new Map();
+    const pointers=mediaPointers;
     const pair=()=>{const [a,b]=[...pointers.values()];return {distance:Math.hypot(b.x-a.x,b.y-a.y),angle:Math.atan2(b.y-a.y,b.x-a.x),x:(a.x+b.x)/2,y:(a.y+b.y)/2};};
     stage.addEventListener('pointerdown',event=>{
         if((toolSession&&toolSession.kind!=='draw')||!pending() || !mayInteract() || event.target.closest('audio, .story-music-toggle, button') || !document.querySelector('.story-inline-text').hidden)return;
@@ -463,16 +466,16 @@ export function registerStoryToolEvents(){
         if(pointers.size===2 && !drawMode){
             // Start from the on-screen single-finger position without losing that movement.
             const e=storyComposition(gesture?.next||currentComposition());
-            gesture={e,rect:stage.getBoundingClientRect(),mode:'pinch',layer:gesture?.mode==='layer'?gesture.layer:null,pair:pair()};return;
+            gesture={story:pending(),e,rect:stage.getBoundingClientRect(),mode:'pinch',layer:gesture?.mode==='layer'?gesture.layer:null,pair:pair()};return;
         }
         if(pointers.size===2)return;
         const layer=drawMode?null:event.target.closest('.story-composition-layer');
         const rect=stage.getBoundingClientRect(),point={x:clamp((event.clientX-rect.left)/rect.width,0,1),y:clamp((event.clientY-rect.top)/rect.height,0,1)};
         if(layer){selectedLayer=layer.dataset.layerId;layer.classList.add('story-layer-selected');}
-        gesture={e:currentComposition(),point,rect,layer:layer?.dataset.layerId,draw:drawMode?{id:id(),type:'draw',...drawMode,points:[point]}:null,mode:drawMode?'draw':layer?'layer':'media'};
+        gesture={story:pending(),e:currentComposition(),point,rect,layer:layer?.dataset.layerId,draw:drawMode?{id:id(),type:'draw',...drawMode,points:[point]}:null,mode:drawMode?'draw':layer?'layer':'media'};
     });
     stage.addEventListener('pointermove',event=>{
-        if(!gesture || !pointers.has(event.pointerId))return;
+        if(!gesture || gesture.story!==pending() || !pointers.has(event.pointerId))return;
         pointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
         const e=storyComposition(gesture.e);
         if(gesture.mode==='pinch'){
@@ -507,7 +510,7 @@ export function registerStoryToolEvents(){
     });
     stage.addEventListener('pointerup',event=>{
         pointers.delete(event.pointerId);
-        if(gesture){const next=gesture.next,layerId=gesture.layer;
+        if(gesture&&gesture.story===pending()){const next=gesture.next,layerId=gesture.layer;
             if(next&&gesture.deleteDrop&&layerId)next.layers=next.layers.filter(item=>item.id!==layerId);
             const tappedLayer=!next&&layerId?gesture.e.layers.find(item=>item.id===layerId):null;
             gesture=null;pointers.clear();hideDeleteTarget();if(next)commitStoryEdit(next);fadeAlignmentGuides();
@@ -515,7 +518,9 @@ export function registerStoryToolEvents(){
             else if(tappedLayer?.type==='location')openInlineLocation(layerId);
         }
     });
-    stage.addEventListener('pointercancel',()=>{pointers.clear();gesture=null;hideDeleteTarget();clearAlignmentGuides();repaint();});
+    const cancelMediaGesture=()=>{pointers.clear();gesture=null;hideDeleteTarget();clearAlignmentGuides();repaint();};
+    stage.addEventListener('pointercancel',cancelMediaGesture);
+    stage.addEventListener('lostpointercapture',()=>{if(gesture)cancelMediaGesture();});
     stage.addEventListener('keydown',event=>{
         const target=event.target.closest('.story-composition-layer');if(!target || !['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key) || !mayInteract())return;
         event.preventDefault();const e=storyComposition(pending().edits),layer=e.layers.find(item=>item.id===target.dataset.layerId);if(!layer)return;

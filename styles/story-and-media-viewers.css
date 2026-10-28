@@ -1037,3 +1037,18 @@ body.video-fullscreen-open {
 
 .story-sticker-search { flex: 0 0 auto; display: block; box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px 14px; margin: 0 0 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface, #fff); color: var(--text); font: inherit; }
 .story-sticker-search:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* A fresh upload occupies one stable canvas; intrinsic image dimensions never move its center. */
+.story-editing .story-selected-preview > :is(img, video) {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  object-fit: contain;
+  object-position: center;
+  transform-origin: center;
+}

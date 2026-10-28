@@ -354,3 +354,32 @@ test('emoji names and symbols search the full catalog; sticker and GIF searches 
     click({target:target('[data-story-sticker-section]',{storyStickerSection:'emojis'})});
     assert.match(app.element('.story-tool-options').innerHTML,/value="giraffe"/);
 });
+
+test('an interrupted media pinch cannot move or scale the next uploaded Story',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js');
+    const tools=app.exportsOf('src/features/story-tools.js'),stage=app.element('.story-selected-preview');
+    stage.getBoundingClientRect=()=>({left:0,top:0,width:400,height:800});
+    stage.setPointerCapture=()=>{};
+    const fire=(type,event)=>app.listeners.find(l=>l.key==='.story-selected-preview'&&l.type===type).callback(event);
+    const point=(pointerId,x,y)=>({pointerId,clientX:x,clientY:y,target:{closest:()=>null},preventDefault(){}});
+    state.pendingStoryMedia={type:'image',media:'first.png'};tools.prepareStoryTools();
+    fire('pointerdown',point(1,100,200));fire('pointerdown',point(2,300,200));
+    fire('pointermove',point(2,390,500));
+    state.pendingStoryMedia={type:'image',media:'second.png'};tools.prepareStoryTools();
+    fire('pointermove',point(1,390,700));fire('pointerup',point(2,390,700));
+    assert.equal(state.pendingStoryMedia.edits,undefined,'previous fingers cannot commit a transform to the new upload');
+    fire('pointerdown',point(3,200,400));fire('pointermove',point(3,240,400));fire('pointerup',point(3,240,400));
+    assert.equal(state.pendingStoryMedia.edits.media.zoom,1);
+    assert.ok(Math.abs(state.pendingStoryMedia.edits.media.x-10)<.001);
+    assert.equal(state.pendingStoryMedia.edits.media.y,0);
+});
+
+test('lost capture cancels an unfinished gesture without saving its transform',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js');
+    const tools=app.exportsOf('src/features/story-tools.js'),stage=app.element('.story-selected-preview');
+    stage.getBoundingClientRect=()=>({left:0,top:0,width:400,height:800});stage.setPointerCapture=()=>{};
+    state.pendingStoryMedia={type:'image',media:'photo.png'};tools.prepareStoryTools();
+    const fire=(type,x,y)=>app.listeners.find(l=>l.key==='.story-selected-preview'&&l.type===type).callback({pointerId:1,clientX:x,clientY:y,target:{closest:()=>null},preventDefault(){}});
+    fire('pointerdown',100,200);fire('pointermove',300,700);fire('lostpointercapture',300,700);fire('pointerup',300,700);
+    assert.equal(state.pendingStoryMedia.edits,undefined);
+});
