@@ -383,3 +383,22 @@ test('lost capture cancels an unfinished gesture without saving its transform',a
     fire('pointerdown',100,200);fire('pointermove',300,700);fire('lostpointercapture',300,700);fire('pointerup',300,700);
     assert.equal(state.pendingStoryMedia.edits,undefined);
 });
+
+test('footer controls fade only during a drag near their area and restore on release or cancellation',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js');
+    const tools=app.exportsOf('src/features/story-tools.js'),stage=app.element('.story-selected-preview'),dialog=app.element('.story-create-dialog'),footer=app.element('.story-editor-controls');
+    footer.hidden=false;footer.getBoundingClientRect=()=>({left:0,top:600,right:400,bottom:800});
+    stage.getBoundingClientRect=()=>({left:0,top:0,width:400,height:800});stage.setPointerCapture=()=>{};
+    state.pendingStoryMedia={type:'image',media:'photo.png'};tools.prepareStoryTools();
+    const fire=(type,x,y)=>app.listeners.find(l=>l.key==='.story-selected-preview'&&l.type===type).callback({pointerId:1,clientX:x,clientY:y,target:{closest:()=>null},preventDefault(){}});
+    fire('pointerdown',100,200);fire('pointermove',100,400);
+    assert.equal(dialog.classList.contains('story-footer-drag-over'),false);
+    fire('pointermove',100,650);assert.equal(dialog.classList.contains('story-footer-drag-over'),true);
+    fire('pointermove',100,400);assert.equal(dialog.classList.contains('story-footer-drag-over'),false);
+    fire('pointermove',100,650);fire('pointerup',100,650);assert.equal(dialog.classList.contains('story-footer-drag-over'),false);
+    fire('pointerdown',100,400);fire('pointermove',100,650);fire('pointercancel',100,650);
+    assert.equal(dialog.classList.contains('story-footer-drag-over'),false);
+    tools.updateStoryEditorDrag({clientX:100,clientY:650});
+    state.pendingStoryMedia={type:'image',media:'next.png'};tools.prepareStoryTools();
+    assert.equal(dialog.classList.contains('story-footer-drag-over'),false);
+});

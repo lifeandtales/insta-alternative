@@ -93,10 +93,17 @@ function showCenterGuides(snap){guideRevision++;preview().classList.toggle('stor
 function fadeAlignmentGuides(){const revision=guideRevision;setTimeout(()=>{if(revision===guideRevision)clearAlignmentGuides();},650);}
 
 
+export function updateStoryEditorDrag(point=null){
+    const footer=document.querySelector('.story-editor-controls');
+    const rect=footer.getBoundingClientRect();
+    const threshold=document.querySelector('.story-create-dialog').classList.contains('story-footer-drag-over')?48:24;
+    const over=Boolean(point && !footer.hidden && point.clientY>=rect.top-threshold && point.clientY<=rect.bottom && point.clientX>=rect.left && point.clientX<=rect.right);
+    document.querySelector('.story-create-dialog').classList.toggle('story-footer-drag-over',over);
+}
 function ensureHistory(){
     if(storyRef!==pending()){
         for(const pointerId of mediaPointers.keys()){if(preview().hasPointerCapture?.(pointerId))preview().releasePointerCapture(pointerId);}
-        mediaPointers.clear();gesture=null;
+        mediaPointers.clear();gesture=null;updateStoryEditorDrag();
         clearAlignmentGuides();hideDeleteTarget();closeInlineText();resetStoryMode();storyRef=pending();history=storyRef?compositionHistory(storyRef.edits):null;selectedLayer=null;drawMode=null;moveMode=false;
     }
     return history;
@@ -505,10 +512,12 @@ export function registerStoryToolEvents(){
                 gesture.deleteDrop=updateDeleteTarget(event);
             }
         }
+        if(gesture.mode!=='draw')updateStoryEditorDrag(event);
         gesture.next=e;applyStoryComposition(stage,{...pending(),edits:e},{editing:true});
         if(gesture.layer){const selected=stage.querySelector(`[data-layer-id="${gesture.layer}"]`);selected?.classList.add('story-layer-selected');if(gesture.overlayAngleSnapped)selected?.classList.add('story-overlay-angle-snapped');}
     });
     stage.addEventListener('pointerup',event=>{
+        updateStoryEditorDrag();
         pointers.delete(event.pointerId);
         if(gesture&&gesture.story===pending()){const next=gesture.next,layerId=gesture.layer;
             if(next&&gesture.deleteDrop&&layerId)next.layers=next.layers.filter(item=>item.id!==layerId);
@@ -518,7 +527,7 @@ export function registerStoryToolEvents(){
             else if(tappedLayer?.type==='location')openInlineLocation(layerId);
         }
     });
-    const cancelMediaGesture=()=>{pointers.clear();gesture=null;hideDeleteTarget();clearAlignmentGuides();repaint();};
+    const cancelMediaGesture=()=>{updateStoryEditorDrag();pointers.clear();gesture=null;hideDeleteTarget();clearAlignmentGuides();repaint();};
     stage.addEventListener('pointercancel',cancelMediaGesture);
     stage.addEventListener('lostpointercapture',()=>{if(gesture)cancelMediaGesture();});
     stage.addEventListener('keydown',event=>{

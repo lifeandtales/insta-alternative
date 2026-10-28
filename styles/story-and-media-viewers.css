@@ -1052,3 +1052,9 @@ body.video-fullscreen-open {
   object-position: center;
   transform-origin: center;
 }
+
+.story-editing .story-editor-controls { transition: opacity 140ms ease; }
+.story-editing.story-footer-drag-over .story-editor-controls { opacity: .12; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .story-editing .story-editor-controls { transition: none; }
+}
