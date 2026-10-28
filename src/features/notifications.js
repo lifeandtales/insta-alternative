@@ -105,7 +105,7 @@ export function updateNotificationBadge() {
     if (!badge) return;
     const count = (state.localStoryNotifications || []).filter(notice => notice.recipient === currentUser.handle && !notice.read).length;
     badge.hidden = count === 0;
-    badge.textContent = count > 9 ? '9+' : String(count);
+    badge.textContent = count ? (count > 9 ? '9+' : String(count)) : '';
     document.querySelector('.home-notifications')?.setAttribute('aria-label', count ? `Notifications, ${count} unread` : 'Notifications');
 }
 
@@ -138,6 +138,12 @@ export function openNotifications(button) {
     document.body.classList.add('notifications-open');
     document.querySelector('.notifications-backdrop').hidden = false;
     document.querySelector('.notifications-close').focus();
+    let changed=false;
+    for(const notice of state.localStoryNotifications || []){
+        if(notice.recipient===currentUser.handle && !notice.read){notice.read=true;changed=true;}
+    }
+    if(changed)persistPreferences();
+    updateNotificationBadge();
 }
 
 export function registerNotificationEvents() {
