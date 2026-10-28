@@ -28,7 +28,6 @@ export function handleOpenCreateClick(event) {
 
 export function handleCreateUploadClick(event) {
     if(event.target.closest('.create-keep-editing')){dismissCreateExit();document.querySelector('.create-upload-close').focus();return true;}
-    if(event.target.closest('.create-confirm-save')){dismissCreateExit();saveCreateDraft();return true;}
     if(event.target.closest('.create-next')){finalizeCreateMedia();return true;}
     if(event.target.closest('.create-back-to-edit')){setCreateDetails(false);return true;}
     if(event.target.closest('.create-add-media')){state.createAppending=true;document.getElementById('post-upload').value='';document.getElementById('post-upload').click();return true;}
@@ -54,7 +53,6 @@ export function handleCreateUploadClick(event) {
         if (video) state.createMediaItems[index].coverTime = video.currentTime;
         state.createCoverIndex = index; renderCreatePreview(); return true;
     }
-    if (event.target.closest('.create-save-draft')) { saveCreateDraft(); return true; }
     if (event.target.closest('.create-discard')) { closeCreateUpload(true); return true; }
     const createTypeButton = event.target.closest("[data-create-type]");
     if (createTypeButton) {

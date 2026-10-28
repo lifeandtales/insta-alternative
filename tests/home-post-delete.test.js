@@ -28,3 +28,10 @@ test('failed draft storage leaves the published post intact',async()=>{
     state.currentView='home';const post={...posts[0],id:99912,handle:currentUser.handle};posts.unshift(post);const count=state.draftItems.length;
     assert.equal(await movePublishedMediaToDraft('post',post.id,{fromHome:true}),false);assert.ok(posts.includes(post));assert.equal(state.draftItems.length,count);
 });
+
+test('post and reel draft options are hidden while stored drafts remain intact',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js'),{currentUser,posts}=app.exportsOf('src/data/sample-data.js'),profile=app.exportsOf('src/features/profile.js');
+    state.profileHandle=currentUser.handle;state.activeProfileSection='drafts';state.draftItems=[{id:'saved-draft',savedAt:Date.now(),type:'post',items:[{type:'image',url:'saved.jpg'}]}];
+    profile.renderProfile();assert.doesNotMatch(app.element('#profile-view').innerHTML,/profile-drafts-button|data-profile-content="drafts"/);assert.equal(state.draftItems.length,1);assert.equal(state.activeProfileSection,'posts');
+    profile.openMediaDeleteConfirmation('post',posts.find(post=>post.handle===currentUser.handle));assert.doesNotMatch(app.element('#media-delete-message').textContent,/draft/i);
+});

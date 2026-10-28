@@ -1187,3 +1187,8 @@ button.caption-hashtag:focus-visible { outline:2px solid currentColor; outline-o
 .profile-draft-tile img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:8px; }
 .profile-draft-tile strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .profile-draft-tile span { font-size:.8rem; }
+.post-carousel { position:relative; }
+.post-carousel > .carousel-index { z-index:2; pointer-events:none; opacity:1; transition:opacity .2s ease; }
+.post-carousel > .carousel-index.counter-hidden { opacity:0; }
+@media (prefers-reduced-motion:reduce) { .post-carousel > .carousel-index { transition:none; } }
+.create-editor-actions { grid-template-columns:1fr; }

@@ -1,3 +1,4 @@
+import { initializePostCarousels } from '../media/carousel.js';
 import { renderCaption } from './caption.js';
 import { renderEditedMedia } from '../features/post-media.js';
 import { feed, profilePostViewerContent } from '../core/dom.js';
@@ -21,7 +22,7 @@ export function renderMedia(post, className = "post-image", type = "post") {
         return `<div class="sensitive-media" data-media-class="${escapeHtml(className)}"><img class="${className}" src="${escapeHtml(post.cover || post.poster || post.media || '')}" alt="Sensitive media obscured" /><div class="sensitive-media-warning"><strong>Sensitive content</strong><p>This media may contain sensitive content.</p>${state.viewerAgeBand === 'minor' ? '<p>Unavailable for under-18 accounts.</p>' : `<button type="button" data-media-reveal="${post.id}" data-entity-type="${type}">View content</button>`}</div></div>`;
     }
     if (post.mediaItems?.length) {
-        return `<div class="post-carousel" aria-label="${post.mediaItems.length} media items"><div class="carousel-slides" tabindex="0">${post.mediaItems.map((item, index) => `<div class="carousel-slide likeable-media" data-likeable-id="${post.id}" data-likeable-type="${type}" role="group" aria-label="${index + 1} of ${post.mediaItems.length}">${renderEditedMedia(item,{className,alt:`${post.user} media ${index+1}`})}<span class="double-like-heart" aria-hidden="true">♥</span><span class="carousel-index">${index + 1}/${post.mediaItems.length}</span></div>`).join('')}</div><small>Swipe left or right · ${post.mediaItems.length} items</small></div>`;
+        return `<div class="post-carousel" aria-label="${post.mediaItems.length} media items"><div class="carousel-slides" tabindex="0">${post.mediaItems.map((item, index) => `<div class="carousel-slide likeable-media" data-likeable-id="${post.id}" data-likeable-type="${type}" role="group" aria-label="${index + 1} of ${post.mediaItems.length}">${renderEditedMedia(item,{className,alt:`${post.user} media ${index+1}`})}<span class="double-like-heart" aria-hidden="true">♥</span></div>`).join('')}</div>${post.mediaItems.length>1?`<span class="carousel-index" role="status" aria-live="polite" aria-label="Item 1 of ${post.mediaItems.length}">1/${post.mediaItems.length}</span>`:''}</div>`;
     }
     if (post.mediaType === "video" || type === "reel") {
         const poster = type === "reel" ? post.poster : post.media;
@@ -86,5 +87,6 @@ export function renderPostCards(items, target = feed) {
       </div>
     </article>
   `).join("") : '<p class="feed-empty">You’re all caught up. New posts from people you follow will appear here.</p>';
+    initializePostCarousels(target);
     observePostVideos(target);
 }

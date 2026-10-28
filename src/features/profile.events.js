@@ -17,7 +17,7 @@ import {
     closeMediaDeleteConfirmation,
     closeMediaEditor,
     closeProfileMedia,
-    movePublishedMediaToDraft, deleteProfileMedia,
+    deleteProfileMedia,
     openProfileMedia,
     renderProfile,
     updateProfileMediaAfterEdit,
@@ -107,13 +107,6 @@ export function registerProfileEditorEvents() {
         try { await persistSession(); }
         catch { showShareFeedback('The post updated in this preview, but local storage could not save the thumbnail.'); return; }
         showShareFeedback(`${type === "reel" ? "Reel" : "Post"} updated.`);
-    });
-    document.querySelector('.media-move-draft').addEventListener('click',async()=>{
-        if(!state.activeMediaDelete)return;
-        const {type,id,origin}=state.activeMediaDelete,buttons=document.querySelectorAll('.media-delete-dialog button');
-        buttons.forEach(button=>button.disabled=true);
-        try {if(await movePublishedMediaToDraft(type,id,{fromHome:origin==='home'}))closeMediaDeleteConfirmation();}
-        finally {buttons.forEach(button=>button.disabled=false);}
     });
     document.querySelector(".media-delete-confirm").addEventListener("click", async () => {
         if (!state.activeMediaDelete)

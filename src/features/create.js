@@ -78,7 +78,6 @@ export function openCreateUpload(type) {
     document.querySelector('.create-tag-selected').replaceChildren();
     document.querySelector('.create-upload-hint').hidden=true;
     document.querySelector('.create-upload-hint').textContent='';
-    document.querySelector('.create-save-draft').textContent='Save draft · 7 days';
     state.activeDraftId = null;
     state.createMediaType = type;
     state.createMediaFile = null;

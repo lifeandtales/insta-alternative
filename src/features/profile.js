@@ -136,7 +136,7 @@ export function renderProfile() {
     const taggedPosts = posts.filter((post) => accessible && canViewMedia(post) && (post.taggedUsers || []).some(handle => normalizeHandle(handle) === normalizeHandle(state.profileHandle)));
     const taggedReels = reels.filter((reel) => accessible && canViewMedia(reel) && (reel.taggedUsers || []).some(handle => normalizeHandle(handle) === normalizeHandle(state.profileHandle)));
     const isOwnProfile = state.profileHandle === currentUser.handle;
-    const drafts=isOwnProfile?unexpiredDrafts(state.draftItems):[];
+    if(state.activeProfileSection==='drafts')state.activeProfileSection='posts';
     const canViewHighlights = accessible;
     const savedCollection = isOwnProfile
         ? [
@@ -168,7 +168,7 @@ export function renderProfile() {
         </div>
         <p>${escapeHtml(user.bio)}</p>
         <div class="profile-links">${(user.links || []).map(link => `<button type="button" data-profile-link="${escapeHtml(link)}">${escapeHtml(link)}</button>`).join('')}</div>
-        ${isOwnProfile ? `<button class="profile-create-button" type="button" aria-label="Create a post or reel"><span aria-hidden="true">+</span> post</button><button class="profile-drafts-button" type="button" data-profile-section="drafts" aria-pressed="${state.activeProfileSection==='drafts'}">Drafts · ${drafts.length}</button>` : ""}
+        ${isOwnProfile ? `<button class="profile-create-button" type="button" aria-label="Create a post or reel"><span aria-hidden="true">+</span> post</button>` : ""}
       </div>
     </header>
     ${accessible ? '' : `<p class="private-profile-note">${state.blockedHandles.has(state.profileHandle) ? 'This account is blocked. Unblock it from Settings to restore search and request access.' : 'This account is private. Send a follow request to view their profile photo and content.'}</p>`}
@@ -194,7 +194,6 @@ export function renderProfile() {
         ${savedCollection.length ? savedCollection.map(({ type, entity }) => renderSavedTile(type, entity)).join("") : '<p class="empty-profile-posts">Posts and reels you save will appear here.</p>'}
       </div>
     </section>` : ""}
-    ${isOwnProfile?`<section class="profile-section-content" data-profile-content="drafts" ${state.activeProfileSection==='drafts'?'':'hidden'}><h3>Drafts</h3><p>Saved on this device for 7 days from the last save.</p><div class="media-grid profile-draft-grid">${drafts.length?drafts.map(draft=>`<button type="button" class="profile-draft-tile" data-resume-draft="${escapeHtml(draft.id)}">${draft.thumbnail?`<img src="${escapeHtml(draft.thumbnail)}" alt="Draft preview" />`:draft.items[0]?.type==='image'?`<img src="${escapeHtml(draft.items[0].url)}" alt="Draft preview" />`:'<span aria-hidden="true">▶</span>'}<strong>${escapeHtml(draft.caption||'Untitled '+draft.type)}</strong><span>Continue editing</span></button>`).join(''):'<p>No drafts yet.</p>'}</div></section>`:''}
     <section class="profile-section-content" data-profile-content="tags" ${state.activeProfileSection === "tags" ? "" : "hidden"}>
       <div class="media-grid profile-media-grid">
         ${[...taggedPosts.map((post) => ({ type: "post", entity: post })), ...taggedReels.map((reel) => ({ type: "reel", entity: reel }))]
@@ -252,8 +251,8 @@ export function closeMediaEditor() {
 export function openMediaDeleteConfirmation(type, entity, { fromHome = false } = {}) {
     if (!mayInteract() || !canViewMedia(entity) || entity.handle!==currentUser.handle) return;
     state.activeMediaDelete = { type, id: entity.id, origin:fromHome?'home':'profile' };
-    document.getElementById("media-delete-title").textContent = type === "reel" ? "Remove reel?" : "Remove post?";
-    document.getElementById("media-delete-message").textContent = "Move it to drafts to keep editing, or delete it permanently. Either choice removes it from your published posts.";
+    document.getElementById("media-delete-title").textContent = type === "reel" ? "Delete reel?" : "Delete post?";
+    document.getElementById("media-delete-message").textContent = "This can't be undone. The media will be removed from your profile, Home, and saved collection.";
     mediaDeleteBackdrop.hidden = false;
     document.getElementById("media-delete-cancel").focus();
 }

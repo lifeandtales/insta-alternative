@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=164" />
+    <link rel="stylesheet" href="styles.css?v=166" />
   </head>
   <body>
     <main id="deletion-lock" class="welcome-screen" hidden aria-labelledby="deletion-lock-title">
@@ -282,7 +282,6 @@
         <p id="media-delete-message"></p>
         <div class="media-delete-actions">
           <button id="media-delete-cancel" type="button">Cancel</button>
-          <button class="media-move-draft" type="button">Move to drafts</button>
           <button class="media-delete-confirm" type="button">Delete permanently</button>
         </div>
       </section>
@@ -491,14 +490,13 @@
               <label for="create-location">Location (optional)</label><input id="create-location" maxlength="100" />
               <label for="create-schedule">Schedule post (optional)</label><input id="create-schedule" type="datetime-local" /><small class="create-schedule-note">Local preview: scheduled posts publish when this app is open, or the next time you open it.</small>
               <p class="create-upload-hint" role="status" hidden></p>
-              <div class="create-editor-actions"><button type="button" class="create-save-draft">Save draft · 7 days</button><button class="primary-btn create-publish-button" type="button" disabled>Share post</button></div>
+              <div class="create-editor-actions"><button class="primary-btn create-publish-button" type="button" disabled>Share post</button></div>
             </div>
           </div>
         </div>
         <dialog class="create-exit-dialog" aria-labelledby="create-exit-title" hidden>
           <h3 id="create-exit-title">Leave this post?</h3>
-          <p>Save your edits as a draft, discard them, or keep editing.</p>
-          <button type="button" class="create-confirm-save">Save draft and close</button>
+          <p>Discard your changes or keep editing.</p>
           <button type="button" class="create-discard">Discard and close</button>
           <button type="button" class="create-keep-editing">Keep editing</button>
         </dialog>
@@ -611,8 +609,8 @@
   "imports": {
             "./src/data/story-emojis.js": "./src/data/story-emojis.js?v=135",
     "./src/components/feedback.js": "./src/components/feedback.js?v=135",
-    "./src/components/caption.js": "./src/components/caption.js?v=164",
-    "./src/components/post-card.js": "./src/components/post-card.js?v=164",
+    "./src/components/caption.js": "./src/components/caption.js?v=166",
+    "./src/components/post-card.js": "./src/components/post-card.js?v=166",
     "./src/core/account-lock.js": "./src/core/account-lock.js?v=135",
     "./src/core/dom.js": "./src/core/dom.js?v=141",
     "./src/core/events.js": "./src/core/events.js?v=135",
@@ -630,11 +628,11 @@
     "./src/features/account-settings.js": "./src/features/account-settings.js?v=135",
     "./src/features/comments.events.js": "./src/features/comments.events.js?v=135",
     "./src/features/comments.js": "./src/features/comments.js?v=135",
-    "./src/features/create.events.js": "./src/features/create.events.js?v=164",
-    "./src/features/post-media.js": "./src/features/post-media.js?v=164",
-    "./src/features/caption-suggestions.js": "./src/features/caption-suggestions.js?v=164",
-    "./src/features/create.js": "./src/features/create.js?v=164",
-    "./src/features/explore.events.js": "./src/features/explore.events.js?v=164",
+    "./src/features/create.events.js": "./src/features/create.events.js?v=166",
+    "./src/features/post-media.js": "./src/features/post-media.js?v=166",
+    "./src/features/caption-suggestions.js": "./src/features/caption-suggestions.js?v=166",
+    "./src/features/create.js": "./src/features/create.js?v=166",
+    "./src/features/explore.events.js": "./src/features/explore.events.js?v=166",
     "./src/features/explore.js": "./src/features/explore.js?v=135",
     "./src/features/follows.events.js": "./src/features/follows.events.js?v=135",
     "./src/features/follows.js": "./src/features/follows.js?v=135",
@@ -645,14 +643,14 @@
     "./src/features/likes.events.js": "./src/features/likes.events.js?v=135",
     "./src/features/likes.js": "./src/features/likes.js?v=135",
     "./src/features/media-options.events.js": "./src/features/media-options.events.js?v=135",
-    "./src/features/media-options.js": "./src/features/media-options.js?v=164",
+    "./src/features/media-options.js": "./src/features/media-options.js?v=166",
     "./src/features/message-access.js": "./src/features/message-access.js?v=135",
     "./src/features/messages.events.js": "./src/features/messages.events.js?v=135",
     "./src/features/messages.js": "./src/features/messages.js?v=135",
-    "./src/features/notifications.js": "./src/features/notifications.js?v=164",
-    "./src/features/profile.events.js": "./src/features/profile.events.js?v=164",
-    "./src/features/profile.js": "./src/features/profile.js?v=164",
-    "./src/features/reels.js": "./src/features/reels.js?v=164",
+    "./src/features/notifications.js": "./src/features/notifications.js?v=166",
+    "./src/features/profile.events.js": "./src/features/profile.events.js?v=166",
+    "./src/features/profile.js": "./src/features/profile.js?v=166",
+    "./src/features/reels.js": "./src/features/reels.js?v=166",
     "./src/features/saved.events.js": "./src/features/saved.events.js?v=135",
     "./src/features/sharing.events.js": "./src/features/sharing.events.js?v=135",
     "./src/features/sharing.js": "./src/features/sharing.js?v=135",
@@ -668,13 +666,14 @@
     "./src/features/story-options.js": "./src/features/story-options.js?v=135",
     "./src/features/story-tools.js": "./src/features/story-tools.js?v=139",
     "./src/media/demo-sources.js": "./src/media/demo-sources.js?v=135",
-    "./src/media/video.events.js": "./src/media/video.events.js?v=164",
-    "./src/media/video.js": "./src/media/video.js?v=164",
+    "./src/media/video.events.js": "./src/media/video.events.js?v=166",
+    "./src/media/carousel.js": "./src/media/carousel.js?v=166",
+    "./src/media/video.js": "./src/media/video.js?v=166",
     "./src/storage/browser-storage.js": "./src/storage/browser-storage.js?v=135",
-    "./src/storage/local-session.js": "./src/storage/local-session.js?v=164"
+    "./src/storage/local-session.js": "./src/storage/local-session.js?v=166"
   }
 }
     </script>
-    <script type="module" src="app.js?v=164"></script>
+    <script type="module" src="app.js?v=166"></script>
   </body>
 </html>
