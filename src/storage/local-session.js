@@ -34,7 +34,7 @@ export function unexpiredDrafts(items, now = Date.now()) {
     return items.filter(item => Number.isFinite(item.savedAt) && now - item.savedAt < WEEK);
 }
 export function persistSession() {
-    const snapshot = { posts, reels, conversations, drafts: unexpiredDrafts(state.draftItems), reports: state.localReports || [] };
+    const snapshot = { posts, reels, conversations, drafts: unexpiredDrafts(state.draftItems), reports: state.localReports || [], notificationPreviews: (state.localStoryNotifications||[]).filter(notice=>notice.storyPreview).map(({storyId,recipient,storyPreview})=>({storyId,recipient,storyPreview})) };
     // Pack before the editor releases any object URLs; serialize database writes in order.
     const packed = pack(snapshot);
     writeQueue = writeQueue.catch(() => {}).then(async () => storeInstaData(KEY, await packed));
@@ -63,4 +63,10 @@ export async function loadSession() {
     repairDemoVideoSources([...posts, ...reels]);
     [...posts, ...reels].forEach(item => (item.commentItems || []).forEach((comment, index) => { comment.id ??= `restored-${item.id}-${index}`; }));
     state.localReports = restored.reports || [];
+    // Merge only media references: newer read flags stay authoritative in preferences.
+    for(const savedPreview of restored.notificationPreviews||[]){
+        for(const notice of state.localStoryNotifications||[]){
+            if(notice.storyId===savedPreview.storyId&&notice.recipient===savedPreview.recipient)notice.storyPreview=savedPreview.storyPreview;
+        }
+    }
 }

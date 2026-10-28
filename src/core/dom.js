@@ -22,6 +22,7 @@ export const createMenuBackdrop = document.querySelector(".create-menu-backdrop"
 export const createUploadBackdrop = document.querySelector(".create-upload-backdrop");
 export const viewSections = {
     home: [feed],
+    notifications: [document.getElementById("notifications-page")],
     explore: [document.getElementById("explore-grid"), exploreCommunityView],
     reels: [document.getElementById("reels-feed")],
     messages: [document.getElementById("messages-list")],

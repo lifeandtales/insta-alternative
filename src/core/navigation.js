@@ -1,3 +1,4 @@
+import { renderNotificationsPage, restoreNotificationFocus } from '../features/notifications.js';
 import { renderPostCards } from '../components/post-card.js';
 import { appShell, viewHeading, viewSections } from './dom.js';
 import { state } from './state.js';
@@ -55,6 +56,8 @@ export function setView(view, { fromHistory = false } = {}) {
         if (view !== 'messages') state.activeConversationHandle = null;
     }
     state.currentView = view;
+    document.body.classList.toggle('notifications-open',view==='notifications');
+    if(previousView==='notifications'&&view!=='notifications')restoreNotificationFocus();
     const accessNotice = document.getElementById('account-access-notice');
     accessNotice.hidden = state.verificationStatus === 'approved' && !state.deletionRequestedAt;
     accessNotice.innerHTML = state.deletionRequestedAt ? 'Deletion request pending. <button type="button" data-settings-page="deletion">Review request</button>' : 'Verification pending · browsing only. <button type="button" data-settings-page="verification">Check status</button>';
@@ -74,8 +77,9 @@ export function setView(view, { fromHistory = false } = {}) {
         sections.forEach((section) => { section.hidden = name !== view; });
     });
     const titles = { explore: "Explore public posts", reels: "Reels", messages: "Messages", profile: "Profile" };
-    viewHeading.hidden = view === 'home' || view === 'messages' || view === 'profile';
+    viewHeading.hidden = view === 'home' || view === 'messages' || view === 'profile' || view === 'notifications';
     viewHeading.textContent = titles[view] || "";
+    if (view === "notifications") renderNotificationsPage();
     if (view === "home") {
         renderStories();
         renderPostCards(getHomeFeedItems());
