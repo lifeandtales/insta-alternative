@@ -34,7 +34,7 @@ export function unexpiredDrafts(items, now = Date.now()) {
     return items.filter(item => Number.isFinite(item.savedAt) && now - item.savedAt < WEEK);
 }
 export function persistSession() {
-    const snapshot = { posts, reels, conversations, drafts: unexpiredDrafts(state.draftItems), reports: state.localReports || [], notificationPreviews: (state.localStoryNotifications||[]).filter(notice=>notice.storyPreview).map(({storyId,postId,recipient,storyPreview})=>({storyId,postId,recipient,storyPreview})) };
+    const snapshot = { posts, reels, conversations, scheduledPosts: state.scheduledPosts || [], drafts: unexpiredDrafts(state.draftItems), reports: state.localReports || [], notificationPreviews: (state.localStoryNotifications||[]).filter(notice=>notice.storyPreview).map(({storyId,postId,recipient,storyPreview})=>({storyId,postId,recipient,storyPreview})) };
     // Pack before the editor releases any object URLs; serialize database writes in order.
     const packed = pack(snapshot);
     writeQueue = writeQueue.catch(() => {}).then(async () => storeInstaData(KEY, await packed));
@@ -59,6 +59,7 @@ export async function loadSession() {
     for (const item of [...posts, ...reels]) {
         if (demoViewCounts.has(item.id)) item.views = demoViewCounts.get(item.id);
     }
+    state.scheduledPosts = restored.scheduledPosts || [];
     state.draftItems = unexpiredDrafts(restored.drafts || []);
     repairDemoVideoSources([...posts, ...reels]);
     [...posts, ...reels].forEach(item => (item.commentItems || []).forEach((comment, index) => { comment.id ??= `restored-${item.id}-${index}`; }));

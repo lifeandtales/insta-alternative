@@ -78,6 +78,7 @@ export function handleMediaSoundClick(event) {
         if (!video)
             return true;
         if (!canPlayInlineVideo(video)) return true;
+        if (video.dataset.originalAudioMuted === 'true') return true;
         video.muted = !video.muted;
         if (video.closest('.reel-card')) state.reelMuted = video.muted;
         updateSoundButton(postSoundButton, video.muted, "video");

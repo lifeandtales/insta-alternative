@@ -1,4 +1,7 @@
-import { escapeHtml, normalizeHandle } from '../core/utils.js';
+import { recordPostMentions } from './notifications.js';
+import { renderCaption } from '../components/caption.js';
+import { POST_FILTERS, bindPostFilterSwipe, bindPostTextGestures, mediaEdits, mediaFilter, mediaAspect, mediaFit, renderEditedMedia } from './post-media.js';
+import { escapeHtml, normalizeHandle, normalizeSearchText } from '../core/utils.js';
 import { mayInteract } from '../core/social.js';
 import { persistSession, unexpiredDrafts } from '../storage/local-session.js';
 import { showShareFeedback } from '../components/feedback.js';
@@ -10,7 +13,6 @@ import { currentUser, posts, reels } from '../data/sample-data.js';
 export function openCreateMenu() {
     if (!mayInteract()) { showShareFeedback('Approval is required to create content.'); return; }
     state.createOriginView = state.currentView;
-    renderDrafts();
     createMenuBackdrop.hidden = false;
     document.body.classList.add("story-overlay-open");
     document.querySelector(".create-menu-close").focus();
@@ -23,10 +25,57 @@ export function closeCreateMenu() {
     }
 }
 
+export function searchCreateTagAccounts(query){
+    const needle=normalizeSearchText(String(query||'').trim().replace(/^@/,''));
+    if(!needle)return [];
+    return state.accountDirectory.filter(account=>account.handle!==currentUser.handle&&!state.blockedHandles.has(account.handle)&&[account.name,account.handle].some(value=>normalizeSearchText(value||'').includes(needle))).sort((a,b)=>Number(state.followedAccountHandles.has(b.handle))-Number(state.followedAccountHandles.has(a.handle))||(a.name||a.handle).localeCompare(b.name||b.handle));
+}
+export function syncCreateCaptionPreview() {
+    const field=document.getElementById('create-caption'),highlight=document.querySelector('.create-caption-highlight');
+    highlight.innerHTML=renderCaption(field.value,{interactive:false})+'\n';
+    highlight.scrollTop=field.scrollTop;highlight.scrollLeft=field.scrollLeft;
+}
+export function renderCreateTags(){
+    const handles=document.getElementById('create-tags').value.split(',').map(value=>value.trim()).filter(Boolean);
+    document.querySelector('.create-tag-selected').innerHTML=handles.map(handle=>`<button type="button" data-create-tag-remove="${escapeHtml(handle)}" aria-label="Remove tag ${escapeHtml(handle)}">${escapeHtml(handle)} ×</button>`).join('');
+    const query=document.getElementById('create-tag-search').value;
+    const accounts=searchCreateTagAccounts(query);
+    document.getElementById('create-tag-results').innerHTML=!query.trim()?'':accounts.length?accounts.map(account=>`<button type="button" data-create-tag="${escapeHtml(account.handle)}" aria-pressed="${handles.includes(account.handle)}"><strong>${escapeHtml(account.name)}</strong><span>${escapeHtml(account.handle)}${state.followedAccountHandles.has(account.handle)?' · Following':''}</span></button>`).join(''):'<p>No matching accounts.</p>';
+}
+export function startCreateEditing(){
+    if(!state.createMediaItems.length||!mayInteract())return false;
+    document.querySelector('.create-picker-step').hidden=true;
+    document.querySelector('.create-editor-step').hidden=false;
+    document.querySelector('.create-upload-dialog').classList.add('create-editing');
+    document.querySelector('.create-upload-backdrop').classList.add('create-editor-open');
+    document.getElementById('create-upload-title').textContent=state.createMediaType==='reel'?'Edit reel':'Edit post';
+    if(state.createCoverIndex===null)state.createCoverIndex=0;
+    setCreateDetails(false);renderCreateTags();
+    document.getElementById('create-upload-title').focus();return true;
+}
+
 export function openCreateUpload(type) {
     if (!mayInteract()) return;
     state.createMediaItems = [];
+    state.createActiveIndex = 0; state.createTool = "edit"; state.createDetailsOpen = false; state.createFinalizedItems = null; state.createAppending = false;
+    document.getElementById("create-schedule").value = "";
+    document.querySelector(".create-editor-fields").hidden = true;
+    document.querySelector(".create-media-editing").hidden = false;
     state.createCoverIndex = null;
+    document.querySelector('.create-picker-step').hidden=false;
+    document.querySelector('.create-editor-step').hidden=true;
+    document.querySelector('.create-upload-dialog').classList.remove('create-editing');
+    document.querySelector('.create-upload-backdrop').classList.remove('create-editor-open');
+    document.querySelector('.create-start-editing').disabled=true;
+    document.querySelector('.create-file-selection').textContent='';
+    document.querySelector('.create-tag-panel').hidden=true;
+    document.querySelector('.create-tag-people').setAttribute('aria-expanded','false');
+    document.getElementById('create-tag-search').value='';
+    document.getElementById('create-tag-results').replaceChildren();
+    document.querySelector('.create-tag-selected').replaceChildren();
+    document.querySelector('.create-upload-hint').hidden=true;
+    document.querySelector('.create-upload-hint').textContent='';
+    document.querySelector('.create-save-draft').textContent='Save draft · 7 days';
     state.activeDraftId = null;
     state.createMediaType = type;
     state.createMediaFile = null;
@@ -35,6 +84,7 @@ export function openCreateUpload(type) {
     state.createMediaUrl = "";
     document.getElementById("post-upload").value = "";
     document.getElementById("create-caption").value = "";
+    syncCreateCaptionPreview();
     document.getElementById('create-location').value = '';
     document.getElementById('create-tags').value = '';
     document.querySelector('.create-media-controls').hidden = true;
@@ -54,8 +104,10 @@ export function openCreateUpload(type) {
 }
 
 export function closeCreateUpload(discard = false) {
-    if (!discard && state.createMediaItems.length) {
+    if (!discard && state.createMediaItems.length && !document.querySelector('.create-editor-step').hidden) {
+        document.querySelector('.create-editor-fields').hidden=false;
         document.querySelector('.create-save-draft').textContent = 'Save draft before closing · or discard';
+        document.querySelector('.create-upload-hint').hidden=false;
         document.querySelector('.create-upload-hint').innerHTML = 'Keep your work for 7 days, or <button type="button" class="create-discard">Discard changes</button>.';
         document.querySelector('.create-save-draft').focus();
         return;
@@ -74,6 +126,10 @@ export function closeCreateUpload(discard = false) {
 
 export async function publishCreatedMedia() {
     if (!mayInteract()) return;
+    if (!state.createDetailsOpen || !state.createFinalizedItems?.length) { showShareFeedback('Tap Next to review your post first.'); return; }
+    const scheduledValue = document.getElementById('create-schedule').value;
+    const scheduledAt = scheduledValue ? new Date(scheduledValue).getTime() : null;
+    if (scheduledValue && (!Number.isFinite(scheduledAt) || scheduledAt <= Date.now())) { showShareFeedback('Choose a future date and time.'); return; }
     if (state.createCoverIndex === null) { showShareFeedback('Choose a square cover before publishing.'); return; }
     if (!state.createMediaItems.length || state.createMediaItems.length > 20) return;
     const cover = await createSquareCover(state.createMediaItems[state.createCoverIndex]);
@@ -92,6 +148,9 @@ export async function publishCreatedMedia() {
             poster: cover,
             cover,
             video: state.createMediaUrl,
+            mediaItems: state.createFinalizedItems.map(item => ({...item})),
+            originalAudioMuted: state.createFinalizedItems[0].originalAudioMuted === true,
+            taggedUsers: document.getElementById('create-tags').value.split(',').map(value=>value.trim()).filter(Boolean).map(normalizeHandle),
             caption,
             createdAt,
             likes: 0,
@@ -103,7 +162,7 @@ export async function publishCreatedMedia() {
             reel: true,
             mine: true
         };
-        reels.unshift(reel);
+        if (scheduledAt) (state.scheduledPosts ??= []).push({type:'reel',item:reel,scheduledAt}); else { reels.unshift(reel);recordPostMentions(reel); }
     }
     else {
         const post = {
@@ -113,7 +172,7 @@ export async function publishCreatedMedia() {
             location: document.getElementById('create-location').value.trim(),
             taggedHandles: document.getElementById('create-tags').value.split(',').map(value => value.trim()).filter(Boolean).map(normalizeHandle),
             taggedUsers: document.getElementById('create-tags').value.split(',').map(value => value.trim()).filter(Boolean).map(normalizeHandle),
-            mediaItems: state.createMediaItems.map(item => ({ ...item })),
+            mediaItems: state.createFinalizedItems.map(item => ({ ...item })),
             cover,
             avatar: currentUser.avatar,
             media: state.createMediaUrl,
@@ -130,11 +189,12 @@ export async function publishCreatedMedia() {
             reel: false,
             mine: true
         };
-        posts.unshift(post);
+        if (scheduledAt) (state.scheduledPosts ??= []).push({type:'post',item:post,scheduledAt}); else { posts.unshift(post);recordPostMentions(post); }
     }
     state.draftItems = state.draftItems.filter(item => item.id !== state.activeDraftId);
     try { await persistSession(); }
     catch { showShareFeedback('Published on this screen, but storage failed. Keep this page open.'); return; }
+    armScheduledPosts();
     const publishedType = state.createMediaType;
     state.createMediaUrl = "";
     state.createMediaFile = null;
@@ -149,7 +209,7 @@ export async function publishCreatedMedia() {
         setView("home");
     }
     state.createOriginView = "";
-    showShareFeedback(`Your ${publishedType} was shared.`);
+    showShareFeedback(scheduledAt ? `Your ${publishedType} is scheduled on this device.` : `Your ${publishedType} was shared to your profile.`);
 }
 
 export function getSupportedStoryFileType(file) {
@@ -172,30 +232,108 @@ export function getSupportedStoryFileType(file) {
     return null;
 }
 
-export function renderDrafts() {
-    state.draftItems = unexpiredDrafts(state.draftItems);
-    const list = document.querySelector('.local-draft-list');
-    list.innerHTML = state.draftItems.map(draft => `<div><button type="button" ${draft.type === 'story' ? 'data-resume-story-draft' : 'data-resume-draft'}="${draft.id}">Resume ${escapeHtml(draft.type)} draft · ${new Date(draft.savedAt).toLocaleDateString()}</button><button type="button" data-delete-draft="${draft.id}" aria-label="Delete draft">×</button></div>`).join('');
+export async function finalizeCreateMedia() {
+    if (!state.createMediaItems.length || state.createFinalizing) return false;
+    state.createFinalizing=true;
+    const finalizingItems=state.createMediaItems;
+    const next=document.querySelector('.create-next');next.disabled=true;next.textContent='Preparing media…';
+    try {
+        await Promise.all(state.createMediaItems.map(item=>item.naturalRatio ? Promise.resolve() : new Promise((resolve,reject)=>{
+            const media=document.createElement(item.type==='video'?'video':'img');
+            if(item.type==='video'){media.muted=true;media.preload='metadata';}
+            const timeout=window.setTimeout(()=>{media.removeAttribute('src');reject(new Error('Media load timed out'));},15000);
+            media.addEventListener(item.type==='video'?'loadedmetadata':'load',()=>{
+                clearTimeout(timeout);const width=media.naturalWidth||media.videoWidth,height=media.naturalHeight||media.videoHeight;
+                if(width&&height){item.naturalRatio=width/height;resolve();}else reject(new Error('Media dimensions unavailable'));
+            },{once:true});
+            media.addEventListener('error',()=>{clearTimeout(timeout);reject(new Error('Unsupported media'));},{once:true});media.src=item.url;
+        })));
+        if(createUploadBackdrop.hidden || state.createMediaItems!==finalizingItems)return false;
+        return setCreateDetails(true);
+    } catch { showShareFeedback('One of these files could not be opened. Try a supported photo or video.');return false; }
+    finally {state.createFinalizing=false;next.disabled=false;next.textContent='Next →';}
+}
+export function setCreateDetails(details) {
+    if (!state.createMediaItems.length) return false;
+    state.createDetailsOpen = Boolean(details);
+    state.createFinalizedItems = details ? state.createMediaItems.map(item => ({...item})) : null;
+    document.querySelector('.create-media-editing').hidden = Boolean(details);
+    document.querySelector('.create-editor-fields').hidden = !details;
+    document.getElementById('create-upload-title').textContent = details ? 'New post' : state.createMediaType === 'reel' ? 'Edit reel' : 'Edit post';
+    renderCreatePreview();
+    document.getElementById('create-upload-title').focus();
+    return true;
 }
 export function renderCreatePreview() {
     const preview = document.querySelector('.create-upload-preview');
     const controls = document.querySelector('.create-media-controls');
-    preview.hidden = !state.createMediaItems.length;
-    controls.hidden = !state.createMediaItems.length;
-    preview.innerHTML = state.createMediaItems.map((item, index) => `<div class="upload-media-item"><strong>${index + 1}</strong>${item.type === 'video' ? `<video controls playsinline muted src="${escapeHtml(item.url)}"></video>` : `<img src="${escapeHtml(item.url)}" alt="Media ${index + 1}" />`}</div>`).join('');
-    controls.innerHTML = state.createMediaItems.map((item, index) => `<fieldset><legend>Media ${index + 1}</legend><label>Frame <select data-media-fit="${index}"><option value="contain" ${item.fit === 'contain' ? 'selected' : ''}>Fit whole media</option><option value="cover" ${item.fit === 'cover' ? 'selected' : ''}>Fill / crop</option></select></label><label>Horizontal crop <input type="range" min="0" max="100" value="${item.x}" data-crop-x="${index}" /></label><label>Vertical crop <input type="range" min="0" max="100" value="${item.y}" data-crop-y="${index}" /></label><button type="button" data-choose-cover="${index}" aria-pressed="${state.createCoverIndex === index}">${state.createCoverIndex === index ? '✓ Selected square cover' : 'Use as square cover'}</button></fieldset>`).join('');
-    preview.querySelectorAll('.upload-media-item').forEach((element, index) => {
-        const media = element.querySelector('img,video');
-        const item = state.createMediaItems[index];
-        media.style.objectFit = item.fit;
-        media.style.objectPosition = `${item.x}% ${item.y}%`;
+    const index = Math.max(0, Math.min(state.createMediaItems.length - 1, state.createActiveIndex || 0));
+    state.createActiveIndex = index;
+    const item = state.createMediaItems[index];
+    preview.hidden = !item;
+    controls.hidden = !item;
+    if (!item) return;
+    const edit = mediaEdits(item), tool = state.createTool || 'edit';
+    document.querySelectorAll('[data-create-tool]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.createTool===tool)));
+    preview.innerHTML = `<div class="upload-media-item">${renderEditedMedia(item, {preview:true,alt:`Media ${index+1}`})}</div>`;
+    const bindText = () => { if (!state.createDetailsOpen) bindPostTextGestures(preview.querySelector('.post-media-stage'),item,()=>{state.createFinalizedItems=null;},()=>!state.createDetailsOpen&&!state.createFinalizing); };
+    bindText();
+    const media = preview.querySelector('img,video');
+    if (media) {
+        const rememberSize = () => {
+            const width = media.naturalWidth || media.videoWidth, height = media.naturalHeight || media.videoHeight;
+            if (width && height && !item.naturalRatio) {
+                item.naturalRatio = width / height;
+                const stage = media.closest('.post-media-stage');
+                if (stage) { stage.style.aspectRatio = String(mediaAspect(item)); stage.style.setProperty("--media-ratio",String(mediaAspect(item))); }
+            }
+        };
+        media.addEventListener(item.type === 'video' ? 'loadedmetadata' : 'load', rememberSize, {once:true});
+        rememberSize();
+        if (item.type === 'video') media.addEventListener('volumechange', () => { if (item.originalAudioMuted && !media.muted) media.muted = true; });
+    }
+    document.querySelector('.create-media-tabs').innerHTML = state.createMediaItems.map((entry, i) => `<button type="button" data-create-active="${i}" aria-pressed="${i===index}">${entry.type === 'video' ? 'Video' : 'Image'} ${i+1}</button>`).join('');
+    document.querySelector('.create-add-media').hidden = state.createDetailsOpen || state.createMediaType === 'reel';
+    document.querySelector('.create-add-media').disabled = state.createMediaItems.length >= 20;
+    const range = (key,label,min,max,value) => `<label>${label}<input type="range" data-create-edit="${key}" min="${min}" max="${max}" value="${value}" /></label>`;
+    const options = (key,label,values,current) => `<label>${label}<select data-create-edit="${key}">${values.map(([value,text])=>`<option value="${value}" ${value===current?'selected':''}>${text}</option>`).join('')}</select></label>`;
+    let fields = '';
+    if (tool === 'text') fields = `<label>Text on media<input data-create-edit="text" maxlength="200" value="${escapeHtml(edit.text)}" placeholder="Write on your image or video" /></label><small>Drag text on the preview to move it. Pinch with two fingers to resize.</small>`;
+    if (tool === 'filters') fields = `<div class="create-filter-strip" role="group" aria-label="Filters">${POST_FILTERS.map(({id:value,name:label})=>`<button type="button" data-create-filter="${value}" aria-pressed="${edit.filter===value}"><span class="create-filter-swatch" style="filter:${mediaFilter({...item,filter:value})}">${item.type==='image'?`<img src="${escapeHtml(item.url)}" alt="" draggable="false" />`:'✦'}</span><span>${label}</span></button>`).join('')}</div><small>Swipe the preview left or right to change filters.</small>`;
+    if (tool === 'ratio') fields = options('ratio','Post ratio',[['original','Original · within post limits'],['1/1','Square · 1:1'],['4/5','Portrait · 4:5'],['3/4','Tall portrait · 3:4'],['16/9','Landscape · 16:9'],['1.91/1','Wide landscape · 1.91:1'],...(state.createMediaType==='reel'?[['9/16','Full portrait · 9:16']]:[])],edit.ratio)+range('x','Horizontal crop',0,100,item.x??50)+range('y','Vertical crop',0,100,item.y??50);
+    if (tool === 'edit') fields = range('brightness','Brightness',0,200,edit.brightness)+range('contrast','Contrast',0,200,edit.contrast)+range('saturation','Saturation',0,200,edit.saturation)+`<button type="button" class="create-reset-edits">Reset adjustments</button>`;
+    if (tool === 'music') fields = '<p>Music catalog is not connected yet. Licensed music selection will be added later.</p>';
+    controls.innerHTML = fields + (item.type === 'video' ? `<label class="create-original-audio"><input type="checkbox" data-create-edit="originalAudioMuted" ${edit.originalAudioMuted?'checked':''} /> Mute original audio</label>` : '') + `<button type="button" data-choose-cover="${index}" aria-pressed="${state.createCoverIndex===index}">${state.createCoverIndex===index?'✓ Selected cover':'Use this media as cover'}</button>`;
+    if (tool === 'filters' && !state.createDetailsOpen) {
+        const selectFilter = value => { item.filter=value;state.createFinalizedItems=null;renderCreatePreview(); };
+        controls.querySelectorAll('[data-create-filter]').forEach(button=>button.addEventListener('click',()=>selectFilter(button.dataset.createFilter)));
+        const strip=controls.querySelector('.create-filter-strip'),selected=strip?.querySelector('[aria-pressed=true]');
+        if(strip&&selected)strip.scrollLeft=Math.max(0,selected.offsetLeft-strip.offsetLeft-(strip.clientWidth-selected.offsetWidth)/2);
+        bindPostFilterSwipe(preview.querySelector('.post-media-stage'),direction=>{
+            const filters=POST_FILTERS.map(filter=>filter.id),current=filters.indexOf(mediaEdits(item).filter);
+            selectFilter(filters[(current+direction+filters.length)%filters.length]);
+        });
+    }
+    controls.querySelectorAll('[data-create-edit]').forEach(control => {
+        const update = () => {
+            if (state.createDetailsOpen) return;
+            const key=control.dataset.createEdit;
+            item[key]=key==='originalAudioMuted'?control.checked:['text','filter','ratio'].includes(key)?control.value:Number(control.value);
+            state.createFinalizedItems=null;
+            preview.innerHTML=`<div class="upload-media-item">${renderEditedMedia(item,{preview:true,alt:`Media ${index+1}`})}</div>`;
+            bindText();
+            const video=preview.querySelector('video');
+            if(video)video.addEventListener('volumechange',()=>{if(item.originalAudioMuted&&!video.muted)video.muted=true;});
+        };
+        control.addEventListener('input',update);
+        control.addEventListener('change',update);
     });
     document.querySelector('.create-publish-button').disabled = state.createCoverIndex === null;
 }
 export async function saveCreateDraft() {
     if (!mayInteract()) return;
     if (!state.createMediaItems.length) return;
-    const draft = { id: state.activeDraftId || `draft-${Date.now()}`, type: state.createMediaType, savedAt: Date.now(), items: state.createMediaItems.map(item => ({ ...item })), coverIndex: state.createCoverIndex, caption: document.getElementById('create-caption').value, location: document.getElementById('create-location').value, tags: document.getElementById('create-tags').value };
+    const draft = { id: state.activeDraftId || `draft-${Date.now()}`, type: state.createMediaType, savedAt: Date.now(), items: state.createMediaItems.map(item => ({ ...item })), coverIndex: state.createCoverIndex, caption: document.getElementById('create-caption').value, location: document.getElementById('create-location').value, tags: document.getElementById('create-tags').value, schedule: document.getElementById('create-schedule').value };
     state.draftItems = state.draftItems.filter(item => item.id !== draft.id);
     state.draftItems.push(draft);
     try { await persistSession(); }
@@ -211,15 +349,17 @@ export function resumeCreateDraft(id) {
     if (!draft) return;
     openCreateUpload(draft.type);
     state.activeDraftId = draft.id;
-    state.createMediaItems = draft.items.map(item => ({ ...item }));
+    state.createMediaItems = draft.items.map(item => ({ ...item, layout:draft.type==='reel'?'reel':'post' }));
     state.createCoverIndex = draft.coverIndex;
     state.createMediaUrl = draft.items[0]?.url || '';
     state.createMediaFile = { type: draft.items[0]?.type === 'video' ? 'video/mp4' : 'image/jpeg' };
     document.getElementById('create-caption').value = draft.caption;
+    syncCreateCaptionPreview();
     document.getElementById('create-location').value = draft.location || '';
     document.getElementById('create-tags').value = draft.tags || '';
+    document.getElementById('create-schedule').value = draft.schedule || '';
     closeCreateMenu();
-    renderCreatePreview();
+    startCreateEditing();
 }
 async function createSquareCover(item) {
     const media = document.createElement(item.type === 'video' ? 'video' : 'img');
@@ -236,8 +376,42 @@ async function createSquareCover(item) {
         if (seekTo > 0) { const seeked = new Promise(resolve => media.addEventListener('seeked', resolve, { once: true })); media.currentTime = seekTo; await seeked; }
     }
     const width = media.videoWidth || media.naturalWidth, height = media.videoHeight || media.naturalHeight;
-    const size = Math.min(width, height);
-    const canvas = document.createElement('canvas'); canvas.width = 720; canvas.height = 720;
-    canvas.getContext('2d').drawImage(media, (width - size) * item.x / 100, (height - size) * item.y / 100, size, size, 0, 0, 720, 720);
+    if (!width || !height) return null;
+    const edit = mediaEdits(item), ratioParts = String(mediaAspect({...item,naturalRatio:width/height})).split('/').map(Number);
+    const ratio = ratioParts.length === 2 ? ratioParts[0]/ratioParts[1] : ratioParts[0];
+    const stage = document.createElement('canvas'); stage.width = Math.round(720*Math.min(1,ratio)); stage.height = Math.round(stage.width/ratio);
+    const context = stage.getContext('2d'); if (!context) return null;
+    context.fillStyle = '#17131d'; context.fillRect(0,0,stage.width,stage.height);
+    const scale = (mediaFit({...item,naturalRatio:width/height}) === 'cover' ? Math.max : Math.min)(stage.width/width,stage.height/height);
+    const drawWidth = width*scale, drawHeight = height*scale;
+    context.save(); context.translate(stage.width/2,stage.height/2); context.rotate(edit.rotation*Math.PI/180); context.filter = mediaFilter(item);
+    context.drawImage(media,(stage.width-drawWidth)*(item.x??50)/100-stage.width/2,(stage.height-drawHeight)*(item.y??50)/100-stage.height/2,drawWidth,drawHeight); context.restore();
+    if (edit.text) {
+        const fontSize=stage.width*edit.textSize/100;
+        context.font=`700 ${fontSize}px sans-serif`;context.fillStyle='#fff';context.textAlign='center';context.textBaseline='middle';
+        context.shadowColor='#000';context.shadowBlur=4;
+        const lines=[];for(const paragraph of edit.text.split('\n')) { let line='';for(const word of paragraph.split(' ')){const next=line?line+' '+word:word;if(line&&context.measureText(next).width>stage.width*.9){lines.push(line);line=word;}else line=next;}lines.push(line); }
+        lines.forEach((line,index)=>context.fillText(line,stage.width*edit.textX/100,stage.height*edit.textY/100+(index-(lines.length-1)/2)*fontSize*1.2,stage.width*.9));
+    }
+    const canvas=document.createElement('canvas');canvas.width=720;canvas.height=720;
+    const size=Math.min(stage.width,stage.height);canvas.getContext('2d').drawImage(stage,(stage.width-size)/2,(stage.height-size)/2,size,size,0,0,720,720);
     return canvas.toDataURL('image/jpeg', .85);
+}
+
+let scheduledPostTimer = null;
+export function processScheduledPosts(now = Date.now()) {
+    const due = (state.scheduledPosts || []).filter(entry => entry.scheduledAt <= now);
+    for (const entry of due) {
+        const target = entry.type === 'reel' ? reels : posts;
+        if (!target.some(item => item.id === entry.item.id)) { const published={...entry.item,createdAt:now};target.unshift(published);recordPostMentions(published); }
+    }
+    state.scheduledPosts = (state.scheduledPosts || []).filter(entry => entry.scheduledAt > now);
+    if (due.length) { persistSession().catch(()=>showShareFeedback('Scheduled post published, but saving failed.')); setView(state.currentView); }
+    armScheduledPosts();
+    return due.length;
+}
+export function armScheduledPosts() {
+    clearTimeout(scheduledPostTimer);
+    const next = Math.min(...(state.scheduledPosts || []).map(entry => entry.scheduledAt));
+    if (Number.isFinite(next)) scheduledPostTimer = window.setTimeout(()=>processScheduledPosts(),Math.max(0,Math.min(2147483647,next-Date.now())));
 }

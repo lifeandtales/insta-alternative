@@ -17,12 +17,14 @@ export function canPlayInlineVideo(video) {
 }
 
 export function observePostVideos(container) {
-    if (!postVideoObserver)
-        return;
     container.querySelectorAll(".likeable-media video").forEach((video) => {
+        if (video.dataset.originalAudioMuted === 'true' && !video.dataset.originalMuteBound) {
+            video.dataset.originalMuteBound = 'true'; video.muted = true;
+            video.addEventListener('volumechange', () => { if (!video.muted) video.muted = true; });
+        }
         const card = video.closest('.reel-card');
         if (card && !video.dataset.watchTracked) {
-            video.dataset.watchTracked = 'true'; video.muted = state.reelMuted;
+            video.dataset.watchTracked = 'true'; video.muted = video.dataset.originalAudioMuted === 'true' || state.reelMuted;
             let lastMediaTime = video.currentTime || 0;
             const button = card.querySelector('[data-reel-play]');
             const updatePlaybackControl = () => {
@@ -46,7 +48,7 @@ export function observePostVideos(container) {
                 }
             });
         }
-        postVideoObserver.observe(video);
+        postVideoObserver?.observe(video);
     });
 }
 

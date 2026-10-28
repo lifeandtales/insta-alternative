@@ -1,3 +1,5 @@
+import { renderCaption } from './caption.js';
+import { renderEditedMedia } from '../features/post-media.js';
 import { feed, profilePostViewerContent } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { escapeHtml, formatCount } from '../core/utils.js';
@@ -19,7 +21,7 @@ export function renderMedia(post, className = "post-image", type = "post") {
         return `<div class="sensitive-media" data-media-class="${escapeHtml(className)}"><img class="${className}" src="${escapeHtml(post.cover || post.poster || post.media || '')}" alt="Sensitive media obscured" /><div class="sensitive-media-warning"><strong>Sensitive content</strong><p>This media may contain sensitive content.</p>${state.viewerAgeBand === 'minor' ? '<p>Unavailable for under-18 accounts.</p>' : `<button type="button" data-media-reveal="${post.id}" data-entity-type="${type}">View content</button>`}</div></div>`;
     }
     if (post.mediaItems?.length) {
-        return `<div class="post-carousel" aria-label="${post.mediaItems.length} media items"><div class="carousel-slides" tabindex="0">${post.mediaItems.map((item, index) => `<div class="carousel-slide likeable-media" data-likeable-id="${post.id}" data-likeable-type="${type}" role="group" aria-label="${index + 1} of ${post.mediaItems.length}">${item.type === 'video' ? `<video class="${className}" playsinline controls preload="metadata" muted src="${escapeHtml(item.url)}" style="object-fit:${item.fit === 'cover' ? 'cover' : 'contain'};object-position:${Number(item.x)}% ${Number(item.y)}%"></video>` : `<img class="${className}" src="${escapeHtml(item.url)}" alt="${escapeHtml(post.user)} media ${index + 1}" style="object-fit:${item.fit === 'cover' ? 'cover' : 'contain'};object-position:${Number(item.x)}% ${Number(item.y)}%" />`}<span class="double-like-heart" aria-hidden="true">♥</span><span class="carousel-index">${index + 1}/${post.mediaItems.length}</span></div>`).join('')}</div><small>Swipe left or right · ${post.mediaItems.length} items</small></div>`;
+        return `<div class="post-carousel" aria-label="${post.mediaItems.length} media items"><div class="carousel-slides" tabindex="0">${post.mediaItems.map((item, index) => `<div class="carousel-slide likeable-media" data-likeable-id="${post.id}" data-likeable-type="${type}" role="group" aria-label="${index + 1} of ${post.mediaItems.length}">${renderEditedMedia(item,{className,alt:`${post.user} media ${index+1}`})}<span class="double-like-heart" aria-hidden="true">♥</span><span class="carousel-index">${index + 1}/${post.mediaItems.length}</span></div>`).join('')}</div><small>Swipe left or right · ${post.mediaItems.length} items</small></div>`;
     }
     if (post.mediaType === "video" || type === "reel") {
         const poster = type === "reel" ? post.poster : post.media;
@@ -81,7 +83,7 @@ export function renderPostCards(items, target = feed) {
             ${renderSaveButton(post.reel ? "reel" : "post", post)}
           </div>
         </div>
-        <p>${escapeHtml(post.caption)}</p>
+        <p>${renderCaption(post.caption)}</p>
         ${renderCommentSection(post)}
       </div>
     </article>

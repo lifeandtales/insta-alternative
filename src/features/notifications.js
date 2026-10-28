@@ -1,9 +1,10 @@
+import { captionMentions } from '../components/caption.js';
 import { openProfileMedia } from './profile.js';
 import { setView } from '../core/navigation.js';
 import { state } from '../core/state.js';
-import { conversations, currentUser, posts } from '../data/sample-data.js';
+import { conversations, currentUser, posts, reels } from '../data/sample-data.js';
 import { getAccount, canViewStory, canViewMedia } from '../core/social.js';
-import { escapeHtml } from '../core/utils.js';
+import { escapeHtml, normalizeHandle } from '../core/utils.js';
 import { persistPreferences } from '../storage/preferences.js';
 import { openStoryGroup, showStoryAtIndex } from './stories.js';
 import { storyComposition } from './story-composition.js';
@@ -61,12 +62,12 @@ function renderNotificationItem(item){
         const content=image?`<img src="${escapeHtml(image)}" alt="" loading="lazy" />`:preview?.type==='video'&&preview.media?`<video src="${escapeHtml(preview.media)}" muted playsinline preload="metadata" aria-hidden="true"></video>`:`<span aria-hidden="true">${available?'▶':'◷'}</span>`;
         thumbnail=`<button type="button" class="notification-story-link" data-story-notice="${escapeHtml(item.storyId)}" aria-label="${escapeHtml(label)}" ${available?'':'disabled'}>${content}</button>`;
     }
-    if(item.kind==='post-like'&&item.postId!=null){
-        const post=posts.find(post=>String(post.id)===String(item.postId));
+    if(['post-like','post-mention','post-tag'].includes(item.kind)&&item.postId!=null){
+        const post=(item.entityType==='reel'?reels:posts).find(post=>String(post.id)===String(item.postId));
         const available=post&&canViewMedia(post);
-        const preview=available?post:(item.recipient===currentUser.handle&&item.storyPreview?.owner===currentUser.handle?item.storyPreview:null);
-        const image=preview?.poster||preview?.media;
-        thumbnail=`<button type="button" class="notification-story-link" data-post-notice="${escapeHtml(String(item.postId))}" aria-label="${escapeHtml(available?`View post: ${item.text}`:'Post unavailable')}" ${available?'':'disabled'}>${image?`<img src="${escapeHtml(image)}" alt="" loading="lazy" />`:'<span aria-hidden="true">◷</span>'}</button>`;
+        const preview=available?post:(item.kind==='post-like'&&item.recipient===currentUser.handle&&item.storyPreview?.owner===currentUser.handle?item.storyPreview:null);
+        const image=preview?.cover||preview?.poster||preview?.media;
+        thumbnail=`<button type="button" class="notification-story-link" data-post-notice="${escapeHtml(String(item.postId))}" data-notice-entity-type="${item.entityType==='reel'?'reel':'post'}" aria-label="${escapeHtml(available?`View post: ${item.text}`:'Post unavailable')}" ${available?'':'disabled'}>${image?`<img src="${escapeHtml(image)}" alt="" loading="lazy" />`:'<span aria-hidden="true">◷</span>'}</button>`;
     }
     const others=item.otherCount?`<p class="notification-others">+${item.otherCount} ${item.otherCount===1?'other':'others'}</p>`:'';
     return `<li class="notification-card"><div class="notification-copy"><div class="notification-item-heading"><strong>${escapeHtml(item.title)}</strong>${notificationTime(item)}</div><p>${escapeHtml(item.text)}</p>${others}</div>${thumbnail}</li>`;
@@ -86,8 +87,8 @@ export function availableLocalNotifications() {
     }));
     const storyLikes = groupLikeNotifications((state.localStoryNotifications || []).filter(notice => notice.recipient === currentUser.handle && !state.blockedHandles.has(notice.actor))).map(notice => ({
         ...notice,
-        title: notice.kind === 'story-mention' ? 'Story mention' : notice.kind==='post-like'?'Post like':'Story like',
-        text: notice.kind === 'story-mention' ? `${notice.actorName || notice.actor} mentioned you in their story.` : `${notice.actorName || notice.actor} liked your ${notice.kind==='post-like'?'post':'story'}.`
+        title: notice.kind==='post-mention'?'Caption mention':notice.kind==='post-tag'?'Post tag':notice.kind === 'story-mention' ? 'Story mention' : notice.kind==='post-like'?'Post like':'Story like',
+        text: notice.kind==='post-mention'?`${notice.actorName || notice.actor} mentioned you in a caption.`:notice.kind==='post-tag'?`${notice.actorName || notice.actor} tagged you in a post.`:notice.kind === 'story-mention' ? `${notice.actorName || notice.actor} mentioned you in their story.` : `${notice.actorName || notice.actor} liked your ${notice.kind==='post-like'?'post':'story'}.`
     }));
     return [...storyLikes, ...requests, ...unread, ...approvals].sort((left,right)=>notificationTimestamp(right)-notificationTimestamp(left));
 }
@@ -134,6 +135,28 @@ export function recordStoryMentions(story) {
         updateNotificationBadge();
     }
     return created;
+}
+
+// Caption mentions and explicit photo tags are separate relationships.
+export function recordPostMentions(post) {
+    if (!post?.id || !post.handle || state.deletionRequestedAt || state.blockedHandles.has(post.handle)) return 0;
+    const recipients=new Map(captionMentions(post.caption).map(mention=>[mention.handle,'post-mention']));
+    for(const value of post.taggedUsers || post.taggedHandles || []) {
+        const handle=normalizeHandle(value);
+        if(getAccount(handle)&&!state.blockedHandles.has(handle))recipients.set(handle,'post-tag');
+    }
+    let created=0;state.localStoryNotifications ||= [];
+    const entityType=post.reel?'reel':'post';
+    for(const [recipient,kind] of recipients) {
+        if(recipient===post.handle || (post.handle!==currentUser.handle&&recipient!==currentUser.handle))continue;
+        if(state.localStoryNotifications.some(notice=>notice.kind===kind&&notice.recipient===recipient&&String(notice.postId)===String(post.id)&&(notice.entityType||'post')===entityType&&notice.actor===post.handle))continue;
+        state.localStoryNotifications.push({kind,recipient,postId:post.id,entityType,actor:post.handle,actorName:post.user||post.handle,createdAt:post.createdAt||Date.now(),read:false});created++;
+    }
+    if(created){persistPreferences();updateNotificationBadge();}
+    return created;
+}
+export function syncIncomingPostMentions() {
+    [...posts,...reels].filter(post=>post.handle!==currentUser.handle).forEach(recordPostMentions);
 }
 
 export function syncIncomingStoryMentions() {
@@ -233,7 +256,7 @@ export function registerNotificationEvents() {
     updateNotificationBadge();
     page.addEventListener('click', event => {
         const postLink=event.target.closest('[data-post-notice]');
-        if(postLink){const post=posts.find(post=>String(post.id)===postLink.dataset.postNotice);if(post&&canViewMedia(post))openProfileMedia('post',post.id,postLink,{singleItem:true});return;}
+        if(postLink){const type=postLink.dataset.noticeEntityType==='reel'?'reel':'post';const post=(type==='reel'?reels:posts).find(post=>String(post.id)===postLink.dataset.postNotice);if(post&&canViewMedia(post))openProfileMedia(type,post.id,postLink,{singleItem:true});return;}
         const storyLink = event.target.closest('[data-story-notice]');
         if (storyLink) {
             const storyId = storyLink.dataset.storyNotice;

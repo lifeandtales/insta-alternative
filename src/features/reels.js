@@ -1,3 +1,4 @@
+import { renderCaption } from '../components/caption.js';
 import { renderSaveButton } from '../components/post-card.js';
 import { escapeHtml, formatCount } from '../core/utils.js';
 import { state } from '../core/state.js';
@@ -38,11 +39,11 @@ export function renderReels() {
     return `
     <article class="reel-card ${gated ? 'reel-gated' : ''}" data-reel-id="${reel.id}" data-likeable-id="${reel.id}" data-likeable-type="reel">
       <div class="likeable-media reel-media" data-likeable-id="${reel.id}" data-likeable-type="reel">
-        <video class="reel-video" tabindex="0" playsinline preload="none" loop poster="${escapeHtml(reel.poster)}" ${state.reelMuted ? 'muted' : ''}>
+        <video class="reel-video" tabindex="0" playsinline preload="none" loop poster="${escapeHtml(reel.poster)}" ${state.reelMuted || reel.originalAudioMuted ? 'muted' : ''} ${reel.originalAudioMuted ? 'data-original-audio-muted="true"' : ''}>
           <source src="${escapeHtml(reel.video)}" />Your browser does not support video playback.
         </video>
         ${gated ? `<div class="reel-content-warning"><strong>Sensitive content</strong><p>${blockedForMinor ? 'This content is not available for under-18 accounts.' : 'This Reel may contain sensitive content.'}</p>${blockedForMinor ? '' : `<button type="button" data-reel-reveal="${reel.id}">View content</button>`}</div>` : ''}
-        <button class="video-sound-toggle" type="button" data-video-sound aria-label="Turn video sound ${state.reelMuted ? 'on' : 'off'}" aria-pressed="${!state.reelMuted}">${state.reelMuted ? '🔇' : '🔊'}</button>
+        <button class="video-sound-toggle" type="button" ${reel.originalAudioMuted ? 'disabled' : ''} data-video-sound aria-label="Turn video sound ${state.reelMuted ? 'on' : 'off'}" aria-pressed="${!state.reelMuted}">${state.reelMuted ? '🔇' : '🔊'}</button>
         <button class="reel-play-state" type="button" data-reel-play aria-label="Pause reel">Ⅱ</button>
         <span class="double-like-heart" aria-hidden="true">♥</span>
       </div>
@@ -50,7 +51,7 @@ export function renderReels() {
         <div class="post-user"><img src="${escapeHtml(reel.avatar)}" alt="${escapeHtml(reel.user)} avatar" />
           <div><button class="author-name reel-author-name" type="button" data-profile-handle="${escapeHtml(reel.handle)}">${escapeHtml(reel.user)}</button><span>Public reel</span></div>
         </div>
-        <p>${escapeHtml(reel.caption)}</p>
+        <p>${renderCaption(reel.caption)}</p>
         ${reel.demoVideoCredit ? `<small class="reel-demo-credit">${escapeHtml(reel.demoVideoCredit)}</small>` : ''}
         <div class="reel-actions">
           <button class="like-btn ${reel.liked ? 'liked' : ''}" type="button" data-action="like" data-entity-type="reel" data-entity-id="${reel.id}" aria-pressed="${reel.liked}">♥ ${formatCount(reel.likes)}</button>
