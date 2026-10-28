@@ -418,3 +418,15 @@ test('any transformed object edge triggers the footer fade even when its center 
     tools.updateStoryEditorDrag(finger,item);assert.equal(dialog.classList.contains('story-footer-drag-over'),true,'a rotated corner crossing the footer triggers fading');
     tools.updateStoryEditorDrag();assert.equal(dialog.classList.contains('story-footer-drag-over'),false,'release restores controls even while the object remains underneath');
 });
+
+test('the gray Story boundary flashes once on footer entry and clears after its brief timeout',async()=>{
+    const app=await loadApp(),tools=app.exportsOf('src/features/story-tools.js'),dialog=app.element('.story-create-dialog'),footer=app.element('.story-editor-controls');
+    const timers=[];app.context.setTimeout=callback=>{timers.push(callback);return timers.length;};
+    footer.hidden=false;footer.getBoundingClientRect=()=>({left:0,top:600,right:400,bottom:800});
+    tools.updateStoryEditorDrag({clientX:200,clientY:650});
+    assert.equal(dialog.classList.contains('story-canvas-boundary-flash'),true);assert.equal(timers.length,1);
+    tools.updateStoryEditorDrag({clientX:200,clientY:660});assert.equal(timers.length,1,'remaining inside the footer does not repeatedly blink');
+    timers[0]();assert.equal(dialog.classList.contains('story-canvas-boundary-flash'),false);
+    tools.flashStoryCanvasBoundary();assert.equal(dialog.classList.contains('story-canvas-boundary-flash'),true);
+    timers[1]();assert.equal(dialog.classList.contains('story-canvas-boundary-flash'),false);
+});

@@ -12,7 +12,7 @@ import { storyViewer } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { currentUser, posts } from '../data/sample-data.js';
 import { getSupportedStoryFileType } from './create.js';
-import { prepareStoryTools, updateStoryEditorDrag } from './story-tools.js';
+import { prepareStoryTools, updateStoryEditorDrag, flashStoryCanvasBoundary } from './story-tools.js';
 import { setStoryDraftSaving } from './story-options.js';
 import { applyStoryComposition, storyComposition, storyNeedsFullCanvasRepost } from './story-composition.js';
 import { captureStoryPhoto, openStoryCamera, startStoryVideoRecording, stopStoryCamera, stopStoryVideoRecording, switchStoryCamera } from './story-camera.js';
@@ -760,6 +760,7 @@ function renderSelectedStory() {
                 gesture = { mode: 'drag', bounds, center, scale, rotation, pointerId, start: point };
             } else if (pointers.size === 2) {
                 gesture = { mode: 'pinch', bounds, center, scale, rotation, start: midpoint() };
+                flashStoryCanvasBoundary();
             }
         };
         repostFrame.onpointerdown = event => {

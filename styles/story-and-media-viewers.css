@@ -1058,3 +1058,22 @@ body.video-fullscreen-open {
 @media (prefers-reduced-motion: reduce) {
   .story-editing .story-editor-controls { transition: none; }
 }
+
+/* The editing dialog and the published Story share the same full canvas bounds. */
+.story-create-dialog.story-editing.story-canvas-boundary-flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  border: 2px solid #b9b9c0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: story-canvas-boundary-blink 700ms ease-out both;
+}
+@keyframes story-canvas-boundary-blink {
+  0%, 30% { opacity: .85; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .story-create-dialog.story-editing.story-canvas-boundary-flash::after { animation: none; opacity: .7; }
+}

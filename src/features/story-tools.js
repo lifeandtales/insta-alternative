@@ -93,6 +93,15 @@ function showCenterGuides(snap){guideRevision++;preview().classList.toggle('stor
 function fadeAlignmentGuides(){const revision=guideRevision;setTimeout(()=>{if(revision===guideRevision)clearAlignmentGuides();},650);}
 
 
+let canvasBoundaryTimer;
+export function flashStoryCanvasBoundary(){
+    const dialog=document.querySelector('.story-create-dialog');
+    clearTimeout(canvasBoundaryTimer);
+    dialog.classList.remove('story-canvas-boundary-flash');
+    void dialog.offsetWidth;
+    dialog.classList.add('story-canvas-boundary-flash');
+    canvasBoundaryTimer=setTimeout(()=>dialog.classList.remove('story-canvas-boundary-flash'),700);
+}
 export function updateStoryEditorDrag(point=null,item=null){
     const footer=document.querySelector('.story-editor-controls');
     const rect=footer.getBoundingClientRect();
@@ -105,11 +114,13 @@ export function updateStoryEditorDrag(point=null,item=null){
         ? bounds.bottom>=rect.top-buffer && bounds.top<=rect.bottom+buffer && bounds.right>=rect.left-buffer && bounds.left<=rect.right+buffer
         : point.clientY>=rect.top-(faded?48:24) && point.clientY<=rect.bottom && point.clientX>=rect.left && point.clientX<=rect.right));
     document.querySelector('.story-create-dialog').classList.toggle('story-footer-drag-over',over);
+    if(over&&!faded)flashStoryCanvasBoundary();
 }
 function ensureHistory(){
     if(storyRef!==pending()){
         for(const pointerId of mediaPointers.keys()){if(preview().hasPointerCapture?.(pointerId))preview().releasePointerCapture(pointerId);}
         mediaPointers.clear();gesture=null;updateStoryEditorDrag();
+        clearTimeout(canvasBoundaryTimer);document.querySelector('.story-create-dialog').classList.remove('story-canvas-boundary-flash');
         clearAlignmentGuides();hideDeleteTarget();closeInlineText();resetStoryMode();storyRef=pending();history=storyRef?compositionHistory(storyRef.edits):null;selectedLayer=null;drawMode=null;moveMode=false;
     }
     return history;
@@ -479,7 +490,7 @@ export function registerStoryToolEvents(){
         if(pointers.size===2 && !drawMode){
             // Start from the on-screen single-finger position without losing that movement.
             const e=storyComposition(gesture?.next||currentComposition());
-            gesture={story:pending(),e,rect:stage.getBoundingClientRect(),mode:'pinch',layer:gesture?.mode==='layer'?gesture.layer:null,pair:pair()};return;
+            gesture={story:pending(),e,rect:stage.getBoundingClientRect(),mode:'pinch',layer:gesture?.mode==='layer'?gesture.layer:null,pair:pair()};flashStoryCanvasBoundary();return;
         }
         if(pointers.size===2)return;
         const layer=drawMode?null:event.target.closest('.story-composition-layer');
