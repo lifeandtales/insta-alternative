@@ -87,3 +87,24 @@ test('Next previews every finalized item in a feed-style carousel, starting at t
     assert.equal(state.createFinalizedItems.length,9);assert.equal(app.element('.create-media-controls').hidden,true);
     create.setCreateDetails(false);assert.doesNotMatch(app.element('.create-upload-preview').innerHTML,/carousel-slides/);assert.equal(state.createActiveIndex,7);
 });
+
+
+test('phone swipes remain native: no capture, manual scrolling, or cancelled touch movement',async()=>{
+    const app=await loadApp(),{bindHorizontalReorder}=app.exportsOf('src/media/horizontal-reorder.js'),f=stripFixture(20,168);
+    bindHorizontalReorder(f.panel,f.commit,f.options);
+    f.handlers.pointerdown({...f.event(0,120),pointerType:'touch'});
+    let prevented=false;f.handlers.pointermove({...f.event(0,30),pointerType:'touch',preventDefault(){prevented=true;}});
+    f.hold();assert.equal(prevented,false);assert.equal(f.strip.scrollLeft,0);assert.equal(f.captures.size,0);assert.equal(f.frames.size,0);assert.equal(f.timers.size,0);
+    f.handlers.touchmove({cancelable:true,preventDefault(){prevented=true;}});assert.equal(prevented,false);
+    assert.equal(f.moves.length,0);
+});
+
+test('phone hold enables reorder and prevents native scrolling only during that held drag',async()=>{
+    const app=await loadApp(),{bindHorizontalReorder}=app.exportsOf('src/media/horizontal-reorder.js'),f=stripFixture();
+    bindHorizontalReorder(f.panel,f.commit,f.options);
+    f.handlers.pointerdown({...f.event(0,38),pointerType:'touch'});
+    let prevented=false;f.handlers.touchmove({cancelable:true,preventDefault(){prevented=true;}});assert.equal(prevented,false);
+    f.hold();f.handlers.touchmove({cancelable:true,preventDefault(){prevented=true;}});assert.equal(prevented,true);
+    f.handlers.pointermove({...f.event(0,230),pointerType:'touch'});f.handlers.pointerup(f.event(0,230));assert.deepEqual(f.moves,[[0,2]]);
+    prevented=false;f.handlers.touchmove({cancelable:true,preventDefault(){prevented=true;}});assert.equal(prevented,false);assert.equal(f.captures.size,0);
+});

@@ -64,7 +64,7 @@ export function bindHorizontalReorder(panel,onReorder,{requestFrame=callback=>wi
         const button=event.target.closest('[data-order-index]'),strip=button?.closest('.create-order-strip');
         if(!button||!strip)return;
         const tile=button.closest('.create-order-tile'),rect=tile.getBoundingClientRect();
-        drag={id:event.pointerId,from:Number(button.dataset.orderIndex),to:Number(button.dataset.orderIndex),x:event.clientX,startX:event.clientX,startY:event.clientY,scrollStart:strip.scrollLeft,grabX:event.clientX-rect.left,top:rect.top,tile,strip,original:[...strip.querySelectorAll('.create-order-tile')],started:false,scrolling:false};
+        drag={id:event.pointerId,pointerType:event.pointerType,from:Number(button.dataset.orderIndex),to:Number(button.dataset.orderIndex),x:event.clientX,startX:event.clientX,startY:event.clientY,scrollStart:strip.scrollLeft,grabX:event.clientX-rect.left,top:rect.top,tile,strip,original:[...strip.querySelectorAll('.create-order-tile')],started:false,scrolling:false};
         hold=setTimer(beginHold,450);
     });
     panel.addEventListener('pointermove',event=>{
@@ -74,11 +74,18 @@ export function bindHorizontalReorder(panel,onReorder,{requestFrame=callback=>wi
             if(Math.abs(dy)>8&&Math.abs(dy)>Math.abs(dx)){stop(false);return;}
             if(!drag.scrolling&&Math.abs(dx)<8)return;
             if(hold!=null)clearTimer(hold);hold=null;
-            drag.scrolling=true;panel.setPointerCapture(event.pointerId);
+            drag.scrolling=true;
+            // Let the browser own touch swipes, including momentum and cancellation.
+            // Only a completed hold may take over a touch gesture for reordering.
+            if(drag.pointerType==='touch'){stop(false);return;}
+            panel.setPointerCapture(event.pointerId);
             drag.strip.scrollLeft=drag.scrollStart-dx;
             event.preventDefault();return;
         }
         event.preventDefault();drag.x=event.clientX;place();
+    },{passive:false});
+    panel.addEventListener('touchmove',event=>{
+        if(drag?.started&&drag.pointerType==='touch'&&event.cancelable)event.preventDefault();
     },{passive:false});
     panel.addEventListener('pointerup',event=>{if(drag?.id===event.pointerId)stop(true);});
     panel.addEventListener('pointercancel',()=>stop(false));
