@@ -7,7 +7,7 @@ export function squareCropBounds(width,height,{x=50,y=50,zoom=1}={}) {
     return {x:(width-size)*clamp(x,0,100)/100,y:(height-size)*clamp(y,0,100)/100,size};
 }
 // Render the edited composition before selecting its square cover crop.
-export function renderSquareCover(media,item=null,{size=REEL_COVER_SIZE,x=50,y=50,zoom=1}={}) {
+export function coverSource(media,item=null,{size=REEL_COVER_SIZE}={}) {
     const width=media.videoWidth||media.naturalWidth,height=media.videoHeight||media.naturalHeight;
     if(!width||!height)throw new Error('The media has no readable dimensions.');
     let source=media,sourceWidth=width,sourceHeight=height;
@@ -27,7 +27,17 @@ export function renderSquareCover(media,item=null,{size=REEL_COVER_SIZE,x=50,y=5
         }
         source=stage;sourceWidth=stage.width;sourceHeight=stage.height;
     }
-    const crop=squareCropBounds(sourceWidth,sourceHeight,{x,y,zoom}),canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;
+    return {source,width:sourceWidth,height:sourceHeight};
+}
+export function renderFullCoverPreview(media,item=null){
+    const {source,width,height}=coverSource(media,item);
+    const scale=Math.min(1,1024/Math.max(width,height)),canvas=document.createElement('canvas');canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);
+    canvas.getContext('2d').drawImage(source,0,0,canvas.width,canvas.height);
+    return {url:canvas.toDataURL('image/jpeg',.9),width,height};
+}
+export function renderSquareCover(media,item=null,{size=REEL_COVER_SIZE,x=50,y=50,zoom=1}={}) {
+    const {source,width,height}=coverSource(media,item,{size});
+    const crop=squareCropBounds(width,height,{x,y,zoom}),canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;
     const context=canvas.getContext('2d');if(!context)throw new Error('Cover rendering is unavailable.');
     context.drawImage(source,crop.x,crop.y,crop.size,crop.size,0,0,size,size);
     return canvas.toDataURL('image/jpeg',.85);

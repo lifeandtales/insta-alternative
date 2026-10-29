@@ -1298,3 +1298,11 @@ button.caption-hashtag:focus-visible { outline:2px solid currentColor; outline-o
 .reel-cover-frame-group { display:flex; gap:4px; min-width:0; overflow-x:auto; padding:3px 1px; touch-action:pan-x pan-y; }
 .reel-cover-frame-divider { display:block; background:#bca8cc; margin:3px 0; }
 .create-reel-cover .reel-cover-frame-group button { flex:0 0 52px; width:52px; height:52px; min-height:52px; }
+
+.reel-cover-canvas { width:min(100%,calc(360px * var(--cover-aspect,1))); position:relative; overflow:hidden; margin:10px auto; touch-action:none; user-select:none; -webkit-user-select:none; cursor:move; background:#17131d; outline:1px solid #bba2ce; border-radius:8px; }
+.reel-cover-canvas .reel-cover-preview { display:block; width:100%; max-width:none; height:auto; aspect-ratio:auto; border:0; border-radius:0; margin:0; pointer-events:none; -webkit-touch-callout:none; }
+.reel-cover-selection { position:absolute; box-sizing:border-box; border:2px solid #fff; box-shadow:0 0 0 1000px #0009; pointer-events:none; }
+.reel-cover-zoom-buttons { position:absolute; right:7px; top:7px; display:flex; gap:5px; }
+.create-reel-cover .reel-cover-zoom-buttons button { min-height:36px; width:36px; padding:0; background:#24162edb; border:1px solid #ffffffb3; color:white; font-size:22px; line-height:1; }
+.reel-cover-canvas:focus-visible { outline:3px solid #7134a8; outline-offset:3px; }
+.reel-cover-gesture-hint { text-align:center; font-size:.8rem; opacity:.75; }

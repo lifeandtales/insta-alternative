@@ -1,17 +1,19 @@
+import { bindCoverCrop } from '../media/cover-crop.js';
 import { state } from '../core/state.js';
-import { renderSquareCover, REEL_COVER_SIZE } from '../media/cover-canvas.js';
+import { renderSquareCover, renderFullCoverPreview, REEL_COVER_SIZE } from '../media/cover-canvas.js';
 
-let generation=0,video=null,sampler=null,galleryUrl='',signature='',draftMedia=null,draftItem=null,crop={x:50,y:50,zoom:1},working=false;
+let generation=0,video=null,sampler=null,galleryUrl='',signature='',draftMedia=null,draftItem=null,crop={x:50,y:50,zoom:1},working=false,cropController=null;
 export function reelCoverSignature(item){return JSON.stringify(item||null);}
 export function getReelCover(item){return state.createReelThumbnail?.signature===reelCoverSignature(item)?state.createReelThumbnail.data:null;}
 function releaseMedia(){
+    cropController?.cancel();
     if(video){video.pause();video.removeAttribute('src');video.load();video=null;}
     if(sampler){sampler.pause();sampler.removeAttribute('src');sampler.load();sampler=null;}
     if(galleryUrl){URL.revokeObjectURL(galleryUrl);galleryUrl='';}
     draftMedia=null;draftItem=null;working=false;
 }
-export function resetReelCover(){generation++;releaseMedia();signature='';state.createReelThumbnail=null;}
-export function suspendReelCover(){generation++;releaseMedia();signature='';}
+export function resetReelCover(){generation++;releaseMedia();cropController?.dispose();cropController=null;signature='';state.createReelThumbnail=null;}
+export function suspendReelCover(){generation++;releaseMedia();cropController?.dispose();cropController=null;signature='';}
 function ready(media,event,trigger){return new Promise((resolve,reject)=>{
     const finish=error=>{clearTimeout(timer);media.removeEventListener(event,loaded);media.removeEventListener('error',failed);error?reject(error):resolve();};
     const loaded=()=>finish(),failed=()=>finish(new Error('This file could not be opened.'));
@@ -34,16 +36,18 @@ export function renderReelCover(item){
     const root=document.querySelector('.create-reel-cover');root.hidden=state.createMediaType!=='reel'||!state.createDetailsOpen;
     if(root.hidden)return;
     const next=reelCoverSignature(item);if(signature===next)return;
-    generation++;releaseMedia();signature=next;
+    generation++;releaseMedia();cropController?.dispose();cropController=null;signature=next;
     const saved=getReelCover(item);
-    root.innerHTML=`<h3>Reel thumbnail</h3><p class="reel-cover-size">Square · ${REEL_COVER_SIZE} × ${REEL_COVER_SIZE}</p><div class="reel-cover-saved" ${saved?'':'hidden'}><img alt="Selected reel thumbnail" /><button type="button" class="reel-cover-change">Change thumbnail</button></div><div class="reel-cover-editor" ${saved?'hidden':''}><p>Choose a frame from your reel or upload an image.</p><div class="reel-cover-sources"><button type="button" data-cover-source="video" aria-pressed="false">From video</button><button type="button" data-cover-source="gallery" aria-pressed="false">Upload image</button></div><input class="reel-cover-file" type="file" accept="image/*" hidden /><p class="reel-cover-status" role="status"></p><div class="reel-cover-crop" hidden><img class="reel-cover-preview" alt="Square thumbnail crop preview" /><div class="reel-cover-timeline" hidden><div class="reel-cover-frames" aria-label="Nearby video frames" hidden><div class="reel-cover-frame-group" data-nearby="before" aria-label="Earlier frames"></div><span class="reel-cover-frame-divider" aria-hidden="true"></span><div class="reel-cover-frame-group" data-nearby="after" aria-label="Later frames"></div></div><label>Choose frame <output class="reel-cover-time">0:00.0</output><input class="reel-cover-seek" aria-label="Choose video frame" type="range" min="0" max="0" step="0.01" value="0" /></label></div><div class="reel-cover-position"><label>Horizontal crop<input data-cover-crop="x" type="range" min="0" max="100" value="50" /></label><label>Vertical crop<input data-cover-crop="y" type="range" min="0" max="100" value="50" /></label><label>Zoom<input data-cover-crop="zoom" type="range" min="1" max="3" step="0.01" value="1" /></label></div><button type="button" class="reel-cover-apply">Use thumbnail</button></div></div>`;
+    root.innerHTML=`<h3>Reel thumbnail</h3><p class="reel-cover-size">Square · ${REEL_COVER_SIZE} × ${REEL_COVER_SIZE}</p><div class="reel-cover-saved" ${saved?'':'hidden'}><img alt="Selected reel thumbnail" /><button type="button" class="reel-cover-change">Change thumbnail</button></div><div class="reel-cover-editor" ${saved?'hidden':''}><p>Choose a frame from your reel or upload an image.</p><div class="reel-cover-sources"><button type="button" data-cover-source="video" aria-pressed="false">From video</button><button type="button" data-cover-source="gallery" aria-pressed="false">Upload image</button></div><input class="reel-cover-file" type="file" accept="image/*" hidden /><p class="reel-cover-status" role="status"></p><div class="reel-cover-crop" hidden><div class="reel-cover-canvas" tabindex="0" role="group" aria-label="Thumbnail crop: drag with one finger, pinch with two fingers to zoom"><img class="reel-cover-preview" alt="Full image for thumbnail selection" draggable="false" /><div class="reel-cover-selection" aria-hidden="true"></div><div class="reel-cover-zoom-buttons"><button type="button" data-cover-zoom="out" aria-label="Zoom out">−</button><button type="button" data-cover-zoom="in" aria-label="Zoom in">＋</button></div></div><small class="reel-cover-gesture-hint">Drag the square to move it. Pinch to zoom.</small><div class="reel-cover-timeline" hidden><div class="reel-cover-frames" aria-label="Nearby video frames" hidden><div class="reel-cover-frame-group" data-nearby="before" aria-label="Earlier frames"></div><span class="reel-cover-frame-divider" aria-hidden="true"></span><div class="reel-cover-frame-group" data-nearby="after" aria-label="Later frames"></div></div><label>Choose frame <output class="reel-cover-time">0:00.0</output><input class="reel-cover-seek" aria-label="Choose video frame" type="range" min="0" max="0" step="0.01" value="0" /></label></div><button type="button" class="reel-cover-apply">Use thumbnail</button></div></div>`;
     const q=selector=>root.querySelector(selector),editor=q('.reel-cover-editor'),savedPanel=q('.reel-cover-saved'),status=q('.reel-cover-status'),cropPanel=q('.reel-cover-crop'),timeline=q('.reel-cover-timeline'),range=q('.reel-cover-seek'),apply=q('.reel-cover-apply');
     if(saved)q('.reel-cover-saved img').src=saved;
     const current=token=>token===generation&&root.isConnected&&state.createDetailsOpen;
-    const paint=()=>{if(draftMedia)q('.reel-cover-preview').src=renderSquareCover(draftMedia,draftItem,crop);};
+    let sourceGeometry={width:1,height:1};
+    const stage=q('.reel-cover-canvas'),cropGestures=cropController=bindCoverCrop(stage,()=>sourceGeometry,()=>crop,next=>{crop=next;});
+    const paint=()=>{if(draftMedia){const full=renderFullCoverPreview(draftMedia,draftItem);sourceGeometry={width:full.width,height:full.height};q('.reel-cover-preview').src=full.url;stage.style.setProperty('--cover-aspect',String(full.width/full.height));cropGestures.paint();}};
     const setBusy=value=>{working=value;apply.disabled=value;range.disabled=value;};
     const failed=(error,token)=>{if(current(token)){status.textContent=error.message||'The thumbnail could not be prepared.';setBusy(false);}};
-    const resetCrop=()=>{crop={x:50,y:50,zoom:1};root.querySelectorAll('[data-cover-crop]').forEach(input=>{input.value=String(crop[input.dataset.coverCrop]);});};
+    const resetCrop=()=>{cropGestures.cancel();crop={x:50,y:50,zoom:1};};
     const selectSource=mode=>{root.querySelectorAll('[data-cover-source]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.coverSource===mode)));};
     let seekQueue=Promise.resolve(),wantedTime=null,nearbyRequest=0,refreshQueue=Promise.resolve();
     const frames=q('.reel-cover-frames');
@@ -113,7 +117,6 @@ export function renderReelCover(item){
         galleryUrl=URL.createObjectURL(file);const image=document.createElement('img');
         try{await ready(image,'load',()=>{image.src=galleryUrl;});if(!current(token))return;draftMedia=image;draftItem=null;paint();cropPanel.hidden=false;status.textContent='Adjust the crop to fit the square thumbnail.';}catch(error){failed(error,token);}finally{if(current(token))setBusy(false);}
     });
-    root.querySelectorAll('[data-cover-crop]').forEach(input=>input.addEventListener('input',()=>{crop[input.dataset.coverCrop]=Number(input.value);try{paint();}catch(error){status.textContent=error.message;}}));
     apply.addEventListener('click',()=>{
         if(working||!draftMedia)return;
         try{const data=renderSquareCover(draftMedia,draftItem,crop);state.createReelThumbnail={signature:next,data};q('.reel-cover-saved img').src=data;savedPanel.hidden=false;editor.hidden=true;document.querySelector('.create-publish-button').disabled=false;generation++;releaseMedia();}catch(error){status.textContent=error.message;}
