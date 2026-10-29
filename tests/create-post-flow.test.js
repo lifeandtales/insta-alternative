@@ -148,3 +148,12 @@ test('removing an item preserves the others, replaces a removed cover and suppor
     state.createAppending=true;const file=new Blob(['fixture'],{type:'image/jpeg'});app.listeners.find(listener=>listener.key==='#post-upload'&&listener.type==='change').callback({target:{files:[file]}});
     assert.equal(state.createMediaItems.length,1);assert.equal(state.createCoverIndex,0);assert.ok(state.createMediaFile);assert.equal(app.element('.create-next').disabled,false);
 });
+
+
+test('Reel ratio menu offers only the five agreed shapes with 9:16 selected initially',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js'),create=app.exportsOf('src/features/create.js');
+    create.openCreateUpload('reel');state.createMediaItems=[{type:'video',url:'test.mp4',ratio:'9/16',layout:'reel'}];create.startCreateEditing();
+    state.createTool='ratio';create.renderCreatePreview();const html=app.element('.create-media-controls').innerHTML;
+    assert.match(html,/Reel ratio/);assert.deepEqual([...html.matchAll(/<option value="([^"]+)"/g)].map(match=>match[1]),['9/16','original','1/1','4/5','16/9']);
+    assert.match(html,/<option value="9\/16" selected/);
+});

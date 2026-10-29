@@ -1273,3 +1273,28 @@ button.caption-hashtag:focus-visible { outline:2px solid currentColor; outline-o
 .create-detail-panel[hidden] { display:none; }
 .create-detail-panel p { margin:0; }
 .create-detail-panel input { min-width:0; width:100%; padding:12px; border:1px solid #b9a4c7; border-radius:8px; font:inherit; }
+
+.create-media-tabs[hidden] { display:none; }
+
+.create-reel-cover { border:1px solid #d7c6e4; padding:14px; border-radius:12px; min-width:0; }
+.create-reel-cover[hidden],.create-reel-cover [hidden] { display:none!important; }
+.create-reel-cover h3 { font-size:1rem; margin:0 0 4px; }
+.reel-cover-size { margin:0 0 12px; font-size:.8rem; opacity:.75; }
+.reel-cover-editor > p { font-size:.9rem; }
+.reel-cover-sources { display:flex; gap:8px; flex-wrap:wrap; }
+.create-reel-cover button { min-height:44px; padding:9px 12px; border:1px solid #bda4ce; border-radius:9px; background:#f4edfb; color:#58218a; font:inherit; font-weight:600; }
+.create-reel-cover button[aria-pressed=true],.create-reel-cover .reel-cover-apply { background:#7134a8; color:#fff; }
+.create-reel-cover button:disabled { opacity:.5; }
+.reel-cover-preview,.reel-cover-saved img { display:block; width:min(100%,260px); aspect-ratio:1; object-fit:contain; border:2px solid #bba2ce; border-radius:10px; margin:12px auto; }
+.reel-cover-crop,.reel-cover-position,.reel-cover-timeline { display:grid; gap:12px; min-width:0; }
+.reel-cover-position label,.reel-cover-timeline label { display:grid; gap:6px; font-size:.85rem; }
+.reel-cover-position input,.reel-cover-seek { width:100%; accent-color:#7134a8; min-height:30px; }
+.reel-cover-frames { display:flex; gap:4px; width:100%; min-width:0; overflow-x:auto; padding:5px 2px; touch-action:pan-x pan-y; }
+.create-reel-cover .reel-cover-frames button { flex:0 0 64px; width:64px; height:64px; min-height:64px; padding:0; overflow:hidden; }
+.reel-cover-frames img { display:block; width:100%; height:100%; object-fit:cover; pointer-events:none; }
+.reel-cover-status { font-size:.85rem; color:#58218a; }
+
+.reel-cover-frames { display:grid; grid-template-columns:minmax(0,1fr) 1px minmax(0,1fr); align-items:stretch; gap:7px; overflow:visible; }
+.reel-cover-frame-group { display:flex; gap:4px; min-width:0; overflow-x:auto; padding:3px 1px; touch-action:pan-x pan-y; }
+.reel-cover-frame-divider { display:block; background:#bca8cc; margin:3px 0; }
+.create-reel-cover .reel-cover-frame-group button { flex:0 0 52px; width:52px; height:52px; min-height:52px; }

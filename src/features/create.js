@@ -1,3 +1,5 @@
+import { resetReelCover, suspendReelCover, renderReelCover, getReelCover } from './reel-cover.js';
+import { renderSquareCover } from '../media/cover-canvas.js';
 import { initializePostCarousels } from '../media/carousel.js';
 import { bindHorizontalReorder } from '../media/horizontal-reorder.js';
 import { hideCaptionSuggestions } from './caption-suggestions.js';
@@ -59,6 +61,7 @@ export function startCreateEditing(){
 
 export function openCreateUpload(type) {
     if (!mayInteract()) return;
+    resetReelCover();
     dismissCreateExit();
     hideCaptionSuggestions();
     state.createMediaItems = [];
@@ -123,6 +126,7 @@ export function closeCreateUpload(discard = false) {
         document.querySelector('.create-keep-editing').focus();return;
     }
     dismissCreateExit();hideCaptionSuggestions();
+    resetReelCover();
     createUploadBackdrop.hidden = true;
     const mediaIsSaved = state.draftItems.some(draft => draft.items?.some(item => item.url === state.createMediaUrl));
     if (state.createMediaUrl && !mediaIsSaved)
@@ -143,7 +147,8 @@ export async function publishCreatedMedia() {
     if (scheduledValue && (!Number.isFinite(scheduledAt) || scheduledAt <= Date.now())) { showShareFeedback('Choose a future date and time.'); return; }
     if (state.createCoverIndex === null) { showShareFeedback('Choose a square cover before publishing.'); return; }
     if (!state.createMediaItems.length || state.createMediaItems.length > 20) return;
-    const cover = await createSquareCover(state.createMediaItems[state.createCoverIndex]);
+    const cover = state.createMediaType==='reel'?getReelCover(state.createMediaItems[0]):await createSquareCover(state.createMediaItems[state.createCoverIndex]);
+    if(state.createMediaType==='reel'&&!cover){showShareFeedback('Choose and confirm a reel thumbnail before sharing.');return;}
     if (!cover) { showShareFeedback('This media cannot be decoded here. Choose another supported file.'); return; }
     if (!state.createMediaFile || !state.createMediaUrl)
         return;
@@ -274,10 +279,12 @@ export function setCreateDetails(details) {
     if (!state.createMediaItems.length) return false;
     state.createDetailsOpen = Boolean(details);
     if(details)updateCreateScheduleMinimum();
+    else suspendReelCover();
+    document.querySelector('.create-reel-cover').hidden=!details||state.createMediaType!=='reel';
     state.createFinalizedItems = details ? state.createMediaItems.map(item => ({...item})) : null;
     document.querySelector('.create-media-editing').hidden = Boolean(details);
     document.querySelector('.create-editor-fields').hidden = !details;
-    document.getElementById('create-upload-title').textContent = details ? 'New post' : state.createMediaType === 'reel' ? 'Edit reel' : 'Edit post';
+    document.getElementById('create-upload-title').textContent = details ? (state.createMediaType==='reel'?'New reel':'New post') : state.createMediaType === 'reel' ? 'Edit reel' : 'Edit post';
     renderCreatePreview();
     document.getElementById('create-upload-title').focus();
     return true;
@@ -308,6 +315,8 @@ export function removeCreateMedia(index=state.createActiveIndex||0) {
 }
 function renderCreateMediaOrder() {
     const items=state.createMediaItems,index=state.createActiveIndex||0,panel=document.querySelector('.create-media-tabs');
+    panel.hidden=state.createMediaType==='reel';
+    if(panel.hidden){panel.replaceChildren();return;}
     panel.innerHTML=items.map((item,i)=>`<div class="create-order-tile" role="listitem"><button type="button" class="create-media-thumbnail create-order-thumb" data-create-active="${i}" data-order-index="${i}" aria-pressed="${i===index}" aria-label="${item.type==='video'?'Video':'Image'} ${i+1}" aria-description="Swipe to scroll. Hold for 0.8 seconds to reorder or remove. Keyboard: Alt and left or right arrow.">${item.type==='image'?`<img src="${escapeHtml(item.url)}" alt="" draggable="false" style="filter:${mediaFilter(item)}" />`:`<video src="${escapeHtml(item.url+(item.url.includes('#')?'':'#t=0.01'))}" muted playsinline preload="metadata" aria-hidden="true" style="filter:${mediaFilter(item)}"></video><span class="create-media-video-mark" aria-hidden="true">▶</span>`}<span class="create-media-position" aria-hidden="true">${i+1}</span></button><button type="button" class="create-thumb-remove" data-create-remove="${i}" aria-label="Remove ${item.type==='video'?'video':'image'} ${i+1}">×</button></div>`).join('');
     bindHorizontalReorder(panel,reorderCreateMedia);
 }
@@ -337,6 +346,8 @@ export function renderCreatePreview() {
         controls.hidden=true;
         preview.innerHTML=`<div class="post-carousel" aria-label="${items.length} media items"><div class="carousel-slides" tabindex="0" aria-label="Post preview: swipe to see all media">${items.map((entry,i)=>`<div class="carousel-slide" role="group" aria-label="${i+1} of ${items.length}">${renderEditedMedia(entry,{preview:true,alt:`Media ${i+1}`})}</div>`).join('')}</div>${items.length>1?`<span class="carousel-index" role="status" aria-live="polite" aria-label="Item 1 of ${items.length}">1/${items.length}</span>`:''}</div>`;
         initializePostCarousels(preview);
+        renderReelCover(items[0]);
+        document.querySelector('.create-publish-button').disabled=state.createMediaType==='reel'&&!getReelCover(items[0]);
         return;
     }
     const edit = mediaEdits(item), tool = state.createTool || '';
@@ -364,9 +375,9 @@ export function renderCreatePreview() {
     let fields = '';
     if (tool === 'text') fields = `<label>Text on media<input data-create-edit="text" maxlength="200" value="${escapeHtml(edit.text)}" placeholder="Write on your image or video" /></label><small>Drag text on the preview to move it. Pinch with two fingers to resize.</small>`;
     if (tool === 'filters') fields = `<div class="create-filter-strip" role="group" aria-label="Filters">${POST_FILTERS.map(({id:value,name:label})=>`<button type="button" data-create-filter="${value}" aria-pressed="${edit.filter===value}"><span class="create-filter-swatch" style="filter:${mediaFilter({...item,filter:value})}">${item.type==='image'?`<img src="${escapeHtml(item.url)}" alt="" draggable="false" />`:'✦'}</span><span>${label}</span></button>`).join('')}</div><small>Swipe the preview left or right to change filters.</small>`;
-    if (tool === 'ratio') fields = options('ratio','Post ratio',[['original','Original · within post limits'],['1/1','Square · 1:1'],['4/5','Portrait · 4:5'],['3/4','Tall portrait · 3:4'],['16/9','Landscape · 16:9'],['1.91/1','Wide landscape · 1.91:1'],...(state.createMediaType==='reel'?[['9/16','Full portrait · 9:16']]:[])],edit.ratio)+range('x','Horizontal crop',0,100,item.x??50)+range('y','Vertical crop',0,100,item.y??50);
+    if (tool === 'ratio') fields = options('ratio',state.createMediaType==='reel'?'Reel ratio':'Post ratio',(state.createMediaType==='reel'?[['9/16','Full portrait · 9:16'],['original','Original'],['1/1','Square · 1:1'],['4/5','Portrait · 4:5'],['16/9','Landscape · 16:9']]:[['original','Original · within post limits'],['1/1','Square · 1:1'],['4/5','Portrait · 4:5'],['3/4','Tall portrait · 3:4'],['16/9','Landscape · 16:9'],['1.91/1','Wide landscape · 1.91:1']]),edit.ratio)+range('x','Horizontal crop',0,100,item.x??50)+range('y','Vertical crop',0,100,item.y??50);
     if (tool === 'edit') fields = range('brightness','Brightness',0,200,edit.brightness)+range('contrast','Contrast',0,200,edit.contrast)+range('saturation','Saturation',0,200,edit.saturation)+`<button type="button" class="create-reset-edits">Reset adjustments</button>`;
-    controls.innerHTML = !tool?'':fields + (item.type === 'video' ? `<label class="create-original-audio"><input type="checkbox" data-create-edit="originalAudioMuted" ${edit.originalAudioMuted?'checked':''} /> Mute original audio</label>` : '') + `<button type="button" data-choose-cover="${index}" aria-pressed="${state.createCoverIndex===index}">${state.createCoverIndex===index?'✓ Selected cover':'Use this media as cover'}</button>`;
+    controls.innerHTML = !tool?'':fields + (item.type === 'video' ? `<label class="create-original-audio"><input type="checkbox" data-create-edit="originalAudioMuted" ${edit.originalAudioMuted?'checked':''} /> Mute original audio</label>` : '') + (state.createMediaType==='reel'?'':`<button type="button" data-choose-cover="${index}" aria-pressed="${state.createCoverIndex===index}">${state.createCoverIndex===index?'✓ Selected cover':'Use this media as cover'}</button>`);
     if (tool === 'filters' && !state.createDetailsOpen) {
         const selectFilter = value => { item.filter=value;state.createFinalizedItems=null;renderCreatePreview(); };
         controls.querySelectorAll('[data-create-filter]').forEach(button=>button.addEventListener('click',()=>selectFilter(button.dataset.createFilter)));
@@ -439,27 +450,7 @@ async function createSquareCover(item) {
         const seekTo = Math.min(item.coverTime || 0, media.duration || 0);
         if (seekTo > 0) { const seeked = new Promise(resolve => media.addEventListener('seeked', resolve, { once: true })); media.currentTime = seekTo; await seeked; }
     }
-    const width = media.videoWidth || media.naturalWidth, height = media.videoHeight || media.naturalHeight;
-    if (!width || !height) return null;
-    const edit = mediaEdits(item), ratioParts = String(mediaAspect({...item,naturalRatio:width/height})).split('/').map(Number);
-    const ratio = ratioParts.length === 2 ? ratioParts[0]/ratioParts[1] : ratioParts[0];
-    const stage = document.createElement('canvas'); stage.width = Math.round(720*Math.min(1,ratio)); stage.height = Math.round(stage.width/ratio);
-    const context = stage.getContext('2d'); if (!context) return null;
-    context.fillStyle = '#17131d'; context.fillRect(0,0,stage.width,stage.height);
-    const scale = (mediaFit({...item,naturalRatio:width/height}) === 'cover' ? Math.max : Math.min)(stage.width/width,stage.height/height);
-    const drawWidth = width*scale, drawHeight = height*scale;
-    context.save(); context.translate(stage.width/2,stage.height/2); context.rotate(edit.rotation*Math.PI/180); context.filter = mediaFilter(item);
-    context.drawImage(media,(stage.width-drawWidth)*(item.x??50)/100-stage.width/2,(stage.height-drawHeight)*(item.y??50)/100-stage.height/2,drawWidth,drawHeight); context.restore();
-    if (edit.text) {
-        const fontSize=stage.width*edit.textSize/100;
-        context.font=`700 ${fontSize}px sans-serif`;context.fillStyle='#fff';context.textAlign='center';context.textBaseline='middle';
-        context.shadowColor='#000';context.shadowBlur=4;
-        const lines=[];for(const paragraph of edit.text.split('\n')) { let line='';for(const word of paragraph.split(' ')){const next=line?line+' '+word:word;if(line&&context.measureText(next).width>stage.width*.9){lines.push(line);line=word;}else line=next;}lines.push(line); }
-        lines.forEach((line,index)=>context.fillText(line,stage.width*edit.textX/100,stage.height*edit.textY/100+(index-(lines.length-1)/2)*fontSize*1.2,stage.width*.9));
-    }
-    const canvas=document.createElement('canvas');canvas.width=720;canvas.height=720;
-    const size=Math.min(stage.width,stage.height);canvas.getContext('2d').drawImage(stage,(stage.width-size)/2,(stage.height-size)/2,size,size,0,0,720,720);
-    return canvas.toDataURL('image/jpeg', .85);
+    try{return renderSquareCover(media,item);}catch{return null;}
 }
 
 let scheduledPostTimer = null;
