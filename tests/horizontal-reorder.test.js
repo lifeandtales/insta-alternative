@@ -128,3 +128,32 @@ test('thumbnail cross removes only that item while preserving the other edits',a
     assert.equal(state.createMediaItems.length,1);assert.equal(state.createMediaItems[0].text,'Keep');
     assert.match(app.element('.create-media-tabs').innerHTML,/data-create-remove="0"/);
 });
+
+
+test('all post tools begin closed and toggle independently without losing edits',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js'),create=app.exportsOf('src/features/create.js'),events=app.exportsOf('src/features/create.events.js');
+    create.openCreateUpload('post');state.createMediaItems=[{type:'image',url:'a.jpg',text:'Keep me',filter:'warm'}];create.startCreateEditing();
+    assert.equal(state.createTool,'');assert.equal(app.element('.create-media-controls').hidden,true);
+    for(const name of ['text','filters','edit','ratio']){
+        const event={target:{closest:selector=>selector==='[data-create-tool]'?{dataset:{createTool:name}}:null}};
+        events.handleCreateUploadClick(event);assert.equal(state.createTool,name);assert.equal(app.element('.create-media-controls').hidden,false);
+        events.handleCreateUploadClick(event);assert.equal(state.createTool,'');assert.equal(app.element('.create-media-controls').hidden,true);
+    }
+    assert.equal(state.createMediaItems[0].text,'Keep me');assert.equal(state.createMediaItems[0].filter,'warm');
+    assert.match(app.element('.create-upload-preview').innerHTML,/Keep me/);
+});
+
+
+test('New post music and schedule panels start closed and future time minimum is enforced',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js'),create=app.exportsOf('src/features/create.js'),events=app.exportsOf('src/features/create.events.js');
+    create.openCreateUpload('post');assert.equal(app.element('#create-music-panel').hidden,true);assert.equal(app.element('#create-schedule-panel').hidden,true);
+    state.createMediaItems=[{type:'image',url:'a.jpg',naturalRatio:1}];create.startCreateEditing();create.setCreateDetails(true);
+    assert.ok(new Date(app.element('#create-schedule').min).getTime()>1792738800000);
+    for(const name of ['music','schedule']){
+        const toggle={dataset:{createDetail:name},setAttribute(){}};const event={target:{closest:selector=>selector==='[data-create-detail]'?toggle:null}};
+        events.handleCreateUploadClick(event);assert.equal(app.element(`#create-${name}-panel`).hidden,false);
+        events.handleCreateUploadClick(event);assert.equal(app.element(`#create-${name}-panel`).hidden,true);
+    }
+    app.element('#create-schedule').value='2020-01-01T12:00';await create.publishCreatedMedia();
+    assert.equal(state.createDetailsOpen,true);assert.match(app.element('#share-feedback').textContent,/future date and time/);
+});

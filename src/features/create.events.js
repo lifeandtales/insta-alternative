@@ -5,7 +5,7 @@ import { createMenuBackdrop, createUploadBackdrop } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { mayInteract } from '../core/social.js';
 import {
-    removeCreateMedia, syncCreateMediaSelection, dismissCreateExit, syncCreateCaptionPreview, finalizeCreateMedia, setCreateDetails, renderCreatePreview, saveCreateDraft, resumeCreateDraft, startCreateEditing, renderCreateTags, searchCreateTagAccounts,
+    updateCreateScheduleMinimum, removeCreateMedia, syncCreateMediaSelection, dismissCreateExit, syncCreateCaptionPreview, finalizeCreateMedia, setCreateDetails, renderCreatePreview, saveCreateDraft, resumeCreateDraft, startCreateEditing, renderCreateTags, searchCreateTagAccounts,
     closeCreateMenu,
     closeCreateUpload,
     getSupportedStoryFileType,
@@ -28,11 +28,20 @@ export function handleOpenCreateClick(event) {
 
 export function handleCreateUploadClick(event) {
     if(event.target.closest('.create-keep-editing')){dismissCreateExit();document.querySelector('.create-upload-close').focus();return true;}
+    const detail=event.target.closest('[data-create-detail]');
+    if(detail){
+        const name=detail.dataset.createDetail;
+        if(!['music','schedule'].includes(name))return true;
+        const panel=document.getElementById(`create-${name}-panel`);panel.hidden=!panel.hidden;
+        detail.setAttribute('aria-expanded',String(!panel.hidden));
+        if(name==='schedule'&&!panel.hidden)updateCreateScheduleMinimum();
+        return true;
+    }
     if(event.target.closest('.create-next')){finalizeCreateMedia();return true;}
     if(event.target.closest('.create-back-to-edit')){setCreateDetails(false);return true;}
     if(event.target.closest('.create-add-media')){state.createAppending=true;document.getElementById('post-upload').value='';document.getElementById('post-upload').click();return true;}
     const tool=event.target.closest('[data-create-tool]');
-    if(tool){state.createTool=tool.dataset.createTool;renderCreatePreview();return true;}
+    if(tool){state.createTool=state.createTool===tool.dataset.createTool?'':tool.dataset.createTool;renderCreatePreview();return true;}
     const remove=event.target.closest('[data-create-remove]');
     if(remove){removeCreateMedia(Number(remove.dataset.createRemove));document.querySelector(state.createMediaItems.length?'.create-media-tabs [data-create-active]':'.create-add-media')?.focus();return true;}
     const active=event.target.closest('[data-create-active]');

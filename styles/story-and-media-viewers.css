@@ -1254,8 +1254,22 @@ button.caption-hashtag:focus-visible { outline:2px solid currentColor; outline-o
 .create-media-tabs.create-order-strip { padding:12px 5px 14px; }
 .create-media-tabs .create-order-tile { position:relative; }
 .create-media-tabs .create-order-thumb { transition:transform .15s,box-shadow .15s; }
-.create-media-tabs .is-held .create-order-thumb { transform:translateY(-3px) scale(1.04); box-shadow:0 7px 12px #32164b45; border-color:#7134a8; }
+.create-media-tabs .create-order-tile.is-held { transform:translateY(-3px) scale(1.04); z-index:3; }
+.create-media-tabs .is-held .create-order-thumb { box-shadow:0 7px 12px #32164b45; border-color:#7134a8; }
 .create-thumb-remove { display:none; position:absolute; right:-2px; top:-6px; width:26px; height:26px; min-height:26px!important; padding:0!important; border-radius:50%!important; background:#fff!important; color:#50216f!important; border:1px solid #a989c1!important; box-shadow:0 2px 6px #0003; font-size:21px; line-height:22px; z-index:2; }
 .is-held > .create-thumb-remove { display:block; }
-.create-order-ghost .create-thumb-remove { display:none; }
-.create-order-ghost { transform-origin:center; }
+.create-order-ghost .create-thumb-remove { display:block; z-index:3; }
+.create-order-ghost { transform-origin:center; overflow:visible; }
+
+.create-add-media { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; }
+.create-add-media small { font-size:.72rem; line-height:1.25; font-weight:400; opacity:.8; }
+
+.create-media-controls[hidden] { display:none; }
+
+.create-detail-toggle { display:flex; align-items:center; gap:9px; justify-self:start; min-height:44px; padding:8px 12px; border:1px solid #c7aedf; border-radius:10px; background:#f4edfb; color:#58218a; font:inherit; font-weight:600; }
+.create-detail-toggle[aria-expanded=true] { background:#7134a8; color:white; }
+.create-detail-toggle svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.create-detail-panel { display:grid; gap:10px; padding:12px; border:1px solid #ded1e7; border-radius:10px; }
+.create-detail-panel[hidden] { display:none; }
+.create-detail-panel p { margin:0; }
+.create-detail-panel input { min-width:0; width:100%; padding:12px; border:1px solid #b9a4c7; border-radius:8px; font:inherit; }

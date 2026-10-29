@@ -62,8 +62,12 @@ export function openCreateUpload(type) {
     dismissCreateExit();
     hideCaptionSuggestions();
     state.createMediaItems = [];
-    state.createReorderOpen = false; state.createActiveIndex = 0; state.createTool = "edit"; state.createDetailsOpen = false; state.createFinalizedItems = null; state.createAppending = false;
+    state.createReorderOpen = false; state.createActiveIndex = 0; state.createTool = ""; state.createDetailsOpen = false; state.createFinalizedItems = null; state.createAppending = false;
     document.getElementById("create-schedule").value = "";
+    for(const name of ['music','schedule']){
+        document.getElementById(`create-${name}-panel`).hidden=true;
+        document.querySelector(`[data-create-detail="${name}"]`).setAttribute('aria-expanded','false');
+    }
     document.querySelector(".create-editor-fields").hidden = true;
     document.querySelector(".create-media-editing").hidden = false;
     state.createCoverIndex = null;
@@ -262,9 +266,14 @@ export async function finalizeCreateMedia() {
     } catch { showShareFeedback('One of these files could not be opened. Try a supported photo or video.');return false; }
     finally {state.createFinalizing=false;next.disabled=false;next.textContent='Next →';}
 }
+export function updateCreateScheduleMinimum() {
+    const next=new Date(Math.ceil((Date.now()+1)/60000)*60000);
+    document.getElementById('create-schedule').min=new Date(next.getTime()-next.getTimezoneOffset()*60000).toISOString().slice(0,16);
+}
 export function setCreateDetails(details) {
     if (!state.createMediaItems.length) return false;
     state.createDetailsOpen = Boolean(details);
+    if(details)updateCreateScheduleMinimum();
     state.createFinalizedItems = details ? state.createMediaItems.map(item => ({...item})) : null;
     document.querySelector('.create-media-editing').hidden = Boolean(details);
     document.querySelector('.create-editor-fields').hidden = !details;
@@ -312,7 +321,7 @@ export function renderCreatePreview() {
     renderCreateMediaOrder();
     document.querySelector('.create-next').disabled=!item||Boolean(state.createFinalizing);
     document.querySelector('.create-add-media').hidden=state.createDetailsOpen||(state.createMediaType==='reel'&&Boolean(item));
-    document.querySelector('.create-add-media').textContent=state.createMediaType==='reel'?'＋ Add video':'＋ Add media · up to 20';
+    document.querySelector('.create-add-media').innerHTML=state.createMediaType==='reel'?'＋ Add video':'<span>＋ Add media</span><small>(up to 20 posts)</small>';
     document.querySelector('.create-add-media').disabled=state.createMediaItems.length>=(state.createMediaType==='reel'?1:20);
     document.querySelector('.create-tool-tabs').hidden=!item;
     preview.hidden = false;
@@ -330,8 +339,9 @@ export function renderCreatePreview() {
         initializePostCarousels(preview);
         return;
     }
-    const edit = mediaEdits(item), tool = state.createTool || 'edit';
-    document.querySelectorAll('[data-create-tool]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.createTool===tool)));
+    const edit = mediaEdits(item), tool = state.createTool || '';
+    document.querySelectorAll('[data-create-tool]').forEach(button=>{const open=button.dataset.createTool===tool;button.setAttribute('aria-pressed',String(open));button.setAttribute('aria-expanded',String(open));});
+    controls.hidden=!tool;
     preview.innerHTML = `<div class="upload-media-item">${renderEditedMedia(item, {preview:true,alt:`Media ${index+1}`})}</div>`;
     const bindText = () => { if (!state.createDetailsOpen) bindPostTextGestures(preview.querySelector('.post-media-stage'),item,()=>{state.createFinalizedItems=null;},()=>!state.createDetailsOpen&&!state.createFinalizing); };
     bindText();
@@ -356,8 +366,7 @@ export function renderCreatePreview() {
     if (tool === 'filters') fields = `<div class="create-filter-strip" role="group" aria-label="Filters">${POST_FILTERS.map(({id:value,name:label})=>`<button type="button" data-create-filter="${value}" aria-pressed="${edit.filter===value}"><span class="create-filter-swatch" style="filter:${mediaFilter({...item,filter:value})}">${item.type==='image'?`<img src="${escapeHtml(item.url)}" alt="" draggable="false" />`:'✦'}</span><span>${label}</span></button>`).join('')}</div><small>Swipe the preview left or right to change filters.</small>`;
     if (tool === 'ratio') fields = options('ratio','Post ratio',[['original','Original · within post limits'],['1/1','Square · 1:1'],['4/5','Portrait · 4:5'],['3/4','Tall portrait · 3:4'],['16/9','Landscape · 16:9'],['1.91/1','Wide landscape · 1.91:1'],...(state.createMediaType==='reel'?[['9/16','Full portrait · 9:16']]:[])],edit.ratio)+range('x','Horizontal crop',0,100,item.x??50)+range('y','Vertical crop',0,100,item.y??50);
     if (tool === 'edit') fields = range('brightness','Brightness',0,200,edit.brightness)+range('contrast','Contrast',0,200,edit.contrast)+range('saturation','Saturation',0,200,edit.saturation)+`<button type="button" class="create-reset-edits">Reset adjustments</button>`;
-    if (tool === 'music') fields = '<p>Music catalog is not connected yet. Licensed music selection will be added later.</p>';
-    controls.innerHTML = fields + (item.type === 'video' ? `<label class="create-original-audio"><input type="checkbox" data-create-edit="originalAudioMuted" ${edit.originalAudioMuted?'checked':''} /> Mute original audio</label>` : '') + `<button type="button" data-choose-cover="${index}" aria-pressed="${state.createCoverIndex===index}">${state.createCoverIndex===index?'✓ Selected cover':'Use this media as cover'}</button>`;
+    controls.innerHTML = !tool?'':fields + (item.type === 'video' ? `<label class="create-original-audio"><input type="checkbox" data-create-edit="originalAudioMuted" ${edit.originalAudioMuted?'checked':''} /> Mute original audio</label>` : '') + `<button type="button" data-choose-cover="${index}" aria-pressed="${state.createCoverIndex===index}">${state.createCoverIndex===index?'✓ Selected cover':'Use this media as cover'}</button>`;
     if (tool === 'filters' && !state.createDetailsOpen) {
         const selectFilter = value => { item.filter=value;state.createFinalizedItems=null;renderCreatePreview(); };
         controls.querySelectorAll('[data-create-filter]').forEach(button=>button.addEventListener('click',()=>selectFilter(button.dataset.createFilter)));
