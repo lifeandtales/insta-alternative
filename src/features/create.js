@@ -298,13 +298,8 @@ export function removeCreateMedia(index=state.createActiveIndex||0) {
     syncCreateMediaSelection();renderCreatePreview();return true;
 }
 function renderCreateMediaOrder() {
-    const items=state.createMediaItems,index=state.createActiveIndex||0;
-    const reorder=document.querySelector('.create-reorder-toggle'),remove=document.querySelector('.create-remove-media'),panel=document.querySelector('.create-reorder-panel');
-    reorder.disabled=items.length<2;reorder.setAttribute('aria-expanded',String(Boolean(state.createReorderOpen&&items.length>1)));
-    remove.disabled=!items.length;remove.textContent=items[index]?.type==='video'?'Remove video':'Remove image';
-    remove.setAttribute('aria-label',items.length?`Remove ${items[index].type==='video'?'video':'image'} ${index+1}`:'Remove media');
-    panel.hidden=!state.createReorderOpen||items.length<2;
-    panel.innerHTML=panel.hidden?'':`<div class="create-order-strip" role="list" aria-label="Hold a thumbnail, then drag left or right to reorder">${items.map((item,i)=>`<div class="create-order-tile" role="listitem"><button type="button" class="create-order-thumb" data-create-active="${i}" data-order-index="${i}" aria-pressed="${i===index}" aria-label="${item.type==='video'?'Video':'Image'} ${i+1}${i===state.createCoverIndex?', cover':''}" aria-description="Swipe to scroll. Hold, then drag horizontally to reorder. Keyboard: Alt and left or right arrow.">${item.type==='image'?`<img src="${escapeHtml(item.url)}" alt="" draggable="false" style="filter:${mediaFilter(item)}" />`:`<video src="${escapeHtml(item.url+(item.url.includes('#')?'':'#t=0.01'))}" muted playsinline preload="metadata" aria-hidden="true" style="filter:${mediaFilter(item)}"></video><span class="create-order-video-mark" aria-hidden="true">▶</span>`}${i===state.createCoverIndex?'<span class="create-order-cover-dot" aria-hidden="true"></span>':''}</button></div>`).join('')}</div>`;
+    const items=state.createMediaItems,index=state.createActiveIndex||0,panel=document.querySelector('.create-media-tabs');
+    panel.innerHTML=items.map((item,i)=>`<div class="create-order-tile" role="listitem"><button type="button" class="create-media-thumbnail create-order-thumb" data-create-active="${i}" data-order-index="${i}" aria-pressed="${i===index}" aria-label="${item.type==='video'?'Video':'Image'} ${i+1}" aria-description="Swipe to scroll. Hold for 0.8 seconds to reorder or remove. Keyboard: Alt and left or right arrow.">${item.type==='image'?`<img src="${escapeHtml(item.url)}" alt="" draggable="false" style="filter:${mediaFilter(item)}" />`:`<video src="${escapeHtml(item.url+(item.url.includes('#')?'':'#t=0.01'))}" muted playsinline preload="metadata" aria-hidden="true" style="filter:${mediaFilter(item)}"></video><span class="create-media-video-mark" aria-hidden="true">▶</span>`}<span class="create-media-position" aria-hidden="true">${i+1}</span></button><button type="button" class="create-thumb-remove" data-create-remove="${i}" aria-label="Remove ${item.type==='video'?'video':'image'} ${i+1}">×</button></div>`).join('');
     bindHorizontalReorder(panel,reorderCreateMedia);
 }
 
@@ -354,7 +349,6 @@ export function renderCreatePreview() {
         rememberSize();
         if (item.type === 'video') media.addEventListener('volumechange', () => { if (item.originalAudioMuted && !media.muted) media.muted = true; });
     }
-    document.querySelector('.create-media-tabs').innerHTML = state.createMediaItems.map((entry, i) => `<button type="button" class="create-media-thumbnail" data-create-active="${i}" aria-pressed="${i===index}" aria-label="${entry.type === 'video' ? 'Video' : 'Image'} ${i+1}">${entry.type==='video'?`<video src="${escapeHtml(entry.url+(entry.url.includes('#')?'':'#t=0.01'))}" muted playsinline preload="metadata" aria-hidden="true" style="filter:${mediaFilter(entry)}"></video><span class="create-media-video-mark" aria-hidden="true">▶</span>`:`<img src="${escapeHtml(entry.url)}" alt="" draggable="false" style="filter:${mediaFilter(entry)}" />`}<span class="create-media-position" aria-hidden="true">${i+1}</span></button>`).join('');
     const range = (key,label,min,max,value) => `<label>${label}<input type="range" data-create-edit="${key}" min="${min}" max="${max}" value="${value}" /></label>`;
     const options = (key,label,values,current) => `<label>${label}<select data-create-edit="${key}">${values.map(([value,text])=>`<option value="${value}" ${value===current?'selected':''}>${text}</option>`).join('')}</select></label>`;
     let fields = '';

@@ -10,7 +10,8 @@ export function edgeScrollSpeed(pointerX,left,right,margin=36) {
 export function bindHorizontalReorder(panel,onReorder,{requestFrame=callback=>window.requestAnimationFrame(callback),cancelFrame=id=>window.cancelAnimationFrame(id),setTimer=(callback,delay)=>window.setTimeout(callback,delay),clearTimer=id=>window.clearTimeout(id)}={}) {
     if(!panel||boundPanels.has(panel))return;
     boundPanels.add(panel);
-    let drag=null,frame=null,hold=null,suppressClickUntil=0;
+    let drag=null,frame=null,hold=null,held=null,suppressClickUntil=0;
+    const dismissHeld=()=>{held?.classList.remove('is-held');held=null;};
     const restore=state=>{if(state.strip.isConnected)state.original.forEach(tile=>state.strip.append(tile));};
     const stop=(commit=false)=>{
         const state=drag;if(!state)return;drag=null;
@@ -25,10 +26,12 @@ export function bindHorizontalReorder(panel,onReorder,{requestFrame=callback=>wi
         else {
             const moved=state.from===state.to||onReorder(state.from,state.to)!==false;
             if(!moved)restore(state);
-            const strip=panel.querySelector('.create-order-strip');
+            const strip=(panel.matches?.('.create-order-strip')?panel:panel.querySelector('.create-order-strip'));
             if(strip)strip.scrollLeft=scroll;
             const index=moved?state.to:state.from;
-            panel.querySelector(`[data-order-index="${index}"]`)?.focus({preventScroll:true});
+            const next=panel.querySelector(`[data-order-index="${index}"]`);
+            next?.focus({preventScroll:true});
+            dismissHeld();held=next?.closest('.create-order-tile');held?.classList.add('is-held');
         }
     };
     const place=()=>{
@@ -49,6 +52,7 @@ export function bindHorizontalReorder(panel,onReorder,{requestFrame=callback=>wi
     const beginHold=()=>{
         hold=null;if(!drag||drag.scrolling)return;
         if(panel.hidden||panel.isConnected===false){stop(false);return;}
+        dismissHeld();held=drag.tile;held.classList.add('is-held');
         drag.started=true;panel.setPointerCapture(drag.id);
         const rect=drag.tile.getBoundingClientRect();drag.ghost=drag.tile.cloneNode(true);
         drag.ghost.classList.add('create-order-ghost');drag.ghost.setAttribute('aria-hidden','true');
@@ -60,12 +64,13 @@ export function bindHorizontalReorder(panel,onReorder,{requestFrame=callback=>wi
     panel.addEventListener('contextmenu',event=>{if(drag)event.preventDefault();});
     panel.addEventListener('pointerdown',event=>{
         if(drag){stop(false);return;}
-        if(event.button>0)return;
+        if(event.button>0||event.target.closest('[data-create-remove]'))return;
+        dismissHeld();
         const button=event.target.closest('[data-order-index]'),strip=button?.closest('.create-order-strip');
         if(!button||!strip)return;
         const tile=button.closest('.create-order-tile'),rect=tile.getBoundingClientRect();
         drag={id:event.pointerId,pointerType:event.pointerType,from:Number(button.dataset.orderIndex),to:Number(button.dataset.orderIndex),x:event.clientX,startX:event.clientX,startY:event.clientY,scrollStart:strip.scrollLeft,grabX:event.clientX-rect.left,top:rect.top,tile,strip,original:[...strip.querySelectorAll('.create-order-tile')],started:false,scrolling:false};
-        hold=setTimer(beginHold,450);
+        hold=setTimer(beginHold,800);
     });
     panel.addEventListener('pointermove',event=>{
         if(!drag||drag.id!==event.pointerId)return;
@@ -91,18 +96,21 @@ export function bindHorizontalReorder(panel,onReorder,{requestFrame=callback=>wi
     panel.addEventListener('pointercancel',()=>stop(false));
     panel.addEventListener('lostpointercapture',()=>stop(false));
     panel.addEventListener('click',event=>{
-        if(event.detail!==0&&Date.now()<suppressClickUntil){suppressClickUntil=0;event.preventDefault();event.stopImmediatePropagation();}
+        if(!event.target?.closest('[data-create-remove]')&&event.detail!==0&&Date.now()<suppressClickUntil){suppressClickUntil=0;event.preventDefault();event.stopImmediatePropagation();}
     },true);
     panel.addEventListener('keydown',event=>{
-        if(drag&&event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();stop(false);return;}
+        if((drag||held)&&event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();stop(false);dismissHeld();return;}
         const button=event.target.closest('[data-order-index]');
         if(!button||!event.altKey||!['ArrowLeft','ArrowRight'].includes(event.key))return;
         event.preventDefault();event.stopPropagation();
         const from=Number(button.dataset.orderIndex),to=from+(event.key==='ArrowLeft'?-1:1),count=panel.querySelectorAll('[data-order-index]').length;
         if(to<0||to>=count)return;
         const scroll=button.closest('.create-order-strip').scrollLeft;
-        if(onReorder(from,to)!==false){const next=panel.querySelector(`[data-order-index="${to}"]`);next?.focus({preventScroll:true});const strip=panel.querySelector('.create-order-strip');if(strip)strip.scrollLeft=scroll;next?.scrollIntoView({block:'nearest',inline:'nearest'});}
+        if(onReorder(from,to)!==false){const next=panel.querySelector(`[data-order-index="${to}"]`);next?.focus({preventScroll:true});const strip=(panel.matches?.('.create-order-strip')?panel:panel.querySelector('.create-order-strip'));if(strip)strip.scrollLeft=scroll;next?.scrollIntoView({block:'nearest',inline:'nearest'});}
     });
-    window.addEventListener('blur',()=>stop(false));
-    document.addEventListener('visibilitychange',()=>{if(document.hidden)stop(false);});
+    document.addEventListener('pointerdown',event=>{
+        if(held&&!event.target.closest('.create-order-tile.is-held'))dismissHeld();
+    });
+    window.addEventListener('blur',()=>{stop(false);dismissHeld();});
+    document.addEventListener('visibilitychange',()=>{if(document.hidden){stop(false);dismissHeld();}});
 }

@@ -1250,3 +1250,12 @@ button.caption-hashtag:focus-visible { outline:2px solid currentColor; outline-o
 .create-upload-dialog.create-editing .create-final-preview .post-media-stage { width:100%; max-width:100%; margin:0; }
 
 .create-order-strip { -webkit-overflow-scrolling:touch; touch-action:auto; }
+
+.create-media-tabs.create-order-strip { padding:12px 5px 14px; }
+.create-media-tabs .create-order-tile { position:relative; }
+.create-media-tabs .create-order-thumb { transition:transform .15s,box-shadow .15s; }
+.create-media-tabs .is-held .create-order-thumb { transform:translateY(-3px) scale(1.04); box-shadow:0 7px 12px #32164b45; border-color:#7134a8; }
+.create-thumb-remove { display:none; position:absolute; right:-2px; top:-6px; width:26px; height:26px; min-height:26px!important; padding:0!important; border-radius:50%!important; background:#fff!important; color:#50216f!important; border:1px solid #a989c1!important; box-shadow:0 2px 6px #0003; font-size:21px; line-height:22px; z-index:2; }
+.is-held > .create-thumb-remove { display:block; }
+.create-order-ghost .create-thumb-remove { display:none; }
+.create-order-ghost { transform-origin:center; }

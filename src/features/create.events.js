@@ -28,13 +28,13 @@ export function handleOpenCreateClick(event) {
 
 export function handleCreateUploadClick(event) {
     if(event.target.closest('.create-keep-editing')){dismissCreateExit();document.querySelector('.create-upload-close').focus();return true;}
-    if(event.target.closest('.create-reorder-toggle')){state.createReorderOpen=!state.createReorderOpen;renderCreatePreview();return true;}
-    if(event.target.closest('.create-remove-media')){removeCreateMedia();document.querySelector(state.createMediaItems.length?'.create-remove-media':'.create-add-media').focus();return true;}
     if(event.target.closest('.create-next')){finalizeCreateMedia();return true;}
     if(event.target.closest('.create-back-to-edit')){setCreateDetails(false);return true;}
     if(event.target.closest('.create-add-media')){state.createAppending=true;document.getElementById('post-upload').value='';document.getElementById('post-upload').click();return true;}
     const tool=event.target.closest('[data-create-tool]');
     if(tool){state.createTool=tool.dataset.createTool;renderCreatePreview();return true;}
+    const remove=event.target.closest('[data-create-remove]');
+    if(remove){removeCreateMedia(Number(remove.dataset.createRemove));document.querySelector(state.createMediaItems.length?'.create-media-tabs [data-create-active]':'.create-add-media')?.focus();return true;}
     const active=event.target.closest('[data-create-active]');
     if(active){state.createActiveIndex=Number(active.dataset.createActive);renderCreatePreview();return true;}
     if(event.target.closest('.create-reset-edits')){const item=state.createMediaItems[state.createActiveIndex||0];if(item){item.brightness=100;item.contrast=100;item.saturation=100;item.rotation=0;renderCreatePreview();}return true;}

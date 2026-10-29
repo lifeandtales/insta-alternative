@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {loadApp} from './helpers/app-harness.js';
 
 function stripFixture(count=3,width=240) {
-    const handlers={},captures=new Set(),frames=new Map(),timers=new Map(),moves=[];let serial=0;
+    const handlers={},captures=new Set(),frames=new Map(),timers=new Map(),delays=[],moves=[];let serial=0;
     const classes=()=>{const values=new Set();return {add:v=>values.add(v),remove:v=>values.delete(v),contains:v=>values.has(v)};};
     const strip={children:[],scrollLeft:0,isConnected:true,getBoundingClientRect:()=>({left:0,right:width,width}),querySelectorAll:()=>strip.children,
         append(tile){const i=this.children.indexOf(tile);if(i>=0)this.children.splice(i,1);this.children.push(tile);},
@@ -14,11 +14,11 @@ function stripFixture(count=3,width=240) {
     for(let i=0;i<count;i++){
         const tile={id:i,classList:classes(),getBoundingClientRect:()=>({left:strip.children.indexOf(tile)*84-strip.scrollLeft,top:0,width:76,height:76}),
             cloneNode:()=>({classList:classes(),style:{},setAttribute(){},querySelectorAll:()=>[{tabIndex:0}],remove(){this.removed=true;}})};
-        tile.button={dataset:{orderIndex:String(i)},closest:selector=>selector==='.create-order-strip'?strip:selector==='.create-order-tile'?tile:tile.button,focus(){},scrollIntoView(){}};
+        tile.button={dataset:{orderIndex:String(i)},closest:selector=>selector==='.create-order-strip'?strip:selector==='.create-order-tile'?tile:selector==='[data-order-index]'?tile.button:null,focus(){},scrollIntoView(){}};
         Object.defineProperty(tile,'nextElementSibling',{get:()=>strip.children[strip.children.indexOf(tile)+1]||null});strip.children.push(tile);
     }
     const event=(index,x,y=20)=>({pointerId:1,button:0,clientX:x,clientY:y,target:strip.children.find(tile=>tile.id===index).button,preventDefault(){},stopImmediatePropagation(){},stopPropagation(){}});
-    return {panel,strip,handlers,captures,frames,timers,moves,event,hold:()=>{const callbacks=[...timers.values()];timers.clear();callbacks.forEach(callback=>callback());},options:{setTimer:callback=>{timers.set(++serial,callback);return serial;},clearTimer:id=>timers.delete(id),requestFrame:callback=>{frames.set(++serial,callback);return serial;},cancelFrame:id=>frames.delete(id)},commit:(from,to)=>{moves.push([from,to]);return true;}};
+    return {panel,strip,handlers,captures,frames,timers,delays,moves,event,hold:()=>{const callbacks=[...timers.values()];timers.clear();callbacks.forEach(callback=>callback());},options:{setTimer:(callback,delay)=>{delays.push(delay);timers.set(++serial,callback);return serial;},clearTimer:id=>timers.delete(id),requestFrame:callback=>{frames.set(++serial,callback);return serial;},cancelFrame:id=>frames.delete(id)},commit:(from,to)=>{moves.push([from,to]);return true;}};
 }
 
 test('horizontal drag moves a thumbnail to the requested position and cleans up capture',async()=>{
@@ -46,7 +46,7 @@ test('holding a dragged thumbnail near the edge scrolls the strip to reach later
 test('Reorder renders one thumbnail strip with no visible item labels or arrow boxes',async()=>{
     const app=await loadApp(),{state}=app.exportsOf('src/core/state.js'),create=app.exportsOf('src/features/create.js');create.openCreateUpload('post');
     state.createMediaItems=[{type:'image',url:'one.jpg'},{type:'video',url:'two.mp4'}];state.createReorderOpen=true;create.startCreateEditing();
-    const html=app.element('.create-reorder-panel').innerHTML;assert.match(html,/create-order-strip/);assert.match(html,/<img/);assert.match(html,/<video/);assert.doesNotMatch(html,/data-create-move-from|Post order|1\. Image/);
+    const html=app.element('.create-media-tabs').innerHTML;assert.match(html,/create-order-tile/);assert.match(html,/<img/);assert.match(html,/<video/);assert.doesNotMatch(html,/data-create-move-from|Post order|1\. Image/);
 });
 
 
@@ -107,4 +107,24 @@ test('phone hold enables reorder and prevents native scrolling only during that 
     f.hold();f.handlers.touchmove({cancelable:true,preventDefault(){prevented=true;}});assert.equal(prevented,true);
     f.handlers.pointermove({...f.event(0,230),pointerType:'touch'});f.handlers.pointerup(f.event(0,230));assert.deepEqual(f.moves,[[0,2]]);
     prevented=false;f.handlers.touchmove({cancelable:true,preventDefault(){prevented=true;}});assert.equal(prevented,false);assert.equal(f.captures.size,0);
+});
+
+
+test('each lifted thumbnail requires a fresh 800ms hold and remains removable after release',async()=>{
+    const app=await loadApp(),{bindHorizontalReorder}=app.exportsOf('src/media/horizontal-reorder.js'),f=stripFixture();
+    bindHorizontalReorder(f.panel,f.commit,f.options);f.handlers.pointerdown(f.event(0,38));assert.equal(f.delays[0],800);
+    assert.equal(f.strip.children[0].classList.contains('is-held'),false);f.hold();assert.equal(f.strip.children[0].classList.contains('is-held'),true);
+    f.handlers.pointerup(f.event(0,38));assert.equal(f.strip.children[0].classList.contains('is-held'),true);
+    let prevented=false;f.handlers.click({detail:1,target:{closest:()=>({})},preventDefault(){prevented=true;},stopImmediatePropagation(){}});assert.equal(prevented,false);
+    f.handlers.pointerdown(f.event(1,122));assert.equal(f.delays[1],800);assert.equal(f.strip.children[0].classList.contains('is-held'),false);assert.equal(f.strip.children[1].classList.contains('is-held'),false);
+    f.hold();assert.equal(f.strip.children[1].classList.contains('is-held'),true);f.handlers.pointerup(f.event(1,122));
+    f.handlers.keydown({key:'Escape',preventDefault(){},stopImmediatePropagation(){}});assert.equal(f.strip.children[1].classList.contains('is-held'),false);
+});
+
+test('thumbnail cross removes only that item while preserving the other edits',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js'),create=app.exportsOf('src/features/create.js'),events=app.exportsOf('src/features/create.events.js');
+    create.openCreateUpload('post');state.createMediaItems=[{type:'image',url:'a.jpg',text:'Keep'},{type:'video',url:'b.mp4'}];create.startCreateEditing();
+    events.handleCreateUploadClick({target:{closest:selector=>selector==='[data-create-remove]'?{dataset:{createRemove:'1'}}:null}});
+    assert.equal(state.createMediaItems.length,1);assert.equal(state.createMediaItems[0].text,'Keep');
+    assert.match(app.element('.create-media-tabs').innerHTML,/data-create-remove="0"/);
 });
