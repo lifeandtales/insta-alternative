@@ -75,3 +75,15 @@ test('media selector shows ordered image and video thumbnails instead of text-on
     assert.match(html,/create-media-position[^>]*>1</);assert.match(html,/create-media-position[^>]*>2</);
     assert.doesNotMatch(html,/>Image 1<|>Video 2</);
 });
+
+
+test('Next previews every finalized item in a feed-style carousel, starting at the first item',async()=>{
+    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js'),create=app.exportsOf('src/features/create.js');create.openCreateUpload('post');
+    state.createMediaItems=Array.from({length:9},(_,i)=>({type:i===8?'video':'image',url:`item-${i}.jpg`,text:`Edit ${i}`,naturalRatio:1}));
+    state.createActiveIndex=7;create.startCreateEditing();create.setCreateDetails(true);
+    const html=app.element('.create-upload-preview').innerHTML;
+    assert.equal((html.match(/class="carousel-slide"/g)||[]).length,9);assert.match(html,/1\/9/);assert.match(html,/aria-label="1 of 9"/);assert.match(html,/<video/);assert.match(html,/Edit 8/);
+    assert.ok(html.indexOf('item-0.jpg')<html.indexOf('item-8.jpg'));
+    assert.equal(state.createFinalizedItems.length,9);assert.equal(app.element('.create-media-controls').hidden,true);
+    create.setCreateDetails(false);assert.doesNotMatch(app.element('.create-upload-preview').innerHTML,/carousel-slides/);assert.equal(state.createActiveIndex,7);
+});

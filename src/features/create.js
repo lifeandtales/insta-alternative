@@ -1,3 +1,4 @@
+import { initializePostCarousels } from '../media/carousel.js';
 import { bindHorizontalReorder } from '../media/horizontal-reorder.js';
 import { hideCaptionSuggestions } from './caption-suggestions.js';
 import { recordPostMentions } from './notifications.js';
@@ -325,6 +326,14 @@ export function renderCreatePreview() {
         preview.innerHTML='<p class="create-media-empty">Add a photo or video to continue.</p>';
         controls.replaceChildren();document.querySelector('.create-media-tabs').replaceChildren();
         document.querySelector('.create-publish-button').disabled=true;return;
+    }
+    preview.classList.toggle('create-final-preview',state.createDetailsOpen);
+    if(state.createDetailsOpen){
+        const items=state.createFinalizedItems||state.createMediaItems;
+        controls.hidden=true;
+        preview.innerHTML=`<div class="post-carousel" aria-label="${items.length} media items"><div class="carousel-slides" tabindex="0" aria-label="Post preview: swipe to see all media">${items.map((entry,i)=>`<div class="carousel-slide" role="group" aria-label="${i+1} of ${items.length}">${renderEditedMedia(entry,{preview:true,alt:`Media ${i+1}`})}</div>`).join('')}</div>${items.length>1?`<span class="carousel-index" role="status" aria-live="polite" aria-label="Item 1 of ${items.length}">1/${items.length}</span>`:''}</div>`;
+        initializePostCarousels(preview);
+        return;
     }
     const edit = mediaEdits(item), tool = state.createTool || 'edit';
     document.querySelectorAll('[data-create-tool]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.createTool===tool)));

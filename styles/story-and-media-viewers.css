@@ -1230,3 +1230,21 @@ button.caption-hashtag:focus-visible { outline:2px solid currentColor; outline-o
 .create-media-thumbnail img,.create-media-thumbnail video { display:block; width:100%; height:100%; object-fit:cover; border-radius:5px; pointer-events:none; }
 .create-media-position { position:absolute; top:6px; left:6px; min-width:19px; height:19px; border-radius:5px; background:#292330d9; color:white; font-size:11px; line-height:19px; text-align:center; pointer-events:none; }
 .create-media-video-mark { position:absolute; bottom:7px; right:8px; color:white; text-shadow:0 1px 3px #000; font-size:15px; pointer-events:none; }
+
+/* Keep long media rows inside the editor rather than expanding its grid. */
+.create-upload-dialog.create-editing,
+.create-editing .create-upload-content,
+.create-editing .create-editor-step,
+.create-editing .create-media-controls,
+.create-editing .create-media-controls > *,
+.create-editing .create-reorder-panel,
+.create-editing .create-order-strip,
+.create-editing .create-media-tabs { min-width:0; max-width:100%; box-sizing:border-box; }
+.create-editing .create-media-controls { grid-template-columns:minmax(0,1fr); }
+.create-editing .create-order-strip,.create-editing .create-media-tabs { width:100%; overflow-x:auto; overflow-y:hidden; overscroll-behavior-x:contain; }
+.create-editing .create-upload-content { overflow-x:hidden; }
+
+.create-upload-dialog.create-editing .create-final-preview { padding:0; width:100%; min-width:0; }
+.create-final-preview .post-carousel { position:relative; width:100%; min-width:0; }
+.create-final-preview .carousel-slides { width:100%; min-width:0; touch-action:pan-x pan-y; }
+.create-upload-dialog.create-editing .create-final-preview .post-media-stage { width:100%; max-width:100%; margin:0; }
