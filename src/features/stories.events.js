@@ -1,3 +1,4 @@
+import { consumeStoryHoldClick } from './story-shortcuts.js';
 import { handleStoryDraftManagement } from './story-drafts.js';
 import { closeHomePanel, showHomePanel } from './home-controls.js';
 import { escapeHtml } from '../core/utils.js';
@@ -178,6 +179,7 @@ export function handleStoryOwnerClick(event) {
     }
     const storyOwner = event.target.closest("[data-story-owner]");
     if (storyOwner) {
+        if(consumeStoryHoldClick(storyOwner.dataset.storyOwner))return true;
         openStoryGroup(storyOwner.dataset.storyOwner);
         return true;
     }

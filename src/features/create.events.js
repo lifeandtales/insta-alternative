@@ -5,7 +5,7 @@ import { createMenuBackdrop, createUploadBackdrop } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { mayInteract } from '../core/social.js';
 import {
-    reorderCreateMedia, removeCreateMedia, syncCreateMediaSelection, dismissCreateExit, syncCreateCaptionPreview, finalizeCreateMedia, setCreateDetails, renderCreatePreview, saveCreateDraft, resumeCreateDraft, startCreateEditing, renderCreateTags, searchCreateTagAccounts,
+    removeCreateMedia, syncCreateMediaSelection, dismissCreateExit, syncCreateCaptionPreview, finalizeCreateMedia, setCreateDetails, renderCreatePreview, saveCreateDraft, resumeCreateDraft, startCreateEditing, renderCreateTags, searchCreateTagAccounts,
     closeCreateMenu,
     closeCreateUpload,
     getSupportedStoryFileType,
@@ -30,8 +30,6 @@ export function handleCreateUploadClick(event) {
     if(event.target.closest('.create-keep-editing')){dismissCreateExit();document.querySelector('.create-upload-close').focus();return true;}
     if(event.target.closest('.create-reorder-toggle')){state.createReorderOpen=!state.createReorderOpen;renderCreatePreview();return true;}
     if(event.target.closest('.create-remove-media')){removeCreateMedia();document.querySelector(state.createMediaItems.length?'.create-remove-media':'.create-add-media').focus();return true;}
-    const move=event.target.closest('[data-create-move-from]');
-    if(move){reorderCreateMedia(Number(move.dataset.createMoveFrom),Number(move.dataset.createMoveTo));document.querySelector(`.create-reorder-panel [data-create-active="${state.createActiveIndex||0}"]`)?.focus();return true;}
     if(event.target.closest('.create-next')){finalizeCreateMedia();return true;}
     if(event.target.closest('.create-back-to-edit')){setCreateDetails(false);return true;}
     if(event.target.closest('.create-add-media')){state.createAppending=true;document.getElementById('post-upload').value='';document.getElementById('post-upload').click();return true;}

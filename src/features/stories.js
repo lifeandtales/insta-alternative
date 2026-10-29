@@ -90,14 +90,14 @@ export function renderStories() {
     ${otherStories.map((group) => {
       const allSeen = group.stories.every((story) => state.seenStoryIds.has(story.id));
       return `
-      <button class="story-item" type="button" data-story-owner="${group.handle}">
+      <button class="story-item" type="button" aria-description="Hold for mute options; Shift+F10 on a keyboard" data-story-owner="${group.handle}">
         <span class="story-ring has-story ${allSeen ? "seen-story" : ""}"><img src="${group.avatar}" alt="" /></span>
         <span>${escapeHtml(group.user)}</span>
       </button>
     `;
     }).join("")}
     ${mutedStories.length ? `<div class="story-muted-section" aria-label="Muted stories"><span class="story-muted-label">Muted stories</span>${mutedStories.map((group) => `
-      <button class="story-item story-muted-item" type="button" data-story-owner="${escapeHtml(group.handle)}" data-story-muted="true" aria-label="${escapeHtml(group.user)}, muted stories">
+      <button class="story-item story-muted-item" type="button" aria-description="Hold for unmute options; Shift+F10 on a keyboard" data-story-owner="${escapeHtml(group.handle)}" data-story-muted="true" aria-label="${escapeHtml(group.user)}, muted stories">
         <span class="story-ring has-story story-muted-ring"><img src="${group.avatar}" alt="" /></span>
         <span>${escapeHtml(group.user)}</span>
       </button>`).join("")}</div>` : ''}

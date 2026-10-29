@@ -1,3 +1,4 @@
+import { registerStoryShortcutEvents } from './src/features/story-shortcuts.js';
 import { processScheduledPosts } from './src/features/create.js';
 import { registerStoryExportEvents } from './src/features/story-export.js';
 import { registerHomeControlEvents } from './src/features/home-controls.js';
@@ -266,6 +267,7 @@ registerAccountSettingsEvents();
 registerProfileEditorEvents();
 registerVideoPointerEvents();
 registerStoryGestureEvents();
+registerStoryShortcutEvents();
 registerCommentEvents();
 registerKeyboardEvents();
 registerMessageFormEvents();

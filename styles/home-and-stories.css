@@ -98,11 +98,17 @@
 .story-muted-section {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 4px 0 0 14px;
-  border-left: 1px solid #d3cfda;
+  flex: 0 0 auto;
+  gap: 8px;
+  padding: 0 0 0 6px;
+  border-left: 1px solid #b9b3c2;
 }
 .story-muted-label {
+  transform: rotate(180deg);
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  line-height: 1;
+  align-self: center;
   color: #77727f;
   font-size: .68rem;
   font-weight: 700;
