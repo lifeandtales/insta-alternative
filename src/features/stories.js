@@ -490,6 +490,9 @@ export function showStoryAtIndex(index) {
     viewer.querySelector(".story-viewer-avatar").src = story.avatar;
     viewer.querySelector(".story-viewer-avatar").alt = `${story.user} profile`;
     viewer.querySelector(".story-viewer-user").textContent = story.user;
+    const profileLink=viewer.querySelector('.story-author-profile');
+    profileLink.dataset.profileHandle=story.handle;
+    profileLink.setAttribute('aria-label',`Open ${story.user}'s profile`);
     viewer.querySelector(".story-viewer-caption").textContent = isRepost ? '' : (story.caption || "");
     viewer.querySelector(".story-progress-list").innerHTML = state.activeStorySequence.map((item, itemIndex) => `
     <span class="story-progress-track"><span class="story-progress-fill ${itemIndex < index ? "complete" : ""}"></span></span>

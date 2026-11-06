@@ -55,15 +55,15 @@ export function mediaFit(item) {
     const source=bounded(item.naturalRatio,mediaAspect(item),.1,10);
     return item.fit==='cover'||edit.ratio!=='original'||Math.abs(source-mediaAspect(item))>.0001?'cover':'contain';
 }
-export function renderEditedMedia(item, {className = 'post-image', alt = 'Selected media', preview = false} = {}) {
+export function renderEditedMedia(item, {className = 'post-image', alt = 'Selected media', preview = false, nativeControls = true} = {}) {
     const edit = mediaEdits(item);
     const style = `object-fit:${mediaFit(item)};object-position:${bounded(item.x,50,0,100)}% ${bounded(item.y,50,0,100)}%;filter:${mediaFilter(item)};transform:rotate(${edit.rotation}deg)`;
     const media = item.type === 'video'
-        ? `<video class="${escapeHtml(className)}" playsinline controls preload="metadata" ${preview || edit.originalAudioMuted ? 'muted' : ''} ${edit.originalAudioMuted ? 'data-original-audio-muted="true"' : ''} src="${escapeHtml(item.url)}" style="${style}"></video>`
+        ? `<video class="${escapeHtml(className)}" playsinline ${nativeControls?'controls':'disablepictureinpicture disableremoteplayback'} preload="metadata" ${preview || edit.originalAudioMuted ? 'muted' : ''} ${edit.originalAudioMuted ? 'data-original-audio-muted="true"' : ''} src="${escapeHtml(item.url)}" style="${style}"></video>`
         : `<img class="${escapeHtml(className)}" src="${escapeHtml(item.url)}" alt="${escapeHtml(alt)}" style="${style}" />`;
     const aspect = String(mediaAspect(item)).split("/").map(Number);
     const numericAspect = aspect.length === 2 ? aspect[0]/aspect[1] : aspect[0];
-    return `<div class="post-media-stage" style="aspect-ratio:${mediaAspect(item)};--media-ratio:${numericAspect}">${media}${edit.text ? `<span class="post-media-text" style="left:${edit.textX}%;top:${edit.textY}%;font-size:${edit.textSize}cqw">${escapeHtml(edit.text)}</span>` : ''}</div>`;
+    return `<div class="post-media-stage" style="aspect-ratio:${mediaAspect(item)};--media-ratio:${numericAspect}">${media}${item.type==='video'&&!nativeControls?'<button type="button" class="reel-editor-play-toggle" aria-label="Play reel preview">▶</button>':''}${edit.text ? `<span class="post-media-text" style="left:${edit.textX}%;top:${edit.textY}%;font-size:${edit.textSize}cqw">${escapeHtml(edit.text)}</span>` : ''}</div>`;
 }
 
 // Work in percentages of the same fixed canvas used for the published post.

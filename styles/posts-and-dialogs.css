@@ -847,3 +847,6 @@ body.profile-post-viewer-open {
 .sensitive-media-warning button { padding: 10px 16px; border: 0; border-radius: 12px; background: #fff; color: #332149; }
 .sensitive-thumbnail { position: relative; width: 100%; height: 100%; overflow: hidden; }
 .sensitive-thumbnail > span { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; background: #21182b55; font-size: .75rem; text-align: center; }
+
+.profile-avatar-link { display: block; flex: 0 0 auto; padding: 0; border: 0; background: transparent; border-radius: 16px; line-height: 0; cursor: pointer; }
+.profile-avatar-link:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }

@@ -51,7 +51,7 @@ export function handleProfileMediaClick(event) {
 export function handleAuthorClick(event) {
     const profileButton = event.target.closest("[data-profile-handle]");
     if (profileButton) {
-        if (profileButton.closest('.story-text-mention')) closeStoryViewer();
+        if (profileButton.closest('.story-viewer') || profileButton.closest('.story-text-mention')) closeStoryViewer({ fromHistory: true });
         if (!profilePostViewer.hidden)
             closeProfileMedia();
         exploreSearchResults.hidden = true;

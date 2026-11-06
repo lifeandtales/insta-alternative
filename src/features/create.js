@@ -1,3 +1,4 @@
+import { bindReelEditorPlayback } from '../media/reel-editor-playback.js';
 import { resetReelCover, suspendReelCover, renderReelCover, getReelCover } from './reel-cover.js';
 import { renderSquareCover } from '../media/cover-canvas.js';
 import { initializePostCarousels } from '../media/carousel.js';
@@ -324,6 +325,7 @@ function renderCreateMediaOrder() {
 export function renderCreatePreview() {
     const preview = document.querySelector('.create-upload-preview');
     const controls = document.querySelector('.create-media-controls');
+    preview.querySelectorAll('video').forEach(video=>video.pause());
     const index = Math.max(0, Math.min(state.createMediaItems.length - 1, state.createActiveIndex || 0));
     state.createActiveIndex = index;
     const item = state.createMediaItems[index];
@@ -353,9 +355,10 @@ export function renderCreatePreview() {
     const edit = mediaEdits(item), tool = state.createTool || '';
     document.querySelectorAll('[data-create-tool]').forEach(button=>{const open=button.dataset.createTool===tool;button.setAttribute('aria-pressed',String(open));button.setAttribute('aria-expanded',String(open));});
     controls.hidden=!tool;
-    preview.innerHTML = `<div class="upload-media-item">${renderEditedMedia(item, {preview:true,alt:`Media ${index+1}`})}</div>`;
+    preview.innerHTML = `<div class="upload-media-item">${renderEditedMedia(item, {preview:true,nativeControls:state.createMediaType!=='reel',alt:`Media ${index+1}`})}</div>`;
     const bindText = () => { if (!state.createDetailsOpen) bindPostTextGestures(preview.querySelector('.post-media-stage'),item,()=>{state.createFinalizedItems=null;},()=>!state.createDetailsOpen&&!state.createFinalizing); };
-    bindText();
+    const bindPlayback=()=>{if(state.createMediaType==='reel'&&!state.createDetailsOpen)bindReelEditorPlayback(preview.querySelector('.post-media-stage'),()=>!state.createDetailsOpen&&!state.createFinalizing&&mayInteract());};
+    bindText();bindPlayback();
     const media = preview.querySelector('img,video');
     if (media) {
         const rememberSize = () => {
@@ -394,8 +397,9 @@ export function renderCreatePreview() {
             const key=control.dataset.createEdit;
             item[key]=key==='originalAudioMuted'?control.checked:['text','filter','ratio'].includes(key)?control.value:Number(control.value);
             state.createFinalizedItems=null;
-            preview.innerHTML=`<div class="upload-media-item">${renderEditedMedia(item,{preview:true,alt:`Media ${index+1}`})}</div>`;
-            bindText();
+            preview.querySelectorAll('video').forEach(video=>video.pause());
+            preview.innerHTML=`<div class="upload-media-item">${renderEditedMedia(item,{preview:true,nativeControls:state.createMediaType!=='reel',alt:`Media ${index+1}`})}</div>`;
+            bindText();bindPlayback();
             const video=preview.querySelector('video');
             if(video)video.addEventListener('volumechange',()=>{if(item.originalAudioMuted&&!video.muted)video.muted=true;});
         };

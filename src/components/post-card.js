@@ -45,7 +45,7 @@ export function renderPostCards(items, target = feed) {
     <article class="post-card" id="post-${post.id}" data-id="${post.id}" data-entity-type="${post.reel ? "reel" : "post"}">
       <header class="post-header">
         <div class="post-user">
-          <img src="${escapeHtml(post.avatar)}" alt="${escapeHtml(post.user)} avatar" />
+          <button class="profile-avatar-link" type="button" data-profile-handle="${escapeHtml(post.handle)}" aria-label="Open ${escapeHtml(post.user)} profile"><img src="${escapeHtml(post.avatar)}" alt="${escapeHtml(post.user)} avatar" /></button>
           <div>
             <button class="author-name" type="button" data-profile-handle="${escapeHtml(post.handle)}">${escapeHtml(post.user)}</button>
             <span>${escapeHtml(post.location || (post.reel ? "Reel" : ""))}</span>

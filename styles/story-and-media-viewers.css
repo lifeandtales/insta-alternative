@@ -1306,3 +1306,14 @@ button.caption-hashtag:focus-visible { outline:2px solid currentColor; outline-o
 .create-reel-cover .reel-cover-zoom-buttons button { min-height:36px; width:36px; padding:0; background:#24162edb; border:1px solid #ffffffb3; color:white; font-size:22px; line-height:1; }
 .reel-cover-canvas:focus-visible { outline:3px solid #7134a8; outline-offset:3px; }
 .reel-cover-gesture-hint { text-align:center; font-size:.8rem; opacity:.75; }
+
+/* A centered, accessible play/pause target replaces native Reel editor controls. */
+.reel-editor-play-toggle { position: absolute; z-index: 4; left: 50%; top: 50%; transform: translate(-50%,-50%); display: grid; place-items: center; width: 56px; height: 56px; padding: 0; border: 1px solid #ffffff90; border-radius: 50%; color: white; background: #181322aa; font-size: 1.6rem; opacity: 0; transition: opacity .15s ease; }
+.reel-preview-paused .reel-editor-play-toggle,.reel-preview-show-state .reel-editor-play-toggle,.reel-editor-play-toggle:focus-visible { opacity: 1; }
+.reel-editor-play-toggle:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .reel-editor-play-toggle { transition: none; } }
+
+.story-author-profile { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; color: white; text-align: left; cursor: pointer; }
+.story-author-profile .story-viewer-avatar { flex: 0 0 38px; }
+.story-author-profile .story-viewer-user { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.story-author-profile:focus-visible { outline: 2px solid white; outline-offset: 3px; border-radius: 8px; }

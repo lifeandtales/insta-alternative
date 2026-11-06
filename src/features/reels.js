@@ -48,7 +48,7 @@ export function renderReels() {
         <span class="double-like-heart" aria-hidden="true">♥</span>
       </div>
       <div class="reel-caption">
-        <div class="post-user"><img src="${escapeHtml(reel.avatar)}" alt="${escapeHtml(reel.user)} avatar" />
+        <div class="post-user"><button class="profile-avatar-link" type="button" data-profile-handle="${escapeHtml(reel.handle)}" aria-label="Open ${escapeHtml(reel.user)} profile"><img src="${escapeHtml(reel.avatar)}" alt="${escapeHtml(reel.user)} avatar" /></button>
           <div><button class="author-name reel-author-name" type="button" data-profile-handle="${escapeHtml(reel.handle)}">${escapeHtml(reel.user)}</button><span>Public reel</span></div>
         </div>
         <p>${renderCaption(reel.caption)}</p>
