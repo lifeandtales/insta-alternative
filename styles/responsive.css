@@ -212,7 +212,7 @@
     margin-top: 14px;
   }
 
-  .profile-stats > span {
+  .profile-stats > span, .profile-stats > button {
     font-size: 0.72rem;
   }
 

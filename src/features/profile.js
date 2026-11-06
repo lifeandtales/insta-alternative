@@ -146,11 +146,11 @@ export function renderProfile() {
         : [];
     document.getElementById("profile-view").innerHTML = `
     <div class="profile-topbar">
-      <span aria-hidden="true"></span>
+      ${isOwnProfile ? '<span aria-hidden="true"></span>' : '<button type="button" class="profile-back" data-profile-back aria-label="Back to previous screen">←</button>'}
       <h2>${escapeHtml(user.handle)}</h2>
       ${isOwnProfile
         ? '<button class="profile-settings-button" type="button" aria-label="Settings" title="Settings">⚙</button>'
-        : '<span aria-hidden="true"></span>'}
+        : `<button type="button" class="profile-options-button" data-profile-options aria-label="Profile options">⋯</button>`}
     </div>
     <header class="profile-header">
       <img class="profile-avatar" src="${escapeHtml(user.avatar)}" alt="${escapeHtml(user.name)} profile photo" />
@@ -159,12 +159,12 @@ export function renderProfile() {
           <div><h3>${escapeHtml(user.name)}</h3></div>
           ${isOwnProfile
         ? '<button class="profile-action" type="button" data-edit-profile>Edit profile</button>'
-        : `<button class="profile-action ${user.isFollowing ? "secondary" : ""}" type="button" data-follow-kind="account" data-follow-value="${escapeHtml(state.profileHandle)}" aria-pressed="${user.isFollowing}" ${state.blockedHandles.has(state.profileHandle) ? 'disabled' : ''}>${state.followRequests.includes(state.profileHandle) ? 'Cancel request' : user.isFollowing ? 'Following' : 'Follow'}</button><button class="profile-block-button" type="button" data-account-block="${escapeHtml(state.profileHandle)}" ${state.blockedHandles.has(state.profileHandle) ? 'disabled' : ''}>${state.blockedHandles.has(state.profileHandle) ? 'Blocked' : 'Block'}</button>`}
+        : `<button class="profile-action ${user.isFollowing ? "secondary" : ""}" type="button" data-follow-kind="account" data-follow-value="${escapeHtml(state.profileHandle)}" aria-pressed="${user.isFollowing}" ${state.blockedHandles.has(state.profileHandle) ? 'disabled' : ''}>${state.followRequests.includes(state.profileHandle) ? 'Cancel request' : user.isFollowing ? 'Following' : 'Follow'}</button>`}
         </div>
         <div class="profile-stats">
           <span><strong>${ownPosts.length}</strong><span>posts</span></span>
-          <span><strong>${user.followers}</strong><span>followers</span></span>
-          <span><strong>${user.following}</strong><span>following</span></span>
+          <button type="button" data-profile-connections="followers" ${accessible ? "" : "disabled"}><strong>${user.followers}</strong><span>followers</span></button>
+          <button type="button" data-profile-connections="following" ${accessible ? "" : "disabled"}><strong>${user.following}</strong><span>following</span></button>
         </div>
         <p>${escapeHtml(user.bio)}</p>
         <div class="profile-links">${(user.links || []).map(link => `<button type="button" data-profile-link="${escapeHtml(link)}">${escapeHtml(link)}</button>`).join('')}</div>

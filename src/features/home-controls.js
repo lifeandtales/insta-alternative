@@ -42,7 +42,7 @@ function renderMuted(handles, type) {
 }
 export function openReportPanel(post, type) {
     state.reportingMedia = { type, id: post.id };
-    showHomePanel(type === 'story' ? 'Report story' : 'Report post', `<p>Choose a reason. In this local prototype, reports are saved on this device; they are not sent to a moderation service.</p><form class="local-report-form"><label>Reason<select name="reason" required><option value="">Choose a reason</option><option>Spam</option><option>Harassment</option><option>Unsafe content</option><option>Impersonation</option><option>Other</option></select></label><label>Details (optional)<textarea name="details" maxlength="500"></textarea></label><button type="submit">Save local report</button></form>`);
+    showHomePanel(type === 'profile' ? 'Report profile' : type === 'story' ? 'Report story' : 'Report post', `<p>Choose a reason. In this local prototype, reports are saved on this device; they are not sent to a moderation service.</p><form class="local-report-form"><label>Reason<select name="reason" required><option value="">Choose a reason</option><option>Spam</option><option>Harassment</option><option>Unsafe content</option><option>Impersonation</option><option>Other</option></select></label><label>Details (optional)<textarea name="details" maxlength="500"></textarea></label><button type="submit">Save local report</button></form>`);
 }
 export function registerHomeControlEvents() {
     document.querySelector('.home-panel-close').addEventListener('click', closeHomePanel);

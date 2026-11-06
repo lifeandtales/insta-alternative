@@ -1,3 +1,5 @@
+import { setView } from './navigation.js';
+import { getAccount } from './social.js';
 import { state } from './state.js';
 import { canViewMedia, canViewStory } from './social.js';
 import { findEntity } from '../data/entities.js';
@@ -7,6 +9,13 @@ import { showShareFeedback } from '../components/feedback.js';
 
 export function openMediaFromHash(hash = window.location.hash) {
     if (state.deletionRequestedAt || !document.getElementById('welcome-screen').hidden) return false;
+    const profileMatch = /^#profile-(.+)$/.exec(hash);
+    if (profileMatch) {
+        let handle;
+        try { handle = decodeURIComponent(profileMatch[1]); } catch { return false; }
+        if (!getAccount(handle)) { showShareFeedback('This profile is unavailable in this preview.'); return false; }
+        state.profileHandle = handle; state.activeProfileSection = 'posts'; setView('profile'); return true;
+    }
     const storyMatch = /^#story-(.+)$/.exec(hash);
     if (storyMatch) {
         let storyId;

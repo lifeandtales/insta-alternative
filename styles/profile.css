@@ -91,7 +91,7 @@
   text-align: center;
 }
 
-.profile-stats > span {
+.profile-stats > span, .profile-stats > button {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -429,3 +429,35 @@
 .bio-character-count { color: var(--muted); }
 .avatar-crop-preview { width: min(100%, 280px); height: auto; border-radius: 50%; margin: 12px auto; display: block; }
 .external-url { overflow-wrap: anywhere; padding: 12px; background: #f4f0fa; border-radius: 12px; }
+
+.profile-stats > button { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; }
+.profile-stats > button:disabled { cursor: default; }
+.profile-connections-dialog { width: min(420px, calc(100vw - 32px)); max-height: 75dvh; padding: 18px; border: 0; border-radius: 20px; color: var(--text); background: var(--surface, #fff); }
+.profile-connections-dialog::backdrop { background: #1118; }
+.profile-connections-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.profile-connections-dialog h2 { margin: 0; font-size: 1.1rem; }
+.profile-connections-dialog header button { border: 0; background: transparent; color: inherit; font-size: 24px; padding: 8px; }
+.profile-connections-list { overflow-y: auto; max-height: 55dvh; margin-top: 16px; }
+.profile-connection { display: flex; align-items: center; width: 100%; gap: 12px; padding: 10px; border: 0; background: transparent; color: inherit; text-align: left; }
+.profile-connection img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
+.profile-connection span { display: grid; gap: 4px; }
+.profile-connection small { color: var(--muted); }
+
+.profile-back { border: 0; background: transparent; color: inherit; font-size: 26px; padding: 8px; justify-self: start; }
+
+.profile-options-button { justify-self: end; padding: 8px 12px; border: 0; background: transparent; color: inherit; font-size: 26px; }
+.profile-options-list { display: grid; gap: 6px; }
+.profile-options-list button { text-align: left; border: 0; border-radius: 10px; padding: 12px; background: var(--surface, #f5f3fa); color: var(--text); font: inherit; }
+.profile-qr { display: grid; justify-items: center; gap: 12px; }
+.profile-qr svg { width: min(260px, 100%); height: auto; background: white; }
+
+/* Keep the profile action sheet compact without changing other panels. */
+.home-panel:has(.profile-options-list) { width: min(272px, calc(100vw - 48px)); padding: 14px; border-radius: 18px; }
+.home-panel:has(.profile-options-list) header { position: relative; justify-content: center; min-height: 32px; margin-bottom: 8px; }
+.home-panel:has(.profile-options-list) header h2 { font-size: 1rem; text-align: center; }
+.home-panel:has(.profile-options-list) .home-panel-close { position: absolute; right: -4px; top: -4px; padding: 7px; background: transparent; }
+.home-panel .profile-options-list { gap: 3px; }
+.home-panel .profile-options-list button { text-align: center; padding: 9px 12px; min-height: 38px; font-size: .88rem; background: transparent; }
+.home-panel .profile-options-list button:hover, .home-panel .profile-options-list button:focus-visible { background: #f2edf9; }
+
+.profile-connections-search { box-sizing: border-box; width: 100%; margin-top: 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #f7f5fb; color: var(--text); font: inherit; }
