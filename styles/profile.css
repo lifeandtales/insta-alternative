@@ -461,3 +461,15 @@
 .home-panel .profile-options-list button:hover, .home-panel .profile-options-list button:focus-visible { background: #f2edf9; }
 
 .profile-connections-search { box-sizing: border-box; width: 100%; margin-top: 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #f7f5fb; color: var(--text); font: inherit; }
+
+.profile-own-actions { display: flex; align-items: center; justify-self: end; gap: 6px; }
+.profile-topbar:has(.profile-own-actions) { grid-template-columns: 88px minmax(0, 1fr) 88px; }
+.profile-qr-button { display: grid; place-items: center; width: 40px; height: 40px; padding: 8px; border-radius: 12px; background: rgba(124,58,237,.08); color: var(--text); }
+.profile-scanner-dialog { width: min(360px, calc(100vw - 40px)); box-sizing: border-box; padding: 18px; border: 0; border-radius: 20px; background: var(--surface, white); color: var(--text); max-height: 85dvh; overflow-y: auto; }
+.profile-scanner-dialog::backdrop { background: #21163788; }
+.profile-scanner-dialog header { display: flex; align-items: center; justify-content: space-between; }
+.profile-scanner-dialog h2 { font-size: 1.1rem; margin: 0; }
+.profile-scanner-dialog header button { border: 0; background: transparent; font-size: 24px; color: inherit; }
+.profile-scanner-video { display: block; width: 100%; max-height: 38dvh; background: #15121d; border-radius: 12px; margin-top: 14px; }
+.profile-scanner-dialog > button, .profile-qr-image-label { display: block; width: 100%; box-sizing: border-box; padding: 10px; text-align: center; border-radius: 10px; background: #eee7fb; color: var(--primary); font: inherit; margin-top: 10px; cursor: pointer; }
+.profile-qr-image-label input { display: block; max-width: 100%; margin-top: 8px; font-size: .8rem; }

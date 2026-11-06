@@ -149,7 +149,7 @@ export function renderProfile() {
       ${isOwnProfile ? '<span aria-hidden="true"></span>' : '<button type="button" class="profile-back" data-profile-back aria-label="Back to previous screen">←</button>'}
       <h2>${escapeHtml(user.handle)}</h2>
       ${isOwnProfile
-        ? '<button class="profile-settings-button" type="button" aria-label="Settings" title="Settings">⚙</button>'
+        ? '<div class="profile-own-actions"><button type="button" class="profile-qr-button" data-own-profile-qr aria-label="Profile QR code" title="Profile QR code"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h3v3h3v3h-6zM12 3v9H3m9 3v6m3-9h6"/></svg></button><button class="profile-settings-button" type="button" aria-label="Settings" title="Settings">⚙</button></div>'
         : `<button type="button" class="profile-options-button" data-profile-options aria-label="Profile options">⋯</button>`}
     </div>
     <header class="profile-header">

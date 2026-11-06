@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
-    <link rel="stylesheet" href="styles.css?v=196" />
+    <link rel="stylesheet" href="styles.css?v=197" />
   </head>
   <body>
     <main id="deletion-lock" class="welcome-screen" hidden aria-labelledby="deletion-lock-title">
@@ -301,6 +301,13 @@
         </form>
       </section>
     </div>
+    <dialog class="profile-scanner-dialog" aria-labelledby="profile-scanner-title">
+      <header><h2 id="profile-scanner-title">Scan QR code</h2><button type="button" data-close-profile-scanner aria-label="Close QR scanner">×</button></header>
+      <video class="profile-scanner-video" hidden muted playsinline aria-label="QR camera preview"></video>
+      <p class="profile-scanner-status" role="status">Start the camera or choose a QR image.</p>
+      <button type="button" data-start-profile-camera>Start camera</button>
+      <label class="profile-qr-image-label">Choose QR image<input type="file" accept="image/*" aria-label="Choose QR image" /></label>
+    </dialog>
     <dialog class="profile-connections-dialog" aria-labelledby="profile-connections-title">
       <header><button type="button" data-close-connections aria-label="Back to profile">←</button><h2 id="profile-connections-title">Followers</h2><button type="button" data-close-connections aria-label="Close list">×</button></header>
       <input class="profile-connections-search" type="search" aria-label="Search followers" placeholder="Search name or username" autocomplete="off" aria-controls="profile-connections-results" />
@@ -618,80 +625,82 @@
     <script type="importmap">
 {
   "imports": {
-    "./src/components/caption.js": "./src/components/caption.js?v=196",
-    "./src/components/feedback.js": "./src/components/feedback.js?v=196",
-    "./src/components/post-card.js": "./src/components/post-card.js?v=196",
-    "./src/core/account-lock.js": "./src/core/account-lock.js?v=196",
-    "./src/core/dom.js": "./src/core/dom.js?v=196",
-    "./src/core/events.js": "./src/core/events.js?v=196",
-    "./src/core/hashtags.js": "./src/core/hashtags.js?v=196",
-    "./src/core/local-preview.js": "./src/core/local-preview.js?v=196",
-    "./src/core/media-links.js": "./src/core/media-links.js?v=196",
-    "./src/core/navigation.events.js": "./src/core/navigation.events.js?v=196",
-    "./src/core/navigation.js": "./src/core/navigation.js?v=196",
-    "./src/core/social.js": "./src/core/social.js?v=196",
-    "./src/core/state.js": "./src/core/state.js?v=196",
-    "./src/core/utils.js": "./src/core/utils.js?v=196",
-    "./src/data/entities.js": "./src/data/entities.js?v=196",
-    "./src/data/sample-data.js": "./src/data/sample-data.js?v=196",
-    "./src/data/story-emojis.js": "./src/data/story-emojis.js?v=196",
-    "./src/features/account-model.js": "./src/features/account-model.js?v=196",
-    "./src/features/account-settings.js": "./src/features/account-settings.js?v=196",
-    "./src/features/caption-suggestions.js": "./src/features/caption-suggestions.js?v=196",
-    "./src/features/comments.events.js": "./src/features/comments.events.js?v=196",
-    "./src/features/comments.js": "./src/features/comments.js?v=196",
-    "./src/features/create.events.js": "./src/features/create.events.js?v=196",
-    "./src/features/create.js": "./src/features/create.js?v=196",
-    "./src/features/explore.events.js": "./src/features/explore.events.js?v=196",
-    "./src/features/explore.js": "./src/features/explore.js?v=196",
-    "./src/features/follows.events.js": "./src/features/follows.events.js?v=196",
-    "./src/features/follows.js": "./src/features/follows.js?v=196",
-    "./src/features/highlights.events.js": "./src/features/highlights.events.js?v=196",
-    "./src/features/highlights.js": "./src/features/highlights.js?v=196",
-    "./src/features/home-controls.js": "./src/features/home-controls.js?v=196",
-    "./src/features/home.js": "./src/features/home.js?v=196",
-    "./src/features/likes.events.js": "./src/features/likes.events.js?v=196",
-    "./src/features/likes.js": "./src/features/likes.js?v=196",
-    "./src/features/media-options.events.js": "./src/features/media-options.events.js?v=196",
-    "./src/features/media-options.js": "./src/features/media-options.js?v=196",
-    "./src/features/message-access.js": "./src/features/message-access.js?v=196",
-    "./src/features/messages.events.js": "./src/features/messages.events.js?v=196",
-    "./src/features/messages.js": "./src/features/messages.js?v=196",
-    "./src/features/notifications.js": "./src/features/notifications.js?v=196",
-    "./src/features/post-media.js": "./src/features/post-media.js?v=196",
-    "./src/features/profile.events.js": "./src/features/profile.events.js?v=196",
-    "./src/features/profile.js": "./src/features/profile.js?v=196",
-    "./src/features/reel-cover.js": "./src/features/reel-cover.js?v=196",
-    "./src/features/reels.js": "./src/features/reels.js?v=196",
-    "./src/features/saved.events.js": "./src/features/saved.events.js?v=196",
-    "./src/features/sharing.events.js": "./src/features/sharing.events.js?v=196",
-    "./src/features/sharing.js": "./src/features/sharing.js?v=196",
-    "./src/features/stories.events.js": "./src/features/stories.events.js?v=196",
-    "./src/features/stories.js": "./src/features/stories.js?v=196",
-    "./src/features/story-camera.js": "./src/features/story-camera.js?v=196",
-    "./src/features/story-composition.js": "./src/features/story-composition.js?v=196",
-    "./src/features/story-drafts.js": "./src/features/story-drafts.js?v=196",
-    "./src/features/story-edit-session.js": "./src/features/story-edit-session.js?v=196",
-    "./src/features/story-export.js": "./src/features/story-export.js?v=196",
-    "./src/features/story-fonts.js": "./src/features/story-fonts.js?v=196",
-    "./src/features/story-options.js": "./src/features/story-options.js?v=196",
-    "./src/features/story-shortcuts.js": "./src/features/story-shortcuts.js?v=196",
-    "./src/features/story-tools.js": "./src/features/story-tools.js?v=196",
-    "./src/media/carousel.js": "./src/media/carousel.js?v=196",
-    "./src/media/cover-canvas.js": "./src/media/cover-canvas.js?v=196",
-    "./src/media/cover-crop.js": "./src/media/cover-crop.js?v=196",
-    "./src/media/demo-sources.js": "./src/media/demo-sources.js?v=196",
-    "./src/media/horizontal-reorder.js": "./src/media/horizontal-reorder.js?v=196",
-    "./src/media/reel-editor-playback.js": "./src/media/reel-editor-playback.js?v=196",
-    "./src/media/video.events.js": "./src/media/video.events.js?v=196",
-    "./src/media/video.js": "./src/media/video.js?v=196",
-    "./src/storage/browser-storage.js": "./src/storage/browser-storage.js?v=196",
-    "./src/storage/local-session.js": "./src/storage/local-session.js?v=196",
-    "./src/storage/preferences.js": "./src/storage/preferences.js?v=196",
-    "./src/vendor/qrcode.js": "./src/vendor/qrcode.js?v=196"
+    "./src/components/caption.js": "./src/components/caption.js?v=197",
+    "./src/components/feedback.js": "./src/components/feedback.js?v=197",
+    "./src/components/post-card.js": "./src/components/post-card.js?v=197",
+    "./src/core/account-lock.js": "./src/core/account-lock.js?v=197",
+    "./src/core/dom.js": "./src/core/dom.js?v=197",
+    "./src/core/events.js": "./src/core/events.js?v=197",
+    "./src/core/hashtags.js": "./src/core/hashtags.js?v=197",
+    "./src/core/local-preview.js": "./src/core/local-preview.js?v=197",
+    "./src/core/media-links.js": "./src/core/media-links.js?v=197",
+    "./src/core/navigation.events.js": "./src/core/navigation.events.js?v=197",
+    "./src/core/navigation.js": "./src/core/navigation.js?v=197",
+    "./src/core/social.js": "./src/core/social.js?v=197",
+    "./src/core/state.js": "./src/core/state.js?v=197",
+    "./src/core/utils.js": "./src/core/utils.js?v=197",
+    "./src/data/entities.js": "./src/data/entities.js?v=197",
+    "./src/data/sample-data.js": "./src/data/sample-data.js?v=197",
+    "./src/data/story-emojis.js": "./src/data/story-emojis.js?v=197",
+    "./src/features/account-model.js": "./src/features/account-model.js?v=197",
+    "./src/features/account-settings.js": "./src/features/account-settings.js?v=197",
+    "./src/features/caption-suggestions.js": "./src/features/caption-suggestions.js?v=197",
+    "./src/features/comments.events.js": "./src/features/comments.events.js?v=197",
+    "./src/features/comments.js": "./src/features/comments.js?v=197",
+    "./src/features/create.events.js": "./src/features/create.events.js?v=197",
+    "./src/features/create.js": "./src/features/create.js?v=197",
+    "./src/features/explore.events.js": "./src/features/explore.events.js?v=197",
+    "./src/features/explore.js": "./src/features/explore.js?v=197",
+    "./src/features/follows.events.js": "./src/features/follows.events.js?v=197",
+    "./src/features/follows.js": "./src/features/follows.js?v=197",
+    "./src/features/highlights.events.js": "./src/features/highlights.events.js?v=197",
+    "./src/features/highlights.js": "./src/features/highlights.js?v=197",
+    "./src/features/home-controls.js": "./src/features/home-controls.js?v=197",
+    "./src/features/home.js": "./src/features/home.js?v=197",
+    "./src/features/likes.events.js": "./src/features/likes.events.js?v=197",
+    "./src/features/likes.js": "./src/features/likes.js?v=197",
+    "./src/features/media-options.events.js": "./src/features/media-options.events.js?v=197",
+    "./src/features/media-options.js": "./src/features/media-options.js?v=197",
+    "./src/features/message-access.js": "./src/features/message-access.js?v=197",
+    "./src/features/messages.events.js": "./src/features/messages.events.js?v=197",
+    "./src/features/messages.js": "./src/features/messages.js?v=197",
+    "./src/features/notifications.js": "./src/features/notifications.js?v=197",
+    "./src/features/post-media.js": "./src/features/post-media.js?v=197",
+    "./src/features/profile-scanner.js": "./src/features/profile-scanner.js?v=197",
+    "./src/features/profile.events.js": "./src/features/profile.events.js?v=197",
+    "./src/features/profile.js": "./src/features/profile.js?v=197",
+    "./src/features/reel-cover.js": "./src/features/reel-cover.js?v=197",
+    "./src/features/reels.js": "./src/features/reels.js?v=197",
+    "./src/features/saved.events.js": "./src/features/saved.events.js?v=197",
+    "./src/features/sharing.events.js": "./src/features/sharing.events.js?v=197",
+    "./src/features/sharing.js": "./src/features/sharing.js?v=197",
+    "./src/features/stories.events.js": "./src/features/stories.events.js?v=197",
+    "./src/features/stories.js": "./src/features/stories.js?v=197",
+    "./src/features/story-camera.js": "./src/features/story-camera.js?v=197",
+    "./src/features/story-composition.js": "./src/features/story-composition.js?v=197",
+    "./src/features/story-drafts.js": "./src/features/story-drafts.js?v=197",
+    "./src/features/story-edit-session.js": "./src/features/story-edit-session.js?v=197",
+    "./src/features/story-export.js": "./src/features/story-export.js?v=197",
+    "./src/features/story-fonts.js": "./src/features/story-fonts.js?v=197",
+    "./src/features/story-options.js": "./src/features/story-options.js?v=197",
+    "./src/features/story-shortcuts.js": "./src/features/story-shortcuts.js?v=197",
+    "./src/features/story-tools.js": "./src/features/story-tools.js?v=197",
+    "./src/media/carousel.js": "./src/media/carousel.js?v=197",
+    "./src/media/cover-canvas.js": "./src/media/cover-canvas.js?v=197",
+    "./src/media/cover-crop.js": "./src/media/cover-crop.js?v=197",
+    "./src/media/demo-sources.js": "./src/media/demo-sources.js?v=197",
+    "./src/media/horizontal-reorder.js": "./src/media/horizontal-reorder.js?v=197",
+    "./src/media/reel-editor-playback.js": "./src/media/reel-editor-playback.js?v=197",
+    "./src/media/video.events.js": "./src/media/video.events.js?v=197",
+    "./src/media/video.js": "./src/media/video.js?v=197",
+    "./src/storage/browser-storage.js": "./src/storage/browser-storage.js?v=197",
+    "./src/storage/local-session.js": "./src/storage/local-session.js?v=197",
+    "./src/storage/preferences.js": "./src/storage/preferences.js?v=197",
+    "./src/vendor/jsqr.js": "./src/vendor/jsqr.js?v=197",
+    "./src/vendor/qrcode.js": "./src/vendor/qrcode.js?v=197"
   }
 }
     </script>
-    <script type="module" src="app.js?v=196"></script>
+    <script type="module" src="app.js?v=197"></script>
   </body>
 </html>

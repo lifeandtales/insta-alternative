@@ -1,3 +1,4 @@
+import { openProfileScanner, registerProfileScannerEvents } from './profile-scanner.js';
 import qrcode from '../vendor/qrcode.js';
 import { persistPreferences } from '../storage/preferences.js';
 import { showHomePanel, closeHomePanel, openReportPanel } from './home-controls.js';
@@ -30,6 +31,13 @@ import {
 
 const profileReturnStack = [];
 export function handleProfileSectionClick(event) {
+    if (event.target.closest('[data-own-profile-qr]')) {
+        showHomePanel('Profile QR code', '<div class="profile-options-list"><button type="button" data-show-own-qr>My QR code</button><button type="button" data-scan-profile-qr>Scan QR code</button></div>'); return true;
+    }
+    if (event.target.closest('[data-show-own-qr]')) {
+        showHomePanel('My QR code', `<div class="profile-qr">${profileQrSvg(currentUser.handle)}<strong>${escapeHtml(currentUser.handle)}</strong><p>Scan to open my profile.</p><button type="button" data-scan-profile-qr>Scan QR code</button></div>`);return true;
+    }
+    if (event.target.closest('[data-scan-profile-qr]')) { closeHomePanel();openProfileScanner();return true; }
     if (event.target.closest('[data-profile-options]')) { openProfileOptions(); return true; }
     const action = event.target.closest('[data-profile-option]');
     if (action) { runProfileOption(action.dataset.profileOption, action.dataset.handle); return true; }
@@ -163,6 +171,7 @@ export function registerProfileEditorEvents() {
 }
 
 export function registerProfileGridEvents() {
+    registerProfileScannerEvents();
     const connections = document.querySelector('.profile-connections-dialog');
     connections.querySelector('.profile-connections-search').addEventListener('input', renderProfileConnectionResults);
     connections.addEventListener('click', event => {
