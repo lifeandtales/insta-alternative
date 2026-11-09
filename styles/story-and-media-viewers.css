@@ -364,9 +364,9 @@
   color: #fff;
 }
 
-/* Followed-account Stories temporarily fill the whole preview window. */
+/* Followed-account Stories fill the app frame. */
 .story-viewer.story-viewer-fullscreen {
-  width: 100vw;
+  width: var(--app-frame-width);
   max-width: none;
   height: 100dvh;
   max-height: none;

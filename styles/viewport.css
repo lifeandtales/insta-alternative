@@ -1,5 +1,9 @@
+:root {
+  --app-frame-width: min(100%, 480px);
+}
+
 .app-shell {
-  width: min(100vw, calc(100dvh * 9 / 16));
+  width: var(--app-frame-width);
   height: 100dvh;
   margin: 0 auto;
   padding: 0;
@@ -28,7 +32,7 @@
   right: auto;
   bottom: 0;
   left: 50%;
-  width: min(100vw, calc(100dvh * 9 / 16));
+  width: var(--app-frame-width);
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
@@ -82,7 +86,7 @@
 }
 
 .app-shell.view-reels {
-  width: min(100vw, calc(100dvh * 9 / 16));
+  width: var(--app-frame-width);
   height: calc(100dvh - 72px - env(safe-area-inset-bottom));
   margin: 0 auto;
   padding: 0;
@@ -174,8 +178,7 @@
 .app-shell.view-home .view-comments-btn { min-height: 44px; display: inline-flex; align-items: center; font-size: .8125rem; }
 .app-shell.view-home .post-comment p { overflow-wrap: anywhere; }
 
-.app-shell.view-notifications { display: block; width: 100%; max-width: none; min-height: 100dvh; margin: 0; padding: 0; }
-.app-shell.view-notifications .main-area { width: 100%; max-width: none; min-height: 100dvh; margin: 0; padding: 0; }
+.app-shell.view-notifications .main-area { min-height: 100%; padding: 0; }
 .app-shell.view-notifications :is(.sidebar,.right-rail,.topbar,.home-brand-header,.home-stories,.home-create-row) { display: none; }
 .notifications-open .mobile-nav { display: none; }
 .notifications-page { min-height: 100dvh; background: var(--surface, #fff); color: var(--text); }

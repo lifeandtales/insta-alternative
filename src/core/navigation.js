@@ -13,13 +13,17 @@ import { syncDeletionLock } from './account-lock.js';
 const currentAppHistory = () => window.history.state && typeof window.history.state === 'object'
     ? window.history.state : {};
 
-function writeAppHistory(view, conversation = null, replace = false) {
-    const next = { ...currentAppHistory(), instaApp: { view, conversation } };
+function writeAppHistory(view, conversation = null, replace = false, groupProfile = null) {
+    const next = { ...currentAppHistory(), instaApp: { view, conversation, ...(groupProfile ? { groupProfile } : {}) } };
     window.history[replace ? 'replaceState' : 'pushState'](next, '', window.location.href);
 }
 
 export function pushConversationHistory(handle) {
     writeAppHistory('messages', handle);
+}
+
+export function pushGroupProfileHistory(handle) {
+    writeAppHistory('messages', state.activeConversationHandle, false, handle);
 }
 
 export function returnToConversationList(handle) {
@@ -35,6 +39,7 @@ window.addEventListener('popstate', event => {
     const route = event.state?.instaApp;
     const view = viewSections[route?.view] ? route.view : 'home';
     const conversation = view === 'messages' ? route?.conversation || null : null;
+    state.activeGroupProfileHandle = view === 'messages' ? route?.groupProfile || null : null;
     if (state.activeConversationHandle !== conversation)
         state.activeConversationHandle = conversation;
     if (state.currentView !== view) setView(view, { fromHistory: true });
@@ -53,7 +58,10 @@ export function setView(view, { fromHistory = false } = {}) {
     if (previousView !== view) {
         document.querySelectorAll('video').forEach(video => video.pause());
         if (state.pendingVideoTap) { clearTimeout(state.pendingVideoTap.timer); state.pendingVideoTap = null; }
-        if (view !== 'messages') state.activeConversationHandle = null;
+        if (view !== 'messages') {
+            state.activeConversationHandle = null;
+            state.activeGroupProfileHandle = null;
+        }
     }
     state.currentView = view;
     document.body.classList.toggle('notifications-open',view==='notifications');

@@ -418,6 +418,7 @@ export const conversations = [
         pinned: false,
         muted: false,
         unread: true,
+        unreadCount: 2,
         messages: [
             { id: "noah-1", type: "text", from: "me", text: "How did you set up the lighting?", sentAt: Date.now() - 75 * 60000 },
             { id: "noah-2", type: "text", from: "them", text: "Sent you the photos from the studio 📷", sentAt: Date.now() - 60 * 60000 },

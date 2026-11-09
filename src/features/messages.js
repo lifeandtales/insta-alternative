@@ -1,14 +1,14 @@
-import { canViewMedia, canViewStory, visibleAvatar, mediaNeedsWarning } from '../core/social.js';
+import { canViewMedia, canViewStory, visibleAvatar, mediaNeedsWarning, getAccount, DEFAULT_AVATAR } from '../core/social.js';
 import { findEntity } from '../data/entities.js';
 import { state } from '../core/state.js';
 import { escapeHtml, formatConversationTime } from '../core/utils.js';
 import { conversations, posts, reels } from '../data/sample-data.js';
 import { currentUser } from '../data/sample-data.js';
 import { mayInteract } from '../core/social.js';
-import { canSendToConversation, canShareToConversation } from './message-access.js';
+import { canSendToConversation, canShareToConversation, isJoinedGroup, isGroupAdmin } from './message-access.js';
 
 export function conversationAvatar(conversation) {
-    return conversation.isGroup ? conversation.photo || conversation.avatar : visibleAvatar(conversation.handle, conversation.avatar);
+    return conversation.isGroup ? conversation.photo || conversation.avatar || DEFAULT_AVATAR : visibleAvatar(conversation.handle, conversation.avatar);
 }
 
 export function getConversationPreview(conversation) {
@@ -27,35 +27,105 @@ export function getConversationPreview(conversation) {
     return `${lastMessage.from === "me" ? "You: " : ""}${lastMessage.text}`;
 }
 
+export function getUnreadMessageCount(conversation) {
+    const count = conversation.unreadCount;
+    return conversation.unread && Number.isSafeInteger(count) && count > 0 ? count : 0;
+}
+
+export function markInboxChatRead(chat) {
+    chat.unread = false;
+    chat.unreadCount = 0;
+}
+
+function inboxMessageTime(conversation) {
+    return conversation.messages?.at(-1)?.sentAt ?? conversation.lastActivity ?? 0;
+}
+
+function renderGroupProfile(group) {
+    const members = [...new Set(group.members)];
+    const admin = isGroupAdmin(group);
+    return `
+      <section class="group-profile" aria-label="Group profile">
+        <header class="group-profile-header">
+          <button class="chat-back-button" type="button" data-group-profile-back aria-label="Back from group profile">‹</button>
+          <h2>Group profile</h2>
+        </header>
+        <div class="group-profile-identity">
+          ${mayInteract() ? `<button class="group-profile-photo" type="button" data-group-photo ${group.photo ? 'data-has-photo' : ''} aria-label="${group.photo ? 'Change' : 'Add'} group photo">
+            ${group.photo ? `<img src="${escapeHtml(group.photo)}" alt="" />` : '<span aria-hidden="true">+</span>'}
+          </button>` : `<img src="${escapeHtml(conversationAvatar(group))}" alt="" />`}
+          <h3>${escapeHtml(group.user)}</h3>
+        </div>
+        <h4>Members (${members.length})</h4>
+        <ul class="group-profile-members">
+          ${members.map(handle => {
+              const account = getAccount(handle);
+              return `<li><img src="${escapeHtml(visibleAvatar(handle, account?.avatar))}" alt="" />
+                <span>${escapeHtml(account?.name || handle)}</span>
+                ${handle === currentUser.handle ? '<small>You</small>' : ''}
+                ${group.admins?.includes(handle) ? '<small>Admin</small>' : ''}
+                ${admin && handle !== currentUser.handle ? `<button class="group-member-options" type="button"
+                  data-group-member-options="${escapeHtml(handle)}" aria-label="Options for ${escapeHtml(account?.name || handle)}">⋯</button>` : ''}
+              </li>`;
+          }).join('')}
+        </ul>
+      </section>`;
+}
+
 export function renderMessages() {
     const list = document.getElementById("messages-list");
+    const group = conversations.find(item => item.handle === state.activeGroupProfileHandle);
+    if (isJoinedGroup(group)) {
+        list.innerHTML = renderGroupProfile(group);
+        return;
+    }
+    state.activeGroupProfileHandle = null;
     const conversation = conversations.find((item) => item.handle === state.activeConversationHandle);
     if (!conversation) {
         state.activeConversationHandle = null;
         state.chatAttachmentPickerOpen = false;
         list.innerHTML = `
-      <header class="messages-inbox-header"><h2>Messages</h2><button type="button" data-create-group>New group</button></header>
+      <header class="messages-inbox-header"><h2>Messages</h2><button class="new-group-button" type="button" data-create-group aria-label="New group" title="New group">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="8" cy="7" r="3" /><path d="M2 19v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M15 4a3 3 0 0 1 0 6M19 13v7M15.5 16.5h7" />
+        </svg>
+      </button></header>
       <div class="conversation-list">
-        ${[...conversations].sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.lastActivity - left.lastActivity).map((item) => `
+        ${[...conversations].sort((left, right) => Number(right.pinned) - Number(left.pinned) || inboxMessageTime(right) - inboxMessageTime(left)).map((item) => {
+          const unreadCount = getUnreadMessageCount(item);
+          const timestamp = inboxMessageTime(item);
+          const preview = getConversationPreview(item);
+          return `
           <button class="conversation-tile ${item.unread ? "unread" : ""}" type="button" data-open-conversation="${escapeHtml(item.handle)}">
             <img class="conversation-avatar" src="${escapeHtml(conversationAvatar(item))}" alt="" />
             <span class="conversation-copy">
               <strong>${escapeHtml(item.user)}</strong>
-              <span class="conversation-handle">${item.isGroup ? `${item.members?.length || 0} members${item.pendingMembers?.length ? ` · ${item.pendingMembers.length} invited` : ''}` : escapeHtml(item.handle)}${item.pinned ? " · Pinned" : ""}${item.muted ? " · Muted" : ""}</span>
-              <span class="conversation-preview">${item.membershipStatus === 'pending' ? 'Group invitation — review to join' : escapeHtml(getConversationPreview(item))}</span>
+              ${item.isGroup || item.pinned || item.muted ? `<span class="conversation-handle">${[
+                item.isGroup ? `${item.members?.length || 0} members` : '',
+                item.isGroup && item.pendingMembers?.length ? `${item.pendingMembers.length} invited` : '',
+                item.pinned ? 'Pinned' : '',
+                item.muted ? 'Muted' : '',
+              ].filter(Boolean).join(' · ')}</span>` : ''}
+              ${item.membershipStatus === 'pending'
+                ? '<span class="conversation-preview">Group invitation — review to join</span>'
+                : unreadCount >= 4
+                  ? `<span class="conversation-unread-count" aria-label="${unreadCount} unread messages">+${unreadCount} new messages</span>`
+                  : `<span class="conversation-preview">${escapeHtml(preview)}</span>`}
             </span>
-            <span class="conversation-time">${escapeHtml(formatConversationTime(item.lastActivity))}</span>
+            <span class="conversation-time">${escapeHtml(formatConversationTime(timestamp || undefined))}</span>
           </button>
-        `).join("")}
+        `;
+        }).join("")}
       </div>
       <p class="messages-local-note">Messages are saved on this device. Delivery and connected calls will be added later.</p>
     `;
         return;
     }
-    conversation.unread = false;
+    markInboxChatRead(conversation);
     const canSend = canSendToConversation(conversation);
     const pending = conversation.membershipStatus === 'pending';
-    const messageMarkup = (conversation.messages || []).map((message) => {
+    const messages = conversation.messages || [];
+    const messageMarkup = messages.map((message) => {
         if (message.type === 'story-mention') {
             const story = state.stories.find(item => item.id === message.storyId && item.handle === message.actor);
             const incoming = message.recipient === currentUser.handle && message.from !== 'me';
@@ -121,6 +191,7 @@ export function renderMessages() {
             <button type="button" role="menuitem" data-chat-option="mute">${conversation.muted ? "Unmute notifications" : "Mute notifications"}</button>
             <button type="button" role="menuitem" data-chat-option="unread">Mark as unread</button>
             ${conversation.isGroup ? '' : '<button type="button" role="menuitem" data-chat-option="profile">View profile</button>'}
+            ${isJoinedGroup(conversation) ? '<button type="button" role="menuitem" data-chat-option="group-profile">View group profile</button><button type="button" role="menuitem" data-chat-option="leave-group">Leave group</button>' : ''}
             ${conversation.isGroup && conversation.admins?.includes(currentUser.handle) ? '<button type="button" role="menuitem" data-chat-option="manage-group">Manage group</button>' : ''}
           </div>
         </div>
@@ -157,6 +228,5 @@ export function appendChatMessage(conversation, message) {
     conversation.messages.push({ ...message, id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, sentAt: Date.now() });
     conversation.lastActivity = Date.now();
     conversation.lastMessage = getConversationPreview(conversation);
-    conversation.unread = false;
     renderMessages();
 }

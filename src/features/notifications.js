@@ -1,3 +1,4 @@
+import { getUnreadMessageCount } from './messages.js';
 import { captionMentions } from '../components/caption.js';
 import { openProfileMedia } from './profile.js';
 import { setView } from '../core/navigation.js';
@@ -78,7 +79,7 @@ export function availableLocalNotifications() {
     const requests = state.incomingFollowRequests.filter(handle => !state.blockedHandles.has(handle)).map(handle => ({
         createdAt: 0, title: 'Follow request', text: `${getAccount(handle)?.name || handle} requested to follow you.`
     }));
-    const unread = conversations.filter(chat => chat.unread && !state.blockedHandles.has(chat.handle)
+    const unread = conversations.filter(chat => chat.unread && !chat.muted && !state.blockedHandles.has(chat.handle)
         && (!chat.isGroup || chat.members?.includes(currentUser.handle))).map(chat => ({
         createdAt: Math.max(0,...(chat.messages||[]).filter(message=>message.from==='them').map(message=>Number(message.sentAt)||0)) || chat.lastActivity || 0, title: 'Unread conversation', text: `You have unread messages in ${chat.user || chat.handle}.`
     }));
@@ -108,6 +109,8 @@ export function recordStoryMentions(story) {
     state.localStoryNotifications ||= [];
     for (const recipient of recipients) {
         if (story.handle !== currentUser.handle && recipient !== currentUser.handle) continue;
+        const messageId = `mention-${story.id}-${recipient}`;
+        if (state.deletedChatMentionIds.has(messageId)) continue;
         const incoming = recipient === currentUser.handle;
         const contactHandle = incoming ? story.handle : recipient;
         const account = getAccount(contactHandle);
@@ -118,10 +121,17 @@ export function recordStoryMentions(story) {
         }
         chat.messages ||= [];
         if (!chat.messages.some(message => message.type === 'story-mention' && message.storyId === story.id && message.recipient === recipient)) {
-            chat.messages.push({ id: `mention-${story.id}-${recipient}`, type: 'story-mention', storyId: story.id, recipient, actor: story.handle, from: incoming ? 'them' : 'me', sentAt: Date.now() });
+            chat.messages.push({ id: messageId, type: 'story-mention', storyId: story.id, recipient, actor: story.handle, from: incoming ? 'them' : 'me', sentAt: Date.now() });
             chat.lastActivity = Date.now();
             chat.lastMessage = incoming ? 'Mentioned you in a story' : `You mentioned ${recipient} in your story`;
-            chat.unread = incoming && !(state.currentView === 'messages' && state.activeConversationHandle === chat.handle);
+            const chatIsOpen = state.currentView === 'messages' && state.activeConversationHandle === chat.handle;
+            if (chatIsOpen) {
+                chat.unread = false;
+                chat.unreadCount = 0;
+            } else if (incoming) {
+                chat.unreadCount = getUnreadMessageCount(chat) + 1;
+                chat.unread = true;
+            }
             created++;
         }
         if (!state.localStoryNotifications.some(notice => notice.kind === 'story-mention' && notice.storyId === story.id && notice.recipient === recipient)) {

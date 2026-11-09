@@ -11,6 +11,7 @@ export const state = {
     activeCommentsTrigger: null,
     activeProfileMediaTrigger: null,
     activeConversationHandle: null,
+    activeGroupProfileHandle: null,
     chatAttachmentPickerOpen: false,
     fullscreenVideo: null,
     fullscreenVideoWasPlaying: false,
@@ -72,6 +73,7 @@ export const state = {
 // Feature preferences are kept separately from transient dialog/player state.
 Object.assign(state, {
     hiddenPostKeys: new Set(),
+    deletedChatMentionIds: new Set(),
     mutedPostHandles: new Set(),
     mutedStoryHandles: new Set(),
     blockedHandles: new Set(),

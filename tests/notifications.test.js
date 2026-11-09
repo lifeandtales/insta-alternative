@@ -117,3 +117,19 @@ test('a new liker updates the existing card and unread count without duplicating
     const items=notifications.availableLocalNotifications().filter(item=>item.storyId==='one');assert.equal(items.length,1);assert.equal(items[0].otherCount,1);assert.equal(items[0].read,false);
     assert.equal(app.element('.home-notifications .notification-badge').textContent,'1');
 });
+
+test('muting a chat hides its alert while preserving unread messages', async () => {
+    const app = await loadApp();
+    const { currentUser, conversations } = app.exportsOf('src/data/sample-data.js');
+    const { availableLocalNotifications } = app.exportsOf('src/features/notifications.js');
+    const chat = {
+        handle: '@mute-test-group', user: 'Muted group test', isGroup: true,
+        members: [currentUser.handle], unread: true, unreadCount: 4, muted: true,
+    };
+    conversations.push(chat);
+    const hasAlert = () => availableLocalNotifications().some(item => item.text === 'You have unread messages in Muted group test.');
+    assert.equal(hasAlert(), false);
+    assert.equal(chat.unreadCount, 4);
+    chat.muted = false;
+    assert.equal(hasAlert(), true);
+});

@@ -1,14 +1,16 @@
+import { openGroupPhotoPicker, openGroupPhotoViewer, registerGroupPhotoEvents } from './group-photo.js';
+import { persistPreferences } from '../storage/preferences.js';
 import { canViewMedia, canViewStory, getAccount, mayInteract } from '../core/social.js';
 import { openProfileMedia } from './profile.js';
 import { showShareFeedback } from '../components/feedback.js';
-import { setView, pushConversationHistory, returnToConversationList } from '../core/navigation.js';
+import { setView, pushConversationHistory, pushGroupProfileHistory, returnToConversationList } from '../core/navigation.js';
 import { state } from '../core/state.js';
 import { escapeHtml } from '../core/utils.js';
 import { findEntity } from '../data/entities.js';
 import { conversations, currentUser } from '../data/sample-data.js';
-import { appendChatMessage, renderMessages, conversationAvatar } from './messages.js';
-import { canSendToConversation, canShareToConversation, createLocalGroup, respondToGroupInvitation } from './message-access.js';
-import { showHomePanel } from './home-controls.js';
+import { appendChatMessage, renderMessages, conversationAvatar, markInboxChatRead } from './messages.js';
+import { canSendToConversation, canShareToConversation, createLocalGroup, respondToGroupInvitation, isJoinedGroup, leaveLocalGroup, isGroupAdmin, updateGroupMember } from './message-access.js';
+import { closeHomePanel, showHomePanel } from './home-controls.js';
 import { persistSession } from '../storage/local-session.js';
 import { openStoryRepostEditor } from './stories.events.js';
 import { openStoryGroup, showStoryAtIndex } from './stories.js';
@@ -29,7 +31,7 @@ function openGroupCreator() {
 function openGroupManager(group) {
     if (!mayInteract() || !group.members?.includes(currentUser.handle) || !group.admins?.includes(currentUser.handle)) return;
     const members = [...new Set([...(group.members || []), ...(group.pendingMembers || [])])].filter(handle => handle !== currentUser.handle);
-    showHomePanel('Manage group', `<form class="manage-group-form" data-group-handle="${escapeHtml(group.handle)}"><label>Group name<input name="groupName" maxlength="60" required value="${escapeHtml(group.user)}" /></label><label>Group photo<input name="groupPhoto" type="file" accept="image/jpeg,image/png,image/webp" /></label><fieldset><legend>Remove members or cancel invitations</legend>${members.map(handle => `<label><input type="checkbox" name="removeMember" value="${escapeHtml(handle)}" /> ${escapeHtml(getAccount(handle)?.name || handle)}${group.pendingMembers?.includes(handle) ? ' · Invited' : ''}</label>`).join('') || '<p>No other members.</p>'}</fieldset><button type="submit">Save group</button></form>`);
+    showHomePanel('Manage group', `<form class="manage-group-form" data-group-handle="${escapeHtml(group.handle)}"><label>Group name<input name="groupName" maxlength="60" required value="${escapeHtml(group.user)}" /></label><fieldset><legend>Remove members or cancel invitations</legend>${members.map(handle => `<label><input type="checkbox" name="removeMember" value="${escapeHtml(handle)}" /> ${escapeHtml(getAccount(handle)?.name || handle)}${group.pendingMembers?.includes(handle) ? ' · Invited' : ''}</label>`).join('') || '<p>No other members.</p>'}</fieldset><button type="submit">Save group</button></form>`);
 }
 function cancelRecording() {
     recordingGeneration += 1; clearTimeout(recordingTimer);
@@ -64,7 +66,218 @@ async function toggleRecording(button) {
     } catch { recordingStream?.getTracks().forEach(track => track.stop()); showShareFeedback('Microphone access was unavailable. You can still send text or gallery attachments.'); }
     finally { button.disabled = false; }
 }
+let heldTarget = null;
+const inboxHoldSelector = '[data-open-conversation], [data-group-photo][data-has-photo]';
+
+function openInboxChatOptions(row) {
+    if (!row.isConnected || state.currentView !== 'messages' || state.activeConversationHandle) return false;
+    const chat = conversations.find(item => item.handle === row.dataset.openConversation);
+    if (!chat) return false;
+    const action = (value, label) => `<button type="button" data-inbox-chat-action="${value}" data-chat-handle="${escapeHtml(chat.handle)}">${label}</button>`;
+    showHomePanel(chat.user, `<div class="profile-options-list">
+      ${action('pin', chat.pinned ? 'Unpin chat' : 'Pin chat')}
+      ${action('mute', chat.muted ? 'Unmute chat' : 'Mute chat')}
+      ${action('read', chat.unread ? 'Mark as read' : 'Mark as unread')}
+      ${!chat.isGroup ? `<button type="button" data-inbox-visit-profile data-profile-handle="${escapeHtml(chat.handle)}">Visit profile</button>` : ''}
+      ${isJoinedGroup(chat) ? action('group-profile', 'View group profile') + action('leave-group', 'Leave group') : ''}
+      ${action('delete', 'Delete chat')}
+    </div>`);
+    return true;
+}
+
+function openInboxHoldTarget(target) {
+    return target.matches('[data-group-photo]')
+        ? target.isConnected && openGroupPhotoViewer(selectedGroupProfile())
+        : openInboxChatOptions(target);
+}
+
+function registerInboxChatOptions(list) {
+    let press, timer;
+    function cancelPress() {
+        clearTimeout(timer);
+        press = null;
+    }
+    list.addEventListener('pointerdown', event => {
+        cancelPress();
+        heldTarget = null;
+        const row = event.target.closest(inboxHoldSelector);
+        if (!row || event.button !== 0 || event.isPrimary === false) return;
+        press = { row, id: event.pointerId, x: event.clientX, y: event.clientY, pointerType: event.pointerType };
+        timer = window.setTimeout(() => {
+            if (press && openInboxHoldTarget(row)) heldTarget = row;
+            cancelPress();
+        }, 1250);
+    });
+    window.addEventListener('pointermove', event => {
+        if (press?.id === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 10) cancelPress();
+    }, { passive: true });
+    for (const type of ['pointerup', 'pointercancel']) {
+        window.addEventListener(type, event => { if (press?.id === event.pointerId) cancelPress(); });
+    }
+    window.addEventListener('blur', cancelPress);
+    function openContextMenu(event) {
+        const row = event.target.closest(inboxHoldSelector);
+        if (!row) return;
+        event.preventDefault();
+        if (event.pointerType === 'touch' || press?.pointerType === 'touch') return;
+        cancelPress();
+        openInboxHoldTarget(row);
+    }
+    list.addEventListener('contextmenu', openContextMenu);
+    list.addEventListener('keydown', event => {
+        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openContextMenu(event);
+    });
+}
+
+function confirmInboxChatDeletion(chat) {
+    showHomePanel('Delete chat?', `<p>Delete your conversation with ${escapeHtml(chat.user)} from this device?</p>
+      <div class="panel-actions">
+        <button type="button" data-inbox-chat-action="cancel-delete" data-chat-handle="${escapeHtml(chat.handle)}">Cancel</button>
+        <button type="button" data-inbox-chat-action="confirm-delete" data-chat-handle="${escapeHtml(chat.handle)}">Delete chat</button>
+      </div>`);
+}
+
+function deleteInboxChat(chat) {
+    const index = conversations.indexOf(chat);
+    if (index < 0) return;
+    // Retain only the IDs needed to prevent Story sync from recreating old messages.
+    for (const message of chat.messages || []) {
+        if (message.type === 'story-mention') state.deletedChatMentionIds.add(message.id);
+    }
+    conversations.splice(index, 1);
+    closeHomePanel();
+    renderMessages();
+    persistSession().catch(() => showShareFeedback('Chat removed from the inbox, but this device could not save the deletion.'));
+}
+
+function openGroupProfile(group) {
+    if (!isJoinedGroup(group)) return;
+    closeHomePanel();
+    cancelRecording();
+    state.activeGroupProfileHandle = group.handle;
+    pushGroupProfileHistory(group.handle);
+    renderMessages();
+    document.querySelector('[data-group-profile-back]')?.focus();
+}
+
+function confirmLeaveGroup(group) {
+    if (!isJoinedGroup(group) || !mayInteract()) return;
+    showHomePanel('Leave group?', `<p>Leave ${escapeHtml(group.user)} and remove it from your inbox?</p>
+      <div class="panel-actions">
+        <button type="button" data-inbox-chat-action="cancel-delete" data-chat-handle="${escapeHtml(group.handle)}">Cancel</button>
+        <button type="button" data-inbox-chat-action="confirm-leave" data-chat-handle="${escapeHtml(group.handle)}">Leave group</button>
+      </div>`);
+}
+
+function selectedGroupProfile() {
+    return state.currentView === 'messages' && conversations.find(chat => chat.handle === state.activeGroupProfileHandle);
+}
+
+function showGroupMemberOptions(group, handle) {
+    if (!mayInteract() || !isGroupAdmin(group) || handle === currentUser.handle || !group.members.includes(handle)) return;
+    const name = getAccount(handle)?.name || handle;
+    const muted = state.mutedPostHandles.has(handle) && state.mutedStoryHandles.has(handle);
+    const action = (value, label) => `<button type="button" data-group-member-action="${value}" data-member-handle="${escapeHtml(handle)}">${label}</button>`;
+    showHomePanel(name, `<div class="profile-options-list">
+      ${action('make-admin', 'Make admin')}
+      ${action('mute', muted ? 'Unmute profile' : 'Mute profile')}
+      ${action('remove', 'Remove from group')}
+    </div>`);
+}
+
+function handleGroupMemberAction(group, button) {
+    const handle = button.dataset.memberHandle;
+    if (!mayInteract() || !isGroupAdmin(group) || handle === currentUser.handle || !group.members.includes(handle)) return;
+    const action = button.dataset.groupMemberAction;
+    if (action === 'remove') {
+        const name = getAccount(handle)?.name || handle;
+        showHomePanel('Remove from group?', `<p>Remove ${escapeHtml(name)} from ${escapeHtml(group.user)}?</p>
+          <div class="panel-actions">
+            <button type="button" data-group-member-options="${escapeHtml(handle)}">Cancel</button>
+            <button type="button" data-group-member-action="confirm-remove" data-member-handle="${escapeHtml(handle)}">Remove</button>
+          </div>`);
+        return;
+    }
+    if (action === 'mute') {
+        const muted = state.mutedPostHandles.has(handle) && state.mutedStoryHandles.has(handle);
+        for (const set of [state.mutedPostHandles, state.mutedStoryHandles]) {
+            if (muted) set.delete(handle);
+            else set.add(handle);
+        }
+        if (!persistPreferences()) {
+            showShareFeedback('This mute preference could not be saved.');
+            return;
+        }
+    } else if (!updateGroupMember(group, handle, action === 'confirm-remove' ? 'remove' : action)) {
+        return;
+    } else {
+        persistSession().catch(() => showShareFeedback('The group change could not be saved on this device.'));
+    }
+    closeHomePanel();
+    renderMessages();
+}
+
 export function handleMessageClick(event) {
+    if (heldTarget && event.detail > 0 && event.target.closest(inboxHoldSelector) === heldTarget) {
+        heldTarget = null;
+        return true;
+    }
+    const memberOptions = event.target.closest('[data-group-member-options]');
+    if (memberOptions) {
+        showGroupMemberOptions(selectedGroupProfile(), memberOptions.dataset.groupMemberOptions);
+        return true;
+    }
+    const memberAction = event.target.closest('[data-group-member-action]');
+    if (memberAction) {
+        handleGroupMemberAction(selectedGroupProfile(), memberAction);
+        return true;
+    }
+    if (event.target.closest('[data-group-photo]')) {
+        openGroupPhotoPicker(selectedGroupProfile());
+        return true;
+    }
+    if (event.target.closest('[data-group-profile-back]')) {
+        window.history.back();
+        return true;
+    }
+    if (event.target.closest('[data-inbox-visit-profile]')) {
+        closeHomePanel();
+        return false; // Let the shared profile navigation remember the inbox for Back.
+    }
+    const inboxAction = event.target.closest('[data-inbox-chat-action]');
+    if (inboxAction) {
+        const chat = conversations.find(item => item.handle === inboxAction.dataset.chatHandle);
+        if (!chat || state.currentView !== 'messages' ||
+            (state.activeConversationHandle && inboxAction.dataset.inboxChatAction !== 'cancel-delete' &&
+                inboxAction.dataset.inboxChatAction !== 'confirm-leave')) return true;
+        switch (inboxAction.dataset.inboxChatAction) {
+            case 'group-profile': openGroupProfile(chat); return true;
+            case 'leave-group': confirmLeaveGroup(chat); return true;
+            case 'confirm-leave':
+                if (leaveLocalGroup(chat)) {
+                    closeHomePanel();
+                    const wasOpen = state.activeConversationHandle === chat.handle;
+                    state.activeConversationHandle = null;
+                    if (!wasOpen || !returnToConversationList(chat.handle)) renderMessages();
+                    persistSession().catch(() => showShareFeedback('Leaving the group could not be saved on this device.'));
+                }
+                return true;
+            case 'delete': confirmInboxChatDeletion(chat); return true;
+            case 'cancel-delete': closeHomePanel(); return true;
+            case 'confirm-delete': deleteInboxChat(chat); return true;
+            case 'pin': chat.pinned = !chat.pinned; break;
+            case 'mute': chat.muted = !chat.muted; break;
+            case 'read':
+                if (chat.unread) markInboxChatRead(chat);
+                else chat.unread = true;
+                break;
+            default: return true;
+        }
+        closeHomePanel();
+        renderMessages();
+        persistSession().catch(() => showShareFeedback('Chat preferences could not be saved.'));
+        return true;
+    }
     const mentionAction = event.target.closest('[data-story-mention-view], [data-story-mention-repost]');
     if (mentionAction) {
         const storyId = mentionAction.dataset.storyMentionView || mentionAction.dataset.storyMentionRepost;
@@ -91,6 +304,7 @@ export function handleMessageClick(event) {
     if (!event.target.closest('.chat-options-wrap')) { document.querySelector('.chat-options-menu')?.setAttribute('hidden', ''); document.querySelector('[data-chat-options]')?.setAttribute('aria-expanded', 'false'); }
     const conversationButton = event.target.closest('[data-open-conversation]');
     if (conversationButton) {
+        heldTarget = null;
         cancelRecording(); state.activeConversationHandle = conversationButton.dataset.openConversation; state.chatAttachmentPickerOpen = false;
         pushConversationHistory(state.activeConversationHandle);
         renderMessages(); document.querySelector('.chat-composer input[name="message"]')?.focus(); return true;
@@ -116,6 +330,8 @@ export function handleMessageClick(event) {
             if (returnToConversationList(state.activeConversationHandle)) return true;
             state.activeConversationHandle = null;
         }
+        if (action === 'group-profile') { openGroupProfile(conversation); return true; }
+        if (action === 'leave-group') { confirmLeaveGroup(conversation); return true; }
         if (action === 'manage-group') { openGroupManager(conversation); return true; }
         if (action === 'profile' && !conversation.isGroup) { state.profileHandle = conversation.handle; state.activeProfileSection = 'posts'; setView('profile'); return true; }
         renderMessages(); return true;
@@ -157,6 +373,8 @@ export function handleMessageClick(event) {
     return false;
 }
 export function registerMessageFormEvents() {
+    registerGroupPhotoEvents();
+    registerInboxChatOptions(document.getElementById('messages-list'));
     document.addEventListener('account-deletion-lock', () => {
         cancelRecording();
         if (pendingAttachment?.media?.startsWith('blob:')) URL.revokeObjectURL(pendingAttachment.media);
@@ -190,11 +408,10 @@ export function registerMessageFormEvents() {
             event.preventDefault(); const group = conversations.find(item => item.handle === form.dataset.groupHandle);
             if (!mayInteract() || !group?.admins?.includes(currentUser.handle) || !group.members?.includes(currentUser.handle)) return;
             const name = form.elements.groupName.value.trim(); if (!name) return;
-            const file = form.elements.groupPhoto.files?.[0];
-            if (file && (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 20 * 1024 * 1024)) { showShareFeedback('Choose a JPG, PNG or WebP image up to 20 MB.'); return; }
             const removed = [...form.querySelectorAll('input[name="removeMember"]:checked')].map(input => input.value);
-            group.user = name.slice(0, 60); group.members = group.members.filter(handle => !removed.includes(handle)); group.pendingMembers = (group.pendingMembers || []).filter(handle => !removed.includes(handle));
-            if (file) group.photo = URL.createObjectURL(file);
+            group.user = name.slice(0, 60);
+            for (const handle of removed) updateGroupMember(group, handle, 'remove');
+            group.pendingMembers = (group.pendingMembers || []).filter(handle => !removed.includes(handle));
             closePanel(); renderMessages(); persistSession().catch(() => showShareFeedback('The group changes could not be saved.'));
         }
     });

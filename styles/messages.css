@@ -43,6 +43,9 @@
 }
 
 .conversation-tile {
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+  user-select: none;
   width: 100%;
   display: flex;
   align-items: center;
@@ -61,6 +64,15 @@
 
 .conversation-tile.unread {
   background: rgba(124, 58, 237, 0.08);
+}
+
+.conversation-tile.unread .conversation-copy,
+.conversation-tile.unread .conversation-time {
+  font-weight: 700;
+}
+
+.conversation-tile.unread :is(.conversation-preview, .conversation-handle) {
+  color: var(--text);
 }
 
 .conversation-avatar {
@@ -402,7 +414,7 @@
 .chat-shared-post img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 12px; }
 
 .messages-inbox-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.messages-inbox-header button { padding: 9px 12px; border-radius: 12px; background: var(--primary); color: #fff; }
+.new-group-button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 12px; background: var(--primary); color: #fff; }
 .messages-local-note { margin: 12px 8px; font-size: .72rem; color: var(--muted); line-height: 1.5; }
 .chat-composer .chat-gallery-input[hidden] { display: none; }
 .chat-composer .chat-attach-button { padding: 8px 5px; font-size: 1.15rem; }
@@ -421,3 +433,64 @@
 /* Mention cards reuse Story viewing and reposting actions. */
 .story-mention-repost { display: block; margin-top: 8px; padding: 10px 14px; border-radius: 12px; background: var(--primary); color: #fff; font-weight: 700; }
 .chat-shared-post video { width: 100%; max-height: 240px; object-fit: contain; }
+
+.conversation-unread-count {
+  justify-self: start;
+  color: var(--primary);
+  font-size: .8rem;
+  font-weight: 700;
+}
+
+.group-profile { height: 100%; overflow-y: auto; padding: 0 12px 20px; }
+.group-profile-header { display: flex; align-items: center; gap: 12px; min-height: 56px; }
+.group-profile-header h2 { margin: 0; font-size: 1.05rem; }
+.group-profile-identity { display: grid; justify-items: center; gap: 10px; padding: 18px 0; }
+.group-profile-identity img { width: 76px; height: 76px; object-fit: cover; border-radius: 50%; }
+.group-profile-identity h3 { margin: 0; text-align: center; overflow-wrap: anywhere; }
+.group-profile h4 { margin: 12px 0; }
+.group-profile-members { list-style: none; margin: 0; padding: 0; }
+.group-profile-members li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.group-profile-members img { width: 36px; height: 36px; object-fit: cover; border-radius: 50%; }
+.group-profile-members small { color: var(--muted); }
+
+.group-profile-photo {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #eee7fb;
+  color: var(--primary);
+  font-size: 32px;
+}
+.group-member-options { margin-inline-start: auto; padding: 10px; border-radius: 10px; background: transparent; color: var(--text); }
+.group-photo-dialog { width: min(430px, calc(100vw - 28px)); max-height: 90dvh; padding: 18px; border: 0; border-radius: 18px; color: var(--text); background: var(--panel-strong); }
+.group-photo-dialog::backdrop { background: #21163788; }
+.group-photo-dialog header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.group-photo-dialog h2 { font-size: 1.1rem; margin: 0; }
+.group-photo-dialog button { padding: 9px 12px; border-radius: 10px; background: #eee7fb; color: var(--text); }
+.group-photo-dialog video { display: block; width: 100%; max-height: 48dvh; object-fit: contain; margin-bottom: 12px; }
+.group-photo-dialog [role="status"]:empty { display: none; }
+.group-photo-crop-stage {
+  position: relative;
+  width: min(100%, calc(48dvh * var(--crop-ratio)));
+  margin: 0 auto;
+  overflow: hidden;
+  touch-action: none;
+}
+.group-photo-crop-stage img { display: block; width: 100%; height: auto; }
+.group-photo-crop-stage .group-photo-crop-circle {
+  position: absolute;
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 0 100vmax #0008;
+  pointer-events: none;
+}
+.group-photo-zoom { position: absolute; right: 6px; bottom: 6px; display: flex; gap: 4px; }
+
+.group-profile-photo { -webkit-touch-callout: none; touch-action: pan-y; user-select: none; }
+.group-photo-viewer { width: min(84vw, 420px, 75dvh); max-width: none; padding: 0; border: 0; border-radius: 16px; background: transparent; }
+.group-photo-viewer::backdrop { background: #181222b3; }
+.group-photo-viewer img { display: block; width: 100%; height: auto; object-fit: contain; }

@@ -63,3 +63,37 @@ export function respondToGroupInvitation(group, accept) {
     }
     return true;
 }
+
+
+export function isJoinedGroup(group) {
+    return Boolean(group?.isGroup && group.membershipStatus !== 'pending' && group.members?.includes(currentUser.handle));
+}
+
+export function leaveLocalGroup(group) {
+    const index = conversations.indexOf(group);
+    if (!mayInteract() || !isJoinedGroup(group) || index < 0) return false;
+    group.members = group.members.filter(handle => handle !== currentUser.handle);
+    group.admins = (group.admins || []).filter(handle => handle !== currentUser.handle);
+    group.membershipStatus = 'left';
+    conversations.splice(index, 1);
+    return true;
+}
+
+
+export function isGroupAdmin(group) {
+    return isJoinedGroup(group) && Boolean(group.admins?.includes(currentUser.handle));
+}
+
+export function updateGroupMember(group, handle, action) {
+    if (!mayInteract() || !isGroupAdmin(group) || handle === currentUser.handle || !group.members.includes(handle)) return false;
+    if (action === 'make-admin') {
+        group.admins = [...new Set([...group.admins.filter(admin => admin !== currentUser.handle), handle])];
+    } else if (action === 'remove') {
+        group.members = group.members.filter(member => member !== handle);
+        group.admins = group.admins.filter(admin => admin !== handle);
+        group.pendingMembers = (group.pendingMembers || []).filter(member => member !== handle);
+    } else {
+        return false;
+    }
+    return true;
+}
