@@ -1,3 +1,4 @@
+import { openChatWallpaper, registerChatWallpaperEvents } from './chat-wallpaper.js';
 import { openGroupPhotoPicker, openGroupPhotoViewer, registerGroupPhotoEvents } from './group-photo.js';
 import { persistPreferences } from '../storage/preferences.js';
 import { canViewMedia, canViewStory, getAccount, mayInteract } from '../core/social.js';
@@ -239,7 +240,39 @@ function handleGroupMemberAction(group, button) {
     renderMessages();
 }
 
+function openChatMuteOptions(conversation) {
+    const action = (kind, muted) => `<button type="button" data-chat-mute="${kind.toLowerCase()}" aria-pressed="${Boolean(muted)}">${muted ? 'Unmute' : 'Mute'} ${kind.toLowerCase()}</button>`;
+    showHomePanel('Mute', `<div class="profile-options-list">
+      ${action('Messages', conversation.muted)}
+      ${action('Calls', conversation.callsMuted)}
+      ${conversation.isGroup ? '' : action('Story', state.mutedStoryHandles.has(conversation.handle))}
+    </div>`);
+}
+
 export function handleMessageClick(event) {
+    const mute = event.target.closest('[data-chat-mute]');
+    if (mute) {
+        const chat = activeConversation();
+        if (!chat || state.currentView !== 'messages') return true;
+        switch (mute.dataset.chatMute) {
+            case 'messages': chat.muted = !chat.muted; break;
+            case 'calls': chat.callsMuted = !chat.callsMuted; break;
+            case 'story':
+                if (chat.isGroup) return true;
+                if (state.mutedStoryHandles.has(chat.handle)) state.mutedStoryHandles.delete(chat.handle);
+                else state.mutedStoryHandles.add(chat.handle);
+                if (!persistPreferences()) showShareFeedback('The story mute preference could not be saved.');
+                break;
+            default: return true;
+        }
+        persistSession().catch(() => showShareFeedback('The mute preference could not be saved.'));
+        openChatMuteOptions(chat);
+        return true;
+    }
+    if (event.target.closest('[data-chat-profile]')) {
+        cancelRecording();
+        return false; // Shared profile navigation remembers the open chat.
+    }
     if (event.target.closest('[data-group-add-member]')) {
         openGroupMemberPicker(selectedGroupProfile());
         return true;
@@ -350,11 +383,12 @@ export function handleMessageClick(event) {
         const conversation = activeConversation(); if (!conversation) return true;
         const action = option.dataset.chatOption;
         if (action === 'pin') conversation.pinned = !conversation.pinned;
-        if (action === 'mute') conversation.muted = !conversation.muted;
-        if (action === 'unread') {
-            conversation.unread = true;
-            if (returnToConversationList(state.activeConversationHandle)) return true;
-            state.activeConversationHandle = null;
+        if (action === 'mute' || action === 'wallpaper') {
+            document.querySelector('.chat-options-menu').hidden = true;
+            document.querySelector('[data-chat-options]').setAttribute('aria-expanded', 'false');
+            if (action === 'mute') openChatMuteOptions(conversation);
+            else openChatWallpaper(conversation);
+            return true;
         }
         if (action === 'group-profile') { openGroupProfile(conversation); return true; }
         if (action === 'leave-group') { confirmLeaveGroup(conversation); return true; }
@@ -399,6 +433,7 @@ export function handleMessageClick(event) {
     return false;
 }
 export function registerMessageFormEvents() {
+    registerChatWallpaperEvents();
     registerGroupPhotoEvents();
     registerInboxChatOptions(document.getElementById('messages-list'));
     document.addEventListener('account-deletion-lock', () => {
