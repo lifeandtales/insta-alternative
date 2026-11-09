@@ -507,8 +507,22 @@ export function handleMessageClick(event) {
         return true;
     }
     const voice = event.target.closest('[data-chat-voice]'); if (voice) { void toggleRecording(voice); return true; }
+    if (event.target.closest('[data-dismiss-attachment-expiry]')) {
+        closeHomePanel();
+        return true;
+    }
     if (event.target.closest('[data-attachment-send]')) {
-        if (pendingAttachment) { const { conversation, ...message } = pendingAttachment; saveMessage(conversation, { ...message, from: 'me' }); pendingAttachment = null; closePanel(); }
+        if (!pendingAttachment) return true;
+        const { conversation, ...message } = pendingAttachment;
+        const sent = saveMessage(conversation, { ...message, from: 'me' });
+        pendingAttachment = null;
+        if (!sent) URL.revokeObjectURL(message.media);
+        if (sent && message.fileSize > TEMPORARY_ATTACHMENT_BYTES) {
+            showHomePanel('Temporary attachment', `<p>This attachment is over 200 MB and will be deleted automatically after 24 hours. Download it before it expires.</p>
+              <div class="panel-actions"><button type="button" data-dismiss-attachment-expiry>OK</button></div>`);
+        } else {
+            closeHomePanel();
+        }
         return true;
     }
     if (event.target.closest('[data-attachment-discard]')) { if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.media); pendingAttachment = null; closePanel(); return true; }
