@@ -225,6 +225,11 @@
   overflow-y: auto;
   padding: 16px 8px;
   overscroll-behavior: contain;
+  background-color: #ffe4e9;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 32%), rgb(255 255 255 / 32%)),
+    repeating-radial-gradient(ellipse at 92% 104%, transparent 0 17px, #ad446441 18px 19px, transparent 20px 31px),
+    linear-gradient(145deg, #ffd7df, #f9aebd 62%, #e794ac);
 }
 
 .chat-message {
