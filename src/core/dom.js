@@ -26,6 +26,7 @@ export const viewSections = {
     explore: [document.getElementById("explore-grid"), exploreCommunityView],
     reels: [document.getElementById("reels-feed")],
     messages: [document.getElementById("messages-list")],
+    "shared-post": [document.getElementById("shared-post-page")],
     profile: [document.getElementById("profile-view")]
 };
 export const storyViewer = document.querySelector(".story-viewer");

@@ -113,11 +113,61 @@ export function addLocalGroupMembers(group, handles) {
     return true;
 }
 
-// Chat history is appended in order. Remember how much this viewer has cleared.
+const CHAT_RETENTION_MS = 24 * 60 * 60 * 1000;
+
 export function visibleConversationMessages(conversation, viewer = currentUser.handle) {
     const cleared = conversation.isGroup ? conversation.clearedMessageCount?.[viewer] ?? 0 : 0;
     const hidden = new Set(conversation.hiddenMessageIds?.[viewer]);
     return (conversation.messages || []).slice(cleared).filter(message => !hidden.has(message.id));
+}
+
+function removeConversationMessages(chat, shouldRemove) {
+    const removedIndexes = [];
+    const remaining = (chat.messages || []).filter((message, index) => {
+        if (!shouldRemove(message)) return true;
+        removedIndexes.push(index);
+        if (message.type === 'story-mention') state.deletedChatMentionIds.add(message.id);
+        if (typeof message.media === 'string' && message.media.startsWith('blob:')) URL.revokeObjectURL(message.media);
+        return false;
+    });
+    if (!removedIndexes.length) return false;
+    if (chat.clearedMessageCount) {
+        for (const [viewer, count] of Object.entries(chat.clearedMessageCount)) {
+            chat.clearedMessageCount[viewer] = count - removedIndexes.filter(index => index < count).length;
+        }
+    }
+    chat.messages = remaining;
+    if (!remaining.length) {
+        chat.lastMessage = '';
+        chat.lastActivity = 0;
+        chat.unread = false;
+        chat.unreadCount = 0;
+    }
+    return true;
+}
+
+export function deleteSentMessagesForEveryone(chat, ids) {
+    const selected = new Set(ids);
+    const messages = visibleConversationMessages(chat).filter(message => selected.has(message.id));
+    if (!messages.length || messages.length !== selected.size || messages.some(message => message.from !== 'me')) return false;
+    return removeConversationMessages(chat, message => selected.has(message.id));
+}
+
+export function refreshConversationTimers(conversations, now = Date.now()) {
+    let changed = false;
+    let nextExpiry = Infinity;
+    for (const chat of conversations) {
+        if (chat.isGroup || chat.chatTimerEnabled !== true || !chat.messages?.length) continue;
+        const removed = removeConversationMessages(chat, message => {
+            if (!Number.isFinite(message.sentAt)) return false;
+            const expiry = message.sentAt + CHAT_RETENTION_MS;
+            if (expiry <= now) return true;
+            nextExpiry = Math.min(nextExpiry, expiry);
+            return false;
+        });
+        changed = changed || removed;
+    }
+    return { changed, nextExpiry };
 }
 
 export function hideConversationMessages(conversation, ids, viewer = currentUser.handle) {

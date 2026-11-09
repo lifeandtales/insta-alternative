@@ -5,39 +5,136 @@ import { persistPreferences } from '../storage/preferences.js';
 import { canViewMedia, canViewStory, getAccount, mayInteract } from '../core/social.js';
 import { openProfileMedia } from './profile.js';
 import { showShareFeedback } from '../components/feedback.js';
-import { pushConversationHistory, pushGroupProfileHistory, returnToConversationList } from '../core/navigation.js';
+import { openSharedPostPage, pushConversationHistory, pushGroupProfileHistory, returnToConversationList } from '../core/navigation.js';
 import { state } from '../core/state.js';
 import { escapeHtml } from '../core/utils.js';
 import { findEntity } from '../data/entities.js';
 import { conversations, currentUser } from '../data/sample-data.js';
 import { appendChatMessage, renderMessages, conversationAvatar, markInboxChatRead } from './messages.js';
-import { canSendToConversation, createLocalGroup, respondToGroupInvitation, isJoinedGroup, leaveLocalGroup, isGroupAdmin, updateGroupMember, availableGroupInvitees, addLocalGroupMembers, visibleConversationMessages, hideConversationMessages } from './message-access.js';
-import { closeHomePanel, showHomePanel } from './home-controls.js';
+import { canSendToConversation, createLocalGroup, respondToGroupInvitation, isJoinedGroup, leaveLocalGroup, isGroupAdmin, updateGroupMember, availableGroupInvitees, addLocalGroupMembers, visibleConversationMessages, hideConversationMessages, deleteSentMessagesForEveryone, refreshConversationTimers } from './message-access.js';
+import { closeHomePanel, openReportPanel, showHomePanel } from './home-controls.js';
 import { persistSession } from '../storage/local-session.js';
 import { openStoryRepostEditor } from './stories.events.js';
 import { openStoryGroup, showStoryAtIndex } from './stories.js';
 
 let expiryTimer;
+let pendingPostTap;
+const POST_DOUBLE_TAP_MS = 300;
+const MESSAGE_HOLD_MS = 750;
+const MESSAGE_REACTIONS = [['❤️', 'Like'], ['😂', 'Laugh'], ['😮', 'Surprised'], ['😢', 'Sad'], ['😡', 'Angry'], ['👍', 'Thumbs up']];
 let recorder, recordingStream, recordingTimer, recordingGeneration = 0, pendingAttachment;
 const activeConversation = () => conversations.find(item => item.handle === state.activeConversationHandle);
 const closePanel = () => { document.querySelector('.home-controls-backdrop').hidden = true; };
+
+function setMessageReaction(bubble, reaction) {
+    const chat = activeConversation();
+    const id = bubble?.dataset.reactableMessage;
+    const message = chat && id && visibleConversationMessages(chat).find(item => String(item.id) === id);
+    if (!message) return;
+    message.reactionsBy = { ...message.reactionsBy, [currentUser.handle]: reaction };
+    const badge = bubble.querySelector('.chat-message-reaction');
+    badge.textContent = reaction;
+    badge.hidden = false;
+    persistSession().catch(() => showShareFeedback('This message reaction could not be saved on this device.'));
+}
+
+function registerMessageReactionGestures(list) {
+    let hold, suppressedBubble, openBubble;
+    const closeTray = () => { list.querySelector('.chat-reaction-tray')?.remove(); openBubble = null; };
+    const cancelHold = () => { clearTimeout(hold?.timer); hold = null; };
+    list.addEventListener('pointerdown', event => {
+        if (event.target.closest('.chat-reaction-tray')) return;
+        closeTray();
+        cancelHold();
+        suppressedBubble = null;
+        const bubble = event.target.closest('[data-reactable-message]');
+        if (!bubble || bubble.closest('.selecting-messages') || !event.isPrimary || event.button !== 0) return;
+        hold = { x: event.clientX, y: event.clientY, pointerId: event.pointerId, timer: window.setTimeout(() => {
+            if (!bubble.isConnected || bubble.closest('.selecting-messages') || state.currentView !== 'messages') return;
+            suppressedBubble = openBubble = bubble;
+            clearTimeout(pendingPostTap?.timer);
+            pendingPostTap = null;
+            bubble.closest('.chat-window').insertAdjacentHTML('beforeend', `<div class="chat-reaction-tray" role="group" aria-label="React to message">
+              ${MESSAGE_REACTIONS.map(([emoji, label]) => `<button type="button" data-message-reaction="${emoji}" aria-label="${label}">${emoji}</button>`).join('')}
+            </div>`);
+            const tray = list.querySelector('.chat-reaction-tray');
+            const bounds = bubble.getBoundingClientRect();
+            const frame = list.getBoundingClientRect();
+            tray.style.left = `${Math.max(frame.left + 4, Math.min(bounds.left, frame.right - tray.offsetWidth - 4))}px`;
+            tray.style.top = `${bounds.top - tray.offsetHeight - 6 >= frame.top ? bounds.top - tray.offsetHeight - 6 : bounds.bottom + 6}px`;
+        }, MESSAGE_HOLD_MS) };
+    });
+    list.addEventListener('pointermove', event => {
+        if (hold?.pointerId === event.pointerId && Math.hypot(event.clientX - hold.x, event.clientY - hold.y) > 10) cancelHold();
+    });
+    for (const type of ['pointerup', 'pointercancel', 'pointerleave']) list.addEventListener(type, cancelHold);
+    list.addEventListener('contextmenu', event => {
+        if (event.target.closest('[data-reactable-message]') && !event.target.closest('.selecting-messages')) event.preventDefault();
+    });
+    list.addEventListener('click', event => {
+        const reaction = event.target.closest('[data-message-reaction]');
+        if (reaction) {
+            setMessageReaction(openBubble, reaction.dataset.messageReaction);
+            closeTray();
+        } else if (suppressedBubble && suppressedBubble.contains(event.target)) {
+            suppressedBubble = null;
+        } else {
+            closeTray();
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+    }, true);
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') closeTray(); });
+}
+
+function handleSharedPostTap(card, postId, keyboardActivated) {
+    const previousTap = pendingPostTap;
+    clearTimeout(previousTap?.timer);
+    pendingPostTap = null;
+    if (keyboardActivated) { openSharedPostPage(postId); return; }
+
+    const chat = activeConversation();
+    if (previousTap?.card === card && Date.now() - previousTap.at <= POST_DOUBLE_TAP_MS) {
+        setMessageReaction(card.closest('[data-reactable-message]'), '❤️');
+        return;
+    }
+
+    pendingPostTap = {
+        card, at: Date.now(),
+        timer: window.setTimeout(() => {
+            pendingPostTap = null;
+            if (state.currentView === 'messages' && activeConversation() === chat && card.isConnected && !card.inert) {
+                openSharedPostPage(postId);
+            }
+        }, POST_DOUBLE_TAP_MS),
+    };
+}
+function closeChatOptions() {
+    document.querySelector('.chat-options-menu')?.setAttribute('hidden', '');
+    document.querySelector('[data-chat-options]')?.setAttribute('aria-expanded', 'false');
+    document.querySelector('.chat-more-menu')?.setAttribute('hidden', '');
+    document.querySelector('[data-chat-more]')?.setAttribute('aria-expanded', 'false');
+}
 export function refreshChatAttachmentExpiry() {
     clearTimeout(expiryTimer);
-    const { changed, nextExpiry } = expireChatAttachments(conversations);
-    if (changed) {
+    const attachments = expireChatAttachments(conversations);
+    const chats = refreshConversationTimers(conversations);
+    const nextExpiry = Math.min(attachments.nextExpiry, chats.nextExpiry);
+    if (attachments.changed || chats.changed) {
         closeMessageDeletion();
         if (state.currentView === 'messages') renderMessages({ preserveComposer: true });
-        persistSession().catch(() => showShareFeedback('Expired attachments could not be removed from storage.'));
+        persistSession().catch(() => showShareFeedback('Expiry changes could not be saved on this device.'));
     }
     if (Number.isFinite(nextExpiry)) {
-        expiryTimer = window.setTimeout(refreshChatAttachmentExpiry, Math.max(1, nextExpiry - Date.now()));
+        expiryTimer = window.setTimeout(refreshChatAttachmentExpiry, Math.min(2_147_483_647, Math.max(1, nextExpiry - Date.now())));
     }
 }
 
 function saveMessage(conversation, message, options) {
     if (!canSendToConversation(conversation)) { showShareFeedback('Messaging is unavailable for this conversation.'); return false; }
     appendChatMessage(conversation, message, options);
-    if (message.type === 'attachment') refreshChatAttachmentExpiry();
+    if (message.type === 'attachment' || conversation.chatTimerEnabled) refreshChatAttachmentExpiry();
     persistSession().catch(() => showShareFeedback('The message is visible, but could not be saved on this device.'));
     return true;
 }
@@ -56,6 +153,24 @@ function cancelRecording() {
     if (recorder?.state === 'recording') recorder.stop();
     recordingStream?.getTracks().forEach(track => track.stop());
 }
+
+function syncVoicePlayer(audio) {
+    const player = audio.closest('.chat-voice-player');
+    if (!player) return;
+    const button = player.querySelector('[data-voice-play]');
+    const seek = player.querySelector('[data-voice-seek]');
+    const playing = !audio.paused && !audio.ended;
+    button.setAttribute('aria-label', playing ? 'Pause voice message' : 'Play voice message');
+    button.firstElementChild.textContent = playing ? '❚❚' : '▶';
+    const duration = Number.isFinite(audio.duration) ? audio.duration
+        : Number(seek.dataset.recordedDuration) || (audio.ended ? audio.currentTime : Number(seek.max));
+    seek.max = String(duration);
+    seek.disabled = duration <= 0;
+    seek.value = String(audio.currentTime);
+    const clock = seconds => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+    player.querySelector('.chat-voice-time').textContent = `${clock(audio.currentTime)} / ${duration > 0 ? clock(duration) : '–:––'}`;
+}
+
 async function toggleRecording(button) {
     if (recorder?.state === 'recording') { recorder.stop(); return; }
     const conversation = activeConversation();
@@ -67,6 +182,7 @@ async function toggleRecording(button) {
         if (activeConversation() !== conversation || !canSendToConversation(conversation)) { recordingStream.getTracks().forEach(track => track.stop()); return; }
         const chunks = [], generation = ++recordingGeneration, stream = recordingStream;
         const recording = new MediaRecorder(stream);
+        const startedAt = Date.now();
         recorder = recording;
         recorder.addEventListener('dataavailable', event => { if (event.data.size) chunks.push(event.data); });
         recorder.addEventListener('stop', () => {
@@ -75,7 +191,7 @@ async function toggleRecording(button) {
             if (recorder === recording) recorder = null;
             if (generation !== recordingGeneration || !chunks.length) return;
             clearTimeout(recordingTimer);
-            pendingAttachment = { conversation, type: 'voice', media: URL.createObjectURL(new Blob(chunks, { type: mimeType })) };
+            pendingAttachment = { conversation, type: 'voice', durationSeconds: Math.max(0.01, (Date.now() - startedAt) / 1000), media: URL.createObjectURL(new Blob(chunks, { type: mimeType })) };
             showHomePanel('Voice message', `<audio controls src="${escapeHtml(pendingAttachment.media)}"></audio><p>Listen before adding this recording to the local conversation.</p><div class="panel-actions"><button type="button" data-attachment-send>Send voice message</button><button type="button" data-attachment-discard>Discard</button></div>`);
             renderMessages();
         });
@@ -177,6 +293,19 @@ function deleteInboxChat(chat) {
     persistSession().catch(() => showShareFeedback('This device could not save the chat deletion.'));
 }
 
+function openChatTimer(chat) {
+    const enabled = chat.chatTimerEnabled === true;
+    showHomePanel('Chat timer', `
+      <form class="chat-timer-form" data-handle="${escapeHtml(chat.handle)}">
+        <fieldset><legend>Keep messages</legend>
+          <label><input type="radio" name="retention" value="off"${enabled ? '' : ' checked'} /> Keep history</label>
+          <label><input type="radio" name="retention" value="24-hours"${enabled ? ' checked' : ''} /> Last 24 hours</label>
+        </fieldset>
+        <p>Messages and shares in this conversation are removed for both participants 24 hours after sending. Older items are removed when you turn the timer on. Turning it off keeps the remaining history.</p>
+        <button type="submit">Save</button>
+      </form>`);
+}
+
 function openMessageDeletion(chat) {
     const history = document.querySelector('.chat-history');
     const messages = visibleConversationMessages(chat);
@@ -186,12 +315,14 @@ function openMessageDeletion(chat) {
     history.querySelectorAll(':scope > article').forEach((bubble, index) => {
         for (const child of bubble.children) child.inert = true;
         bubble.insertAdjacentHTML('beforeend', `<button type="button" class="chat-message-select"
-            data-select-chat-message="${escapeHtml(messages[index].id)}" aria-pressed="false"
+            data-select-chat-message="${escapeHtml(messages[index].id)}" data-sent-by-me="${messages[index].from === 'me'}" aria-pressed="false"
             aria-label="Select message ${index + 1}"><span aria-hidden="true">✓</span></button>`);
     });
     history.insertAdjacentHTML('afterend', `<div class="chat-selection-actions">
+      <span class="chat-selection-hint" role="status">Tap messages to select</span>
       <button type="button" data-cancel-message-deletion>Cancel</button>
-      <button type="button" data-confirm-message-deletion disabled>Delete</button>
+      <button type="button" data-confirm-message-deletion="me" disabled>Delete for me</button>
+      <button type="button" data-confirm-message-deletion="everyone" disabled>Delete for everyone</button>
     </div>`);
     history.querySelector('.chat-message-select')?.focus({ preventScroll: true });
 }
@@ -321,6 +452,19 @@ async function pickChatContact(conversation) {
 }
 
 export function handleMessageClick(event) {
+    if (event.target.closest('[data-shared-post-back]')) {
+        window.history.back();
+        return true;
+    }
+    const voicePlay = event.target.closest('[data-voice-play]');
+    if (voicePlay) {
+        const audio = voicePlay.closest('.chat-voice-player').querySelector('audio');
+        if (audio.paused || audio.ended) {
+            if (audio.ended) audio.currentTime = 0;
+            audio.play().catch(() => showShareFeedback('This voice message could not be played.'));
+        } else audio.pause();
+        return true;
+    }
     const download = event.target.closest('[data-attachment-expires]');
     if (download?.dataset.attachmentExpires && Number(download.dataset.attachmentExpires) <= Date.now()) {
         event.preventDefault();
@@ -435,9 +579,11 @@ export function handleMessageClick(event) {
     if (shared) {
         const entity = findEntity(shared.dataset.sharedType, Number(shared.dataset.sharedId));
         if (!entity || !canViewMedia(entity)) { showShareFeedback('This post is no longer available to you.'); return true; }
-        openProfileMedia(shared.dataset.sharedType, entity.id, shared); return true;
+        if (shared.dataset.sharedType === 'post') handleSharedPostTap(shared, entity.id, event.detail === 0);
+        else openProfileMedia(shared.dataset.sharedType, entity.id, shared, { singleItem: true });
+        return true;
     }
-    if (!event.target.closest('.chat-options-wrap')) { document.querySelector('.chat-options-menu')?.setAttribute('hidden', ''); document.querySelector('[data-chat-options]')?.setAttribute('aria-expanded', 'false'); }
+    if (!event.target.closest('.chat-options-wrap')) closeChatOptions();
     const conversationButton = event.target.closest('[data-open-conversation]');
     if (conversationButton) {
         heldTarget = null;
@@ -454,18 +600,39 @@ export function handleMessageClick(event) {
         return true;
     }
     const options = event.target.closest('[data-chat-options]');
-    if (options) { const menu = document.querySelector('.chat-options-menu'); menu.hidden = !menu.hidden; options.setAttribute('aria-expanded', String(!menu.hidden)); return true; }
+    if (options) {
+        const menu = document.querySelector('.chat-options-menu');
+        if (menu.hidden) { menu.hidden = false; options.setAttribute('aria-expanded', 'true'); }
+        else closeChatOptions();
+        return true;
+    }
+    const more = event.target.closest('[data-chat-more]');
+    if (more) {
+        const menu = document.querySelector('.chat-more-menu');
+        menu.hidden = !menu.hidden;
+        more.setAttribute('aria-expanded', String(!menu.hidden));
+        if (!menu.hidden) menu.querySelector('button').focus();
+        return true;
+    }
+    if (event.target.closest('[data-chat-report]')) {
+        const chat = activeConversation();
+        if (chat && !chat.isGroup) {
+            closeChatOptions();
+            openReportPanel({ id: chat.handle }, 'profile');
+        }
+        return true;
+    }
     const option = event.target.closest('[data-chat-option]');
     if (option) {
         const conversation = activeConversation(); if (!conversation) return true;
         const action = option.dataset.chatOption;
         if (action === 'pin') conversation.pinned = !conversation.pinned;
-        if (action === 'mute' || action === 'wallpaper' || action === 'delete') {
-            document.querySelector('.chat-options-menu').hidden = true;
-            document.querySelector('[data-chat-options]').setAttribute('aria-expanded', 'false');
+        if (action === 'mute' || action === 'wallpaper' || action === 'delete' || action === 'timer') {
+            closeChatOptions();
             if (action === 'mute') openChatMuteOptions(conversation);
             else if (action === 'wallpaper') openChatWallpaper(conversation);
-            else if (!conversation.isGroup || isJoinedGroup(conversation)) openMessageDeletion(conversation);
+            else if (action === 'timer' && !conversation.isGroup) openChatTimer(conversation);
+            else if (action === 'delete' && (!conversation.isGroup || isJoinedGroup(conversation))) openMessageDeletion(conversation);
             return true;
         }
         if (action === 'group-profile') { openGroupProfile(conversation); return true; }
@@ -476,8 +643,13 @@ export function handleMessageClick(event) {
     const selectMessage = event.target.closest('[data-select-chat-message]');
     if (selectMessage) {
         selectMessage.setAttribute('aria-pressed', String(selectMessage.getAttribute('aria-pressed') !== 'true'));
-        document.querySelector('[data-confirm-message-deletion]').disabled =
-            !document.querySelector('[data-select-chat-message][aria-pressed="true"]');
+        const selected = [...document.querySelectorAll('[data-select-chat-message][aria-pressed="true"]')];
+        document.querySelector('[data-confirm-message-deletion="me"]').disabled = !selected.length;
+        const includesReceived = selected.some(button => button.dataset.sentByMe !== 'true');
+        document.querySelector('[data-confirm-message-deletion="everyone"]').disabled = !selected.length || includesReceived;
+        document.querySelector('.chat-selection-hint').textContent = includesReceived
+            ? 'You can only delete your own messages for everyone.'
+            : selected.length ? `${selected.length} selected` : 'Tap messages to select';
         return true;
     }
     if (event.target.closest('[data-cancel-message-deletion]')) {
@@ -485,13 +657,17 @@ export function handleMessageClick(event) {
         document.querySelector('[data-chat-options]')?.focus();
         return true;
     }
-    if (event.target.closest('[data-confirm-message-deletion]')) {
+    const deleteSelection = event.target.closest('[data-confirm-message-deletion]');
+    if (deleteSelection) {
         const chat = activeConversation();
         const history = document.querySelector('.chat-history.selecting-messages');
         if (!chat || !history || (chat.isGroup && !isJoinedGroup(chat))) return true;
         const ids = [...history.querySelectorAll('[data-select-chat-message][aria-pressed="true"]')]
             .map(button => button.dataset.selectChatMessage);
-        if (hideConversationMessages(chat, ids)) {
+        const deleted = deleteSelection.dataset.confirmMessageDeletion === 'everyone'
+            ? deleteSentMessagesForEveryone(chat, ids)
+            : hideConversationMessages(chat, ids);
+        if (deleted) {
             const scrollTop = history.scrollTop;
             closeMessageDeletion();
             renderMessages({ preserveComposer: true });
@@ -612,6 +788,20 @@ export function handleMessageClick(event) {
     return false;
 }
 export function registerMessageFormEvents() {
+    const messagesList = document.getElementById('messages-list');
+    registerMessageReactionGestures(messagesList);
+    for (const type of ['loadedmetadata', 'durationchange', 'timeupdate', 'play', 'pause', 'ended']) {
+        messagesList.addEventListener(type, event => {
+            if (event.target.matches('.chat-voice-player audio')) syncVoicePlayer(event.target);
+        }, true);
+    }
+    messagesList.addEventListener('input', event => {
+        const seek = event.target;
+        if (!seek.matches('[data-voice-seek]')) return;
+        const audio = seek.closest('.chat-voice-player').querySelector('audio');
+        audio.currentTime = Number(seek.value);
+        syncVoicePlayer(audio);
+    });
     registerChatWallpaperEvents();
     window.addEventListener('pageshow', refreshChatAttachmentExpiry);
     document.addEventListener('visibilitychange', () => {
@@ -677,6 +867,18 @@ export function registerMessageFormEvents() {
     });
     document.addEventListener('submit', event => {
         const form = event.target;
+        if (form.matches('.chat-timer-form')) {
+            event.preventDefault();
+            const chat = activeConversation();
+            if (!chat || chat.handle !== form.dataset.handle || chat.isGroup) return;
+            const enabled = form.elements.retention.value === '24-hours';
+            if (!enabled && chat.chatTimerEnabled) refreshChatAttachmentExpiry();
+            chat.chatTimerEnabled = enabled;
+            closeHomePanel();
+            refreshChatAttachmentExpiry();
+            persistSession().catch(() => showShareFeedback('Chat timer could not be saved on this device.'));
+            return;
+        }
         if (form.matches('.chat-share-details, .chat-share-contact')) {
             event.preventDefault();
             const conversation = activeConversation();

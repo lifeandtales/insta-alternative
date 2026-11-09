@@ -159,6 +159,20 @@ export function renderMessages({ preserveComposer = false } = {}) {
             const entity = findEntity(message.entityType, message.entityId);
             if (!entity || !canViewMedia(entity)) return '<article class="chat-message">This shared post is unavailable.</article>';
             const warning = mediaNeedsWarning(entity) && !state.revealedMediaKeys.has(`${message.entityType}:${entity.id}`);
+            if (message.entityType === 'post') {
+                const author = entity.user || entity.handle;
+                const cover = entity.cover || entity.poster || entity.media;
+                const video = entity.mediaType === 'video' && entity.videoUrl;
+                const media = video && !cover && !warning
+                    ? `<video class="chat-post-media" src="${escapeHtml(video)}" preload="metadata" muted playsinline></video>`
+                    : `<img class="chat-post-media" src="${escapeHtml(cover)}" alt="${warning ? 'Sensitive content obscured' : ''}" />`;
+                return `<article class="chat-message chat-post-message ${message.from === 'me' ? 'from-me' : 'from-them'}">
+                  <button type="button" class="chat-post-card" data-shared-type="post" data-shared-id="${Number(entity.id)}" aria-label="Open post by ${escapeHtml(author)}">
+                    <span class="chat-post-author"><img src="${escapeHtml(visibleAvatar(entity.handle, entity.avatar))}" alt="" /><strong>${escapeHtml(author)}</strong></span>
+                    <span class="chat-post-preview${warning ? ' sensitive-preview' : ''}">${media}${warning ? '<span class="chat-post-media-label">Sensitive content</span>' : video ? '<span class="chat-post-media-label" aria-hidden="true">▶</span>' : ''}</span>
+                  </button>
+                </article>`;
+            }
             return `<article class="chat-message ${message.from === 'me' ? 'from-me' : 'from-them'}"><button type="button" class="chat-shared-post ${warning ? 'sensitive-preview' : ''}" data-shared-type="${escapeHtml(message.entityType)}" data-shared-id="${Number(message.entityId)}"><img src="${escapeHtml(entity.cover || entity.poster || entity.media)}" alt="${warning ? 'Sensitive content obscured' : 'Shared post cover'}" /><strong>${escapeHtml(entity.user)}</strong><p>${escapeHtml(entity.caption)}</p><span>${warning ? 'Sensitive content · open to review' : `Open ${escapeHtml(message.entityType)}`}</span></button></article>`;
         }
         if (message.type === "meme") {
@@ -178,7 +192,18 @@ export function renderMessages({ preserveComposer = false } = {}) {
         </article>
       `;
         }
-        if (message.type === 'voice') return `<article class="chat-message ${message.from === 'me' ? 'from-me' : 'from-them'}"><audio controls preload="metadata" src="${escapeHtml(message.media)}"></audio><time>${escapeHtml(formatConversationTime(message.sentAt))}</time><small>Voice message · stored in this browser preview</small></article>`;
+        if (message.type === 'voice') return `<article class="chat-message chat-voice-message ${message.from === 'me' ? 'from-me' : 'from-them'}">
+          <div class="chat-voice-player">
+            <audio preload="metadata" src="${escapeHtml(message.media)}"></audio>
+            <div class="chat-voice-play-row">
+              <button type="button" data-voice-play aria-label="Play voice message"><span aria-hidden="true">▶</span></button>
+              <span class="chat-voice-time">0:00 / –:––</span>
+            </div>
+            <input type="range" data-voice-seek aria-label="Seek voice message" min="0" max="0" value="0" step="0.01"
+              data-recorded-duration="${Number(message.durationSeconds) || 0}" disabled />
+          </div>
+          <time>${escapeHtml(formatConversationTime(message.sentAt))}</time>
+        </article>`;
         if (message.type === 'location' || message.type === 'contact') {
             const location = message.type === 'location';
             const phone = String(message.phone ?? '').replace(/[^+0-9]/g, '');
@@ -217,6 +242,12 @@ export function renderMessages({ preserveComposer = false } = {}) {
         <time>${escapeHtml(formatConversationTime(message.sentAt))}</time>
       </article>
     `;
+    }).map((markup, index) => {
+        const message = messages[index];
+        if (message.id == null) return markup;
+        const reaction = message.reactionsBy?.[currentUser.handle] ?? (message.likedBy?.includes(currentUser.handle) ? '❤️' : '');
+        return markup.replace('<article ', `<article data-reactable-message="${escapeHtml(String(message.id))}" `)
+            .replace('</article>', `<span class="chat-message-reaction" role="status"${reaction ? '' : ' hidden'}>${escapeHtml(reaction)}</span></article>`);
     }).join("");
     if (preserveComposer) {
         const history = list.querySelector('.chat-history');
@@ -245,10 +276,18 @@ export function renderMessages({ preserveComposer = false } = {}) {
             <button type="button" role="menuitem" data-chat-option="pin">${conversation.pinned ? "Unpin chat" : "Pin chat"}</button>
             <button type="button" role="menuitem" data-chat-option="mute">Mute</button>
             <button type="button" role="menuitem" data-chat-option="wallpaper">Change chat wallpaper</button>
+            ${!conversation.isGroup ? '<button type="button" role="menuitem" data-chat-option="timer">Chat timer</button>' : ''}
             ${!conversation.isGroup || isJoinedGroup(conversation) ? '<button type="button" role="menuitem" data-chat-option="delete">Delete chat</button>' : ''}
             ${conversation.isGroup ? '' : `<button type="button" role="menuitem" data-chat-profile data-profile-handle="${escapeHtml(conversation.handle)}">View profile</button>`}
             ${isJoinedGroup(conversation) ? '<button type="button" role="menuitem" data-chat-option="group-profile">View group profile</button><button type="button" role="menuitem" data-chat-option="leave-group">Leave group</button>' : ''}
             ${conversation.isGroup && conversation.admins?.includes(currentUser.handle) ? '<button type="button" role="menuitem" data-chat-option="manage-group">Manage group</button>' : ''}
+            ${conversation.isGroup ? '' : `<div class="chat-more-wrap">
+              <button class="chat-more-toggle" type="button" role="menuitem" data-chat-more aria-haspopup="menu" aria-expanded="false" aria-controls="chat-more-menu">More <span aria-hidden="true">›</span></button>
+              <div class="chat-more-menu" id="chat-more-menu" role="menu" aria-label="More chat options" hidden>
+                <button type="button" role="menuitem" data-chat-report>Report</button>
+                <button type="button" role="menuitem" data-account-block="${escapeHtml(conversation.handle)}" ${state.blockedHandles.has(conversation.handle) ? 'disabled' : ''}>${state.blockedHandles.has(conversation.handle) ? 'Blocked' : 'Block'}</button>
+              </div>
+            </div>`}
           </div>
         </div>
       </header>

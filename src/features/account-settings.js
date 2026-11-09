@@ -12,6 +12,7 @@ import { persistStoryHighlights, persistActiveStories } from '../storage/browser
 import { updateOwnProfile, updateOwnAvatar, setAccountPrivacy, setAccountBlocked, respondToFollowRequest, removeFollower } from './account-model.js';
 import { syncDeletionLock } from '../core/account-lock.js';
 import { refreshEntityComments } from './comments.js';
+import { renderMessages } from './messages.js';
 
 const closePanel = () => { document.querySelector('.home-controls-backdrop').hidden = true; };
 let cropImage;
@@ -82,7 +83,11 @@ export function registerAccountSettingsEvents() {
         if (event.target.closest('[data-edit-profile]')) openProfileEditor();
         const page = event.target.closest('[data-settings-page]'); if (page) openSettingsPage(page.dataset.settingsPage);
         const block = event.target.closest('[data-account-block]');
-        if (block && setAccountBlocked(block.dataset.accountBlock, true)) { saveAccountChanges(); showShareFeedback('Account blocked. Chat history is kept.'); }
+        if (block && setAccountBlocked(block.dataset.accountBlock, true)) {
+            saveAccountChanges();
+            if (state.currentView === 'messages') renderMessages();
+            showShareFeedback('Account blocked. Chat history is kept.');
+        }
         const unblock = event.target.closest('[data-account-unblock]');
         if (unblock && setAccountBlocked(unblock.dataset.accountUnblock, false)) { saveAccountChanges(); openBlockedAccounts(); }
         const request = event.target.closest('[data-follow-request]');

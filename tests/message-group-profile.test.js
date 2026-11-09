@@ -102,3 +102,41 @@ test('deleting selected group messages only hides them for the selecting viewer'
     assert.equal(visibleConversationMessages(group, '@viewer').map(message => message.id).join(','), 'second,new');
     assert.equal(visibleConversationMessages(group, '@other').map(message => message.id).join(','), 'first,second,new');
 });
+
+test('the 24-hour timer removes shared history only from the enabled conversation', async () => {
+    const app = await loadApp();
+    const { refreshConversationTimers, visibleConversationMessages } = app.exportsOf('src/features/message-access.js');
+    const { reels } = app.exportsOf('src/data/sample-data.js');
+    const reel = reels[0];
+    const engagement = { liked: reel.liked, likes: reel.likes, views: reel.views };
+    const day = 24 * 60 * 60 * 1000;
+    const old = { id: 'old', sentAt: day, type: 'shared-post', entityType: 'reel', entityId: reel.id };
+    const recent = { id: 'recent', sentAt: day + 1, type: 'text' };
+    const chat = { chatTimerEnabled: true, messages: [old, recent] };
+    const otherChat = { messages: [old] };
+    assert.equal(refreshConversationTimers([chat, otherChat], 2 * day - 1).nextExpiry, 2 * day);
+    assert.equal(refreshConversationTimers([chat, otherChat], 2 * day).changed, true);
+    assert.equal(chat.messages.map(message => message.id).join(','), 'recent');
+    assert.equal(visibleConversationMessages(chat, '@other').map(message => message.id).join(','), 'recent');
+    assert.equal(otherChat.messages.length, 1);
+    assert.deepEqual({ liked: reel.liked, likes: reel.likes, views: reel.views }, engagement);
+
+    chat.chatTimerEnabled = false;
+    assert.equal(refreshConversationTimers([chat, otherChat], 3 * day).nextExpiry, Infinity);
+    assert.equal(chat.messages.map(message => message.id).join(','), 'recent');
+});
+
+test('delete for everyone removes own messages from shared history and preserves group clear boundaries', async () => {
+    const app = await loadApp();
+    const { deleteSentMessagesForEveryone, visibleConversationMessages } = app.exportsOf('src/features/message-access.js');
+    const chat = {
+        isGroup: true,
+        clearedMessageCount: { '@other': 2 },
+        messages: [{ id: 'sent', from: 'me' }, { id: 'old', from: 'them' }, { id: 'new', from: 'them' }],
+    };
+    assert.equal(deleteSentMessagesForEveryone(chat, ['sent', 'old']), false);
+    assert.equal(chat.messages.length, 3);
+    assert.equal(deleteSentMessagesForEveryone(chat, ['sent']), true);
+    assert.equal(chat.messages.map(message => message.id).join(','), 'old,new');
+    assert.equal(visibleConversationMessages(chat, '@other').map(message => message.id).join(','), 'new');
+});

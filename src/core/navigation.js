@@ -9,17 +9,37 @@ import { renderProfile } from '../features/profile.js';
 import { renderReels } from '../features/reels.js';
 import { renderStories } from '../features/stories.js';
 import { syncDeletionLock } from './account-lock.js';
+import { findEntity } from '../data/entities.js';
+import { canViewMedia } from './social.js';
 
 const currentAppHistory = () => window.history.state && typeof window.history.state === 'object'
     ? window.history.state : {};
 
-function writeAppHistory(view, conversation = null, replace = false, groupProfile = null) {
-    const next = { ...currentAppHistory(), instaApp: { view, conversation, ...(groupProfile ? { groupProfile } : {}) } };
+function writeAppHistory(view, conversation = null, replace = false, groupProfile = null, postId = null) {
+    const next = { ...currentAppHistory(), instaApp: { view, conversation, ...(groupProfile ? { groupProfile } : {}), ...(postId !== null ? { postId } : {}) } };
     window.history[replace ? 'replaceState' : 'pushState'](next, '', window.location.href);
 }
 
 export function pushConversationHistory(handle) {
     writeAppHistory('messages', handle);
+}
+
+export function openSharedPostPage(postId) {
+    const conversation = state.activeConversationHandle;
+    const route = currentAppHistory().instaApp;
+    if (route?.view !== 'messages' || route.conversation !== conversation) writeAppHistory('messages', conversation, true);
+    writeAppHistory('shared-post', null, false, null, postId);
+    setView('shared-post', { fromHistory: true });
+}
+
+function renderSharedPostPage() {
+    const page = viewSections['shared-post'][0];
+    const content = page.querySelector('.shared-post-content');
+    const post = findEntity('post', currentAppHistory().instaApp?.postId);
+    if (post && canViewMedia(post)) renderPostCards([post], content);
+    else content.textContent = 'This post is no longer available.';
+    content.scrollTop = 0;
+    page.querySelector('[data-shared-post-back]').focus({ preventScroll: true });
 }
 
 export function pushGroupProfileHistory(handle) {
@@ -85,7 +105,7 @@ export function setView(view, { fromHistory = false } = {}) {
         sections.forEach((section) => { section.hidden = name !== view; });
     });
     const titles = { explore: "Explore public posts", reels: "Reels", messages: "Messages", profile: "Profile" };
-    viewHeading.hidden = view === 'home' || view === 'messages' || view === 'profile' || view === 'notifications';
+    viewHeading.hidden = view === 'home' || view === 'messages' || view === 'profile' || view === 'notifications' || view === 'shared-post';
     viewHeading.textContent = titles[view] || "";
     if (view === "notifications") renderNotificationsPage();
     if (view === "home") {
@@ -100,6 +120,8 @@ export function setView(view, { fromHistory = false } = {}) {
         renderReels();
     if (view === "messages")
         renderMessages();
+    if (view === "shared-post")
+        renderSharedPostPage();
     if (view === "profile")
         renderProfile();
 }
