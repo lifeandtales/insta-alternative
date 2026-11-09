@@ -116,5 +116,17 @@ export function addLocalGroupMembers(group, handles) {
 // Chat history is appended in order. Remember how much this viewer has cleared.
 export function visibleConversationMessages(conversation, viewer = currentUser.handle) {
     const cleared = conversation.isGroup ? conversation.clearedMessageCount?.[viewer] ?? 0 : 0;
-    return (conversation.messages || []).slice(cleared);
+    const hidden = new Set(conversation.hiddenMessageIds?.[viewer]);
+    return (conversation.messages || []).slice(cleared).filter(message => !hidden.has(message.id));
+}
+
+export function hideConversationMessages(conversation, ids, viewer = currentUser.handle) {
+    const visibleIds = new Set(visibleConversationMessages(conversation, viewer).map(message => message.id));
+    const selected = ids.filter(id => visibleIds.has(id));
+    if (!selected.length) return false;
+    conversation.hiddenMessageIds = {
+        ...conversation.hiddenMessageIds,
+        [viewer]: [...(conversation.hiddenMessageIds?.[viewer] || []), ...new Set(selected)],
+    };
+    return true;
 }

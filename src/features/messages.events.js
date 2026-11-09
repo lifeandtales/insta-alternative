@@ -11,7 +11,7 @@ import { escapeHtml } from '../core/utils.js';
 import { findEntity } from '../data/entities.js';
 import { conversations, currentUser } from '../data/sample-data.js';
 import { appendChatMessage, renderMessages, conversationAvatar, markInboxChatRead } from './messages.js';
-import { canSendToConversation, createLocalGroup, respondToGroupInvitation, isJoinedGroup, leaveLocalGroup, isGroupAdmin, updateGroupMember, availableGroupInvitees, addLocalGroupMembers } from './message-access.js';
+import { canSendToConversation, createLocalGroup, respondToGroupInvitation, isJoinedGroup, leaveLocalGroup, isGroupAdmin, updateGroupMember, availableGroupInvitees, addLocalGroupMembers, visibleConversationMessages, hideConversationMessages } from './message-access.js';
 import { closeHomePanel, showHomePanel } from './home-controls.js';
 import { persistSession } from '../storage/local-session.js';
 import { openStoryRepostEditor } from './stories.events.js';
@@ -25,6 +25,7 @@ export function refreshChatAttachmentExpiry() {
     clearTimeout(expiryTimer);
     const { changed, nextExpiry } = expireChatAttachments(conversations);
     if (changed) {
+        closeMessageDeletion();
         if (state.currentView === 'messages') renderMessages({ preserveComposer: true });
         persistSession().catch(() => showShareFeedback('Expired attachments could not be removed from storage.'));
     }
@@ -174,6 +175,37 @@ function deleteInboxChat(chat) {
     closeHomePanel();
     renderMessages();
     persistSession().catch(() => showShareFeedback('This device could not save the chat deletion.'));
+}
+
+function openMessageDeletion(chat) {
+    const history = document.querySelector('.chat-history');
+    const messages = visibleConversationMessages(chat);
+    if (!messages.length) { showShareFeedback('There are no messages to delete.'); return; }
+
+    history.classList.add('selecting-messages');
+    history.querySelectorAll(':scope > article').forEach((bubble, index) => {
+        for (const child of bubble.children) child.inert = true;
+        bubble.insertAdjacentHTML('beforeend', `<button type="button" class="chat-message-select"
+            data-select-chat-message="${escapeHtml(messages[index].id)}" aria-pressed="false"
+            aria-label="Select message ${index + 1}"><span aria-hidden="true">✓</span></button>`);
+    });
+    history.insertAdjacentHTML('afterend', `<div class="chat-selection-actions">
+      <button type="button" data-cancel-message-deletion>Cancel</button>
+      <button type="button" data-confirm-message-deletion disabled>Delete</button>
+    </div>`);
+    history.querySelector('.chat-message-select')?.focus({ preventScroll: true });
+}
+
+function closeMessageDeletion() {
+    const history = document.querySelector('.chat-history.selecting-messages');
+    if (!history) return;
+    history.classList.remove('selecting-messages');
+    for (const button of history.querySelectorAll('.chat-message-select')) {
+        const bubble = button.parentElement;
+        button.remove();
+        for (const child of bubble.children) child.inert = false;
+    }
+    document.querySelector('.chat-selection-actions')?.remove();
 }
 
 function openGroupProfile(group) {
@@ -428,17 +460,46 @@ export function handleMessageClick(event) {
         const conversation = activeConversation(); if (!conversation) return true;
         const action = option.dataset.chatOption;
         if (action === 'pin') conversation.pinned = !conversation.pinned;
-        if (action === 'mute' || action === 'wallpaper') {
+        if (action === 'mute' || action === 'wallpaper' || action === 'delete') {
             document.querySelector('.chat-options-menu').hidden = true;
             document.querySelector('[data-chat-options]').setAttribute('aria-expanded', 'false');
             if (action === 'mute') openChatMuteOptions(conversation);
-            else openChatWallpaper(conversation);
+            else if (action === 'wallpaper') openChatWallpaper(conversation);
+            else if (!conversation.isGroup || isJoinedGroup(conversation)) openMessageDeletion(conversation);
             return true;
         }
         if (action === 'group-profile') { openGroupProfile(conversation); return true; }
         if (action === 'leave-group') { confirmLeaveGroup(conversation); return true; }
         if (action === 'manage-group') { openGroupManager(conversation); return true; }
         renderMessages(); return true;
+    }
+    const selectMessage = event.target.closest('[data-select-chat-message]');
+    if (selectMessage) {
+        selectMessage.setAttribute('aria-pressed', String(selectMessage.getAttribute('aria-pressed') !== 'true'));
+        document.querySelector('[data-confirm-message-deletion]').disabled =
+            !document.querySelector('[data-select-chat-message][aria-pressed="true"]');
+        return true;
+    }
+    if (event.target.closest('[data-cancel-message-deletion]')) {
+        closeMessageDeletion();
+        document.querySelector('[data-chat-options]')?.focus();
+        return true;
+    }
+    if (event.target.closest('[data-confirm-message-deletion]')) {
+        const chat = activeConversation();
+        const history = document.querySelector('.chat-history.selecting-messages');
+        if (!chat || !history || (chat.isGroup && !isJoinedGroup(chat))) return true;
+        const ids = [...history.querySelectorAll('[data-select-chat-message][aria-pressed="true"]')]
+            .map(button => button.dataset.selectChatMessage);
+        if (hideConversationMessages(chat, ids)) {
+            const scrollTop = history.scrollTop;
+            closeMessageDeletion();
+            renderMessages({ preserveComposer: true });
+            history.scrollTop = scrollTop;
+            document.querySelector('[data-chat-options]')?.focus({ preventScroll: true });
+            persistSession().catch(() => showShareFeedback('This device could not save the chat deletion.'));
+        }
+        return true;
     }
     const invite = event.target.closest('[data-group-invite]');
     if (invite) {

@@ -535,3 +535,52 @@
 }
 .chat-share-card a { display: grid; gap: 4px; color: inherit; }
 .chat-share-card a[download] { text-decoration: none; }
+
+.selecting-messages > article {
+  position: relative;
+}
+.chat-message-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border-radius: inherit;
+  border: 2px solid transparent;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.chat-message-select span {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  opacity: 0;
+}
+.chat-message-select[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: rgb(120 78 216 / 16%);
+}
+.chat-message-select[aria-pressed="true"] span { opacity: 1; }
+.chat-selection-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 8px 12px;
+}
+.chat-selection-actions button {
+  padding: 7px 14px;
+  border-radius: 8px;
+}
+.chat-selection-actions button[data-confirm-message-deletion] {
+  background: #b92a4c;
+  color: white;
+}
+.chat-selection-actions button:disabled { opacity: .45; }
+.chat-selection-actions + .chat-composer,
+.chat-window:has(.selecting-messages) :is(.chat-options-wrap, .chat-call-button) { display: none; }

@@ -91,3 +91,14 @@ test('deleting a group chat hides history only for the current viewer', async ()
     assert.equal(visibleConversationMessages(group)[0].text, 'New message');
     assert.equal(group.unreadCount, 0);
 });
+
+test('deleting selected group messages only hides them for the selecting viewer', async () => {
+    const app = await loadApp();
+    const { hideConversationMessages, visibleConversationMessages } = app.exportsOf('src/features/message-access.js');
+    const group = { isGroup: true, messages: [{ id: 'first' }, { id: 'second' }] };
+    assert.equal(hideConversationMessages(group, ['first'], '@viewer'), true);
+    assert.equal(hideConversationMessages(group, ['first', 'unknown'], '@viewer'), false);
+    group.messages.push({ id: 'new' });
+    assert.equal(visibleConversationMessages(group, '@viewer').map(message => message.id).join(','), 'second,new');
+    assert.equal(visibleConversationMessages(group, '@other').map(message => message.id).join(','), 'first,second,new');
+});

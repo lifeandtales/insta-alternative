@@ -23,7 +23,7 @@ export function conversationAvatar(conversation) {
 export function getConversationPreview(conversation) {
     const lastMessage = visibleConversationMessages(conversation).at(-1);
     if (!lastMessage)
-        return conversation.clearedMessageCount?.[currentUser.handle] ? "Start a conversation" : conversation.lastMessage || "Start a conversation";
+        return conversation.messages?.length ? "Start a conversation" : conversation.lastMessage || "Start a conversation";
     if (lastMessage.type === "shared-post") return `${lastMessage.from === "me" ? "You: " : ""}Shared a ${lastMessage.entityType}`;
     if (lastMessage.type === "shared-story") return `${lastMessage.from === "me" ? "You: " : ""}Shared a story`;
     if (lastMessage.type === 'story-mention') return lastMessage.from === 'me' ? 'You mentioned them in your story' : 'Mentioned you in a story';
@@ -54,7 +54,7 @@ export function markInboxChatRead(chat) {
 
 function inboxMessageTime(conversation) {
     return visibleConversationMessages(conversation).at(-1)?.sentAt
-        ?? (conversation.clearedMessageCount?.[currentUser.handle] ? 0 : conversation.lastActivity ?? 0);
+        ?? (conversation.messages?.length ? 0 : conversation.lastActivity ?? 0);
 }
 
 function renderGroupProfile(group) {
@@ -245,6 +245,7 @@ export function renderMessages({ preserveComposer = false } = {}) {
             <button type="button" role="menuitem" data-chat-option="pin">${conversation.pinned ? "Unpin chat" : "Pin chat"}</button>
             <button type="button" role="menuitem" data-chat-option="mute">Mute</button>
             <button type="button" role="menuitem" data-chat-option="wallpaper">Change chat wallpaper</button>
+            ${!conversation.isGroup || isJoinedGroup(conversation) ? '<button type="button" role="menuitem" data-chat-option="delete">Delete chat</button>' : ''}
             ${conversation.isGroup ? '' : `<button type="button" role="menuitem" data-chat-profile data-profile-handle="${escapeHtml(conversation.handle)}">View profile</button>`}
             ${isJoinedGroup(conversation) ? '<button type="button" role="menuitem" data-chat-option="group-profile">View group profile</button><button type="button" role="menuitem" data-chat-option="leave-group">Leave group</button>' : ''}
             ${conversation.isGroup && conversation.admins?.includes(currentUser.handle) ? '<button type="button" role="menuitem" data-chat-option="manage-group">Manage group</button>' : ''}
