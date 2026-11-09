@@ -1,11 +1,12 @@
+import { attachmentExpiryForSize, isExpiredAttachment } from './chat-attachment-expiry.js';
 import { canViewMedia, canViewStory, visibleAvatar, mediaNeedsWarning, getAccount, DEFAULT_AVATAR } from '../core/social.js';
 import { findEntity } from '../data/entities.js';
 import { state } from '../core/state.js';
 import { escapeHtml, formatConversationTime } from '../core/utils.js';
-import { conversations, posts, reels } from '../data/sample-data.js';
+import { conversations } from '../data/sample-data.js';
 import { currentUser } from '../data/sample-data.js';
 import { mayInteract } from '../core/social.js';
-import { canSendToConversation, canShareToConversation, isJoinedGroup, isGroupAdmin, visibleConversationMessages } from './message-access.js';
+import { canSendToConversation, isJoinedGroup, isGroupAdmin, visibleConversationMessages } from './message-access.js';
 
 export function conversationAvatar(conversation) {
     return conversation.isGroup ? conversation.photo || conversation.avatar || DEFAULT_AVATAR : visibleAvatar(conversation.handle, conversation.avatar);
@@ -23,7 +24,13 @@ export function getConversationPreview(conversation) {
     if (lastMessage.type === "call")
         return `${lastMessage.from === "me" ? "Outgoing" : "Incoming"} ${lastMessage.media} call`;
     if (lastMessage.type === 'voice') return 'Voice message';
-    if (lastMessage.type === 'attachment') return `Shared a ${lastMessage.mediaKind === 'video' ? 'video' : 'photo'}`;
+    if (lastMessage.type === 'location') return `Shared a location: ${lastMessage.place}`;
+    if (lastMessage.type === 'contact') return `Shared a contact: ${lastMessage.contactName}`;
+    if (lastMessage.type === 'attachment') {
+        if (isExpiredAttachment(lastMessage)) return `Expired attachment: ${lastMessage.fileName || 'Attachment'}`;
+        if (lastMessage.mediaKind === 'file') return `Shared a file: ${lastMessage.fileName || 'Attachment'}`;
+        return `Shared a ${lastMessage.mediaKind === 'video' ? 'video' : 'photo'}`;
+    }
     return `${lastMessage.from === "me" ? "You: " : ""}${lastMessage.text}`;
 }
 
@@ -74,7 +81,7 @@ function renderGroupProfile(group) {
       </section>`;
 }
 
-export function renderMessages() {
+export function renderMessages({ preserveComposer = false } = {}) {
     const list = document.getElementById("messages-list");
     const group = conversations.find(item => item.handle === state.activeGroupProfileHandle);
     if (isJoinedGroup(group)) {
@@ -85,7 +92,6 @@ export function renderMessages() {
     const conversation = conversations.find((item) => item.handle === state.activeConversationHandle);
     if (!conversation) {
         state.activeConversationHandle = null;
-        state.chatAttachmentPickerOpen = false;
         list.innerHTML = `
       <header class="messages-inbox-header"><h2>Messages</h2><button class="new-group-button" type="button" data-create-group aria-label="New group" title="New group">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -165,19 +171,51 @@ export function renderMessages() {
       `;
         }
         if (message.type === 'voice') return `<article class="chat-message ${message.from === 'me' ? 'from-me' : 'from-them'}"><audio controls preload="metadata" src="${escapeHtml(message.media)}"></audio><time>${escapeHtml(formatConversationTime(message.sentAt))}</time><small>Voice message · stored in this browser preview</small></article>`;
+        if (message.type === 'location' || message.type === 'contact') {
+            const location = message.type === 'location';
+            const details = location
+                ? `<a class="chat-file-download" href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(message.place)}" target="_blank" rel="noopener noreferrer">${escapeHtml(message.place)}</a>`
+                : `<strong>${escapeHtml(message.contactName)}</strong><p>${escapeHtml(message.phone)}</p>`;
+            return `<article class="chat-message ${message.from === 'me' ? 'from-me' : 'from-them'}">
+              <small>${location ? 'Location' : 'Contact'}</small>${details}<time>${escapeHtml(formatConversationTime(message.sentAt))}</time></article>`;
+        }
         if (message.type === 'attachment') {
-            const media = message.mediaKind === 'video'
-                ? `<video controls playsinline preload="metadata" src="${escapeHtml(message.media)}"></video>`
-                : `<img src="${escapeHtml(message.media)}" alt="Photo attachment" />`;
-            return `<article class="chat-message ${message.from === 'me' ? 'from-me' : 'from-them'} chat-attachment">${media}${message.caption ? `<p>${escapeHtml(message.caption)}</p>` : ''}<time>${escapeHtml(formatConversationTime(message.sentAt))}</time></article>`;
+            const fileName = escapeHtml(message.fileName || 'Attachment');
+            const expired = isExpiredAttachment(message);
+            const expiresAt = Number.isFinite(message.expiresAt) ? message.expiresAt : null;
+            const download = message.media?.startsWith('blob:')
+                ? `<a class="chat-file-download" href="${escapeHtml(message.media)}" download="${fileName}" data-attachment-expires="${expiresAt ?? ''}">${message.mediaKind === 'file' ? fileName : 'Download'}</a>` : '';
+            let content;
+            if (expired) {
+                content = `<strong>${fileName}</strong><small>Expired · Ask the sender to resend.</small>`;
+            } else {
+                const media = message.mediaKind === 'video'
+                    ? `<video controls playsinline preload="metadata" src="${escapeHtml(message.media)}"></video>`
+                    : message.mediaKind === 'file' ? download
+                        : `<img src="${escapeHtml(message.media)}" alt="Photo attachment" />`;
+                content = media;
+                if (expiresAt) {
+                    if (message.mediaKind !== 'file') content += download;
+                    content += `<small>Download by ${escapeHtml(new Date(expiresAt).toLocaleString())}</small>`;
+                }
+            }
+            return `<article class="chat-message ${message.from === 'me' ? 'from-me' : 'from-them'} chat-attachment">${content}${message.caption ? `<p>${escapeHtml(message.caption)}</p>` : ''}<time>${escapeHtml(formatConversationTime(message.sentAt))}</time></article>`;
         }
         return `
-      <article class="chat-message ${message.from === "me" ? "from-me" : "from-them"}">
+      <article class="chat-message chat-text-message ${message.from === "me" ? "from-me" : "from-them"}">
         <p>${escapeHtml(message.text)}</p>
         <time>${escapeHtml(formatConversationTime(message.sentAt))}</time>
       </article>
     `;
     }).join("");
+    if (preserveComposer) {
+        const history = list.querySelector('.chat-history');
+        if (history) {
+            history.innerHTML = messageMarkup;
+            history.scrollTop = history.scrollHeight;
+            return;
+        }
+    }
     const identity = `
         <img src="${escapeHtml(conversationAvatar(conversation))}" alt="" />
         <span class="chat-header-copy"><strong>${escapeHtml(conversation.user)}</strong><small>${conversation.isGroup ? `${conversation.members?.length || 0} members` : escapeHtml(conversation.handle)}</small></span>`;
@@ -197,7 +235,7 @@ export function renderMessages() {
             <button type="button" role="menuitem" data-chat-option="pin">${conversation.pinned ? "Unpin chat" : "Pin chat"}</button>
             <button type="button" role="menuitem" data-chat-option="mute">Mute</button>
             <button type="button" role="menuitem" data-chat-option="wallpaper">Change chat wallpaper</button>
-            ${conversation.isGroup ? '' : '<button type="button" role="menuitem" data-chat-option="profile">View profile</button>'}
+            ${conversation.isGroup ? '' : `<button type="button" role="menuitem" data-chat-profile data-profile-handle="${escapeHtml(conversation.handle)}">View profile</button>`}
             ${isJoinedGroup(conversation) ? '<button type="button" role="menuitem" data-chat-option="group-profile">View group profile</button><button type="button" role="menuitem" data-chat-option="leave-group">Leave group</button>' : ''}
             ${conversation.isGroup && conversation.admins?.includes(currentUser.handle) ? '<button type="button" role="menuitem" data-chat-option="manage-group">Manage group</button>' : ''}
           </div>
@@ -207,21 +245,13 @@ export function renderMessages() {
         ${canSend ? '' : `<p class="chat-empty">${conversation.membershipStatus === 'pending' ? 'Accept this group invitation before viewing its history.' : state.verificationStatus !== 'approved' ? 'Messaging is unavailable while verification is pending.' : 'Messaging is paused while this account is blocked.'}</p>`}
         ${pending ? `<div class="group-invitation-actions"><button type="button" data-group-invite="accept">Accept invitation</button><button type="button" data-group-invite="decline">Decline</button></div>` : messageMarkup || '<p class="chat-empty">Start a conversation with a message or shared post.</p>'}
       </div>
-      <div class="chat-attachment-picker" ${state.chatAttachmentPickerOpen && canSend ? "" : "hidden"}>
-        <p>Share a post or reel</p>
-        <div>${[...posts, ...reels].filter(item => canShareToConversation(item, conversation)).map((item) => {
-        const type = item.reel ? "reel" : "post";
-        const media = item.cover || (type === "reel" ? item.poster : item.media);
-        const warning = mediaNeedsWarning(item) && !state.revealedMediaKeys.has(`${type}:${item.id}`);
-        return `<button class="${warning ? 'sensitive-preview' : ''}" type="button" data-chat-share-type="${type}" data-chat-share-id="${item.id}" aria-label="Share ${warning ? 'sensitive ' : ''}${type} by ${escapeHtml(item.user)}"><img src="${escapeHtml(media)}" alt="" /></button>`;
-    }).join("")}</div>
-      </div>
       ${canSend ? `<form class="chat-composer">
-        <button class="chat-attach-button" type="button" data-chat-attach aria-label="Share a post or reel">＋</button>
+        <button class="chat-attach-button" type="button" data-chat-attach aria-label="More attachment options">＋</button>
         <button class="chat-attach-button" type="button" data-chat-gallery aria-label="Attach a photo or video"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 17H3V5a2 2 0 0 1 2-2h12v2"/><g transform="translate(3 3) scale(.85)"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8" cy="9" r="1.5"/><path d="m4 17 5-5 4 3 3-5 4 6"/></g></svg></button>
         <input class="chat-gallery-input" type="file" accept="image/*,video/*" hidden />
+        <input class="chat-file-input" type="file" hidden />
         <button class="chat-attach-button" type="button" data-chat-voice aria-label="Record a voice message"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3" fill="currentColor" stroke="none"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5m-3 0h6"/></svg></button>
-        <input name="message" type="text" maxlength="1000" placeholder="Message..." aria-label="Message" autocomplete="off" />
+        <input name="message" type="text" maxlength="1000" placeholder="Message..." aria-label="Message" autocomplete="off" enterkeyhint="send" />
         <button class="chat-send-button" type="submit">Send</button>
       </form>` : ''}
     </section>
@@ -230,10 +260,12 @@ export function renderMessages() {
     history.scrollTop = history.scrollHeight;
 }
 
-export function appendChatMessage(conversation, message) {
+export function appendChatMessage(conversation, message, options) {
     conversation.messages = conversation.messages || [];
-    conversation.messages.push({ ...message, id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, sentAt: Date.now() });
-    conversation.lastActivity = Date.now();
+    const sentAt = Date.now();
+    const expiresAt = message.type === 'attachment' ? attachmentExpiryForSize(message.fileSize, sentAt) : undefined;
+    conversation.messages.push({ ...message, id: `chat-${sentAt}-${Math.random().toString(36).slice(2, 8)}`, sentAt, ...(expiresAt ? { expiresAt } : {}) });
+    conversation.lastActivity = sentAt;
     conversation.lastMessage = getConversationPreview(conversation);
-    renderMessages();
+    renderMessages(options);
 }

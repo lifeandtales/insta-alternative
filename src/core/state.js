@@ -12,7 +12,6 @@ export const state = {
     activeProfileMediaTrigger: null,
     activeConversationHandle: null,
     activeGroupProfileHandle: null,
-    chatAttachmentPickerOpen: false,
     fullscreenVideo: null,
     fullscreenVideoWasPlaying: false,
     fullscreenVideoWrapper: null,

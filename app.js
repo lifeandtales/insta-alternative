@@ -17,7 +17,7 @@ import {
     registerVideoPointerEvents,
 } from './src/media/video.events.js';
 import { handleFollowClick } from './src/features/follows.events.js';
-import { handleMessageClick, registerMessageFormEvents } from './src/features/messages.events.js';
+import { handleMessageClick, registerMessageFormEvents, refreshChatAttachmentExpiry } from './src/features/messages.events.js';
 import { dismissOpenMenus, registerKeyboardEvents } from './src/core/events.js';
 import {
     handleStoryMenuClick,
@@ -288,7 +288,7 @@ if (document.documentElement.classList.contains("mobile-splash-pending")) {
 }
 setView("home");
 if (opensDirectlyToHome(window.location.href)) enterLocalDemo('', false);
-loadSession().then(() => { processScheduledPosts(); syncIncomingStoryMentions(); syncIncomingPostMentions(); setView(state.currentView); openMediaFromHash(); updateNotificationBadge(); }).catch(() => {
+loadSession().then(() => { refreshChatAttachmentExpiry(); processScheduledPosts(); syncIncomingStoryMentions(); syncIncomingPostMentions(); setView(state.currentView); openMediaFromHash(); updateNotificationBadge(); }).catch(() => {
     showShareFeedback('Local content storage is unavailable. New work may not survive closing this page.');
 });
 window.addEventListener?.('hashchange', () => openMediaFromHash());

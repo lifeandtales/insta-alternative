@@ -1,28 +1,44 @@
+import { TEMPORARY_ATTACHMENT_BYTES, expireChatAttachments } from './chat-attachment-expiry.js';
 import { openChatWallpaper, registerChatWallpaperEvents } from './chat-wallpaper.js';
 import { openGroupPhotoPicker, openGroupPhotoViewer, registerGroupPhotoEvents } from './group-photo.js';
 import { persistPreferences } from '../storage/preferences.js';
 import { canViewMedia, canViewStory, getAccount, mayInteract } from '../core/social.js';
 import { openProfileMedia } from './profile.js';
 import { showShareFeedback } from '../components/feedback.js';
-import { setView, pushConversationHistory, pushGroupProfileHistory, returnToConversationList } from '../core/navigation.js';
+import { pushConversationHistory, pushGroupProfileHistory, returnToConversationList } from '../core/navigation.js';
 import { state } from '../core/state.js';
 import { escapeHtml } from '../core/utils.js';
 import { findEntity } from '../data/entities.js';
 import { conversations, currentUser } from '../data/sample-data.js';
 import { appendChatMessage, renderMessages, conversationAvatar, markInboxChatRead } from './messages.js';
-import { canSendToConversation, canShareToConversation, createLocalGroup, respondToGroupInvitation, isJoinedGroup, leaveLocalGroup, isGroupAdmin, updateGroupMember, availableGroupInvitees, addLocalGroupMembers } from './message-access.js';
+import { canSendToConversation, createLocalGroup, respondToGroupInvitation, isJoinedGroup, leaveLocalGroup, isGroupAdmin, updateGroupMember, availableGroupInvitees, addLocalGroupMembers } from './message-access.js';
 import { closeHomePanel, showHomePanel } from './home-controls.js';
 import { persistSession } from '../storage/local-session.js';
 import { openStoryRepostEditor } from './stories.events.js';
 import { openStoryGroup, showStoryAtIndex } from './stories.js';
 
+let expiryTimer;
 let recorder, recordingStream, recordingTimer, recordingGeneration = 0, pendingAttachment;
 const activeConversation = () => conversations.find(item => item.handle === state.activeConversationHandle);
 const closePanel = () => { document.querySelector('.home-controls-backdrop').hidden = true; };
-function saveMessage(conversation, message) {
-    if (!canSendToConversation(conversation)) { showShareFeedback('Messaging is unavailable for this conversation.'); return; }
-    appendChatMessage(conversation, message);
+export function refreshChatAttachmentExpiry() {
+    clearTimeout(expiryTimer);
+    const { changed, nextExpiry } = expireChatAttachments(conversations);
+    if (changed) {
+        if (state.currentView === 'messages') renderMessages({ preserveComposer: true });
+        persistSession().catch(() => showShareFeedback('Expired attachments could not be removed from storage.'));
+    }
+    if (Number.isFinite(nextExpiry)) {
+        expiryTimer = window.setTimeout(refreshChatAttachmentExpiry, Math.max(1, nextExpiry - Date.now()));
+    }
+}
+
+function saveMessage(conversation, message, options) {
+    if (!canSendToConversation(conversation)) { showShareFeedback('Messaging is unavailable for this conversation.'); return false; }
+    appendChatMessage(conversation, message, options);
+    if (message.type === 'attachment') refreshChatAttachmentExpiry();
     persistSession().catch(() => showShareFeedback('The message is visible, but could not be saved on this device.'));
+    return true;
 }
 function openGroupCreator() {
     if (!mayInteract()) { showShareFeedback('Group creation is unavailable while verification is pending.'); return; }
@@ -250,6 +266,12 @@ function openChatMuteOptions(conversation) {
 }
 
 export function handleMessageClick(event) {
+    const download = event.target.closest('[data-attachment-expires]');
+    if (download?.dataset.attachmentExpires && Number(download.dataset.attachmentExpires) <= Date.now()) {
+        event.preventDefault();
+        refreshChatAttachmentExpiry();
+        return true;
+    }
     const mute = event.target.closest('[data-chat-mute]');
     if (mute) {
         const chat = activeConversation();
@@ -364,12 +386,12 @@ export function handleMessageClick(event) {
     const conversationButton = event.target.closest('[data-open-conversation]');
     if (conversationButton) {
         heldTarget = null;
-        cancelRecording(); state.activeConversationHandle = conversationButton.dataset.openConversation; state.chatAttachmentPickerOpen = false;
+        cancelRecording(); state.activeConversationHandle = conversationButton.dataset.openConversation;
         pushConversationHistory(state.activeConversationHandle);
         renderMessages(); document.querySelector('.chat-composer input[name="message"]')?.focus(); return true;
     }
     if (event.target.closest('[data-chat-back]')) {
-        cancelRecording(); state.chatAttachmentPickerOpen = false;
+        cancelRecording();
         if (!returnToConversationList(state.activeConversationHandle)) {
             state.activeConversationHandle = null;
             renderMessages();
@@ -393,7 +415,6 @@ export function handleMessageClick(event) {
         if (action === 'group-profile') { openGroupProfile(conversation); return true; }
         if (action === 'leave-group') { confirmLeaveGroup(conversation); return true; }
         if (action === 'manage-group') { openGroupManager(conversation); return true; }
-        if (action === 'profile' && !conversation.isGroup) { state.profileHandle = conversation.handle; state.activeProfileSection = 'posts'; setView('profile'); return true; }
         renderMessages(); return true;
     }
     const invite = event.target.closest('[data-group-invite]');
@@ -407,16 +428,85 @@ export function handleMessageClick(event) {
         }
         return true;
     }
-    if (event.target.closest('[data-chat-attach]')) { if (canSendToConversation(activeConversation())) { state.chatAttachmentPickerOpen = !state.chatAttachmentPickerOpen; renderMessages(); } return true; }
-    if (event.target.closest('[data-chat-gallery]')) { if (canSendToConversation(activeConversation())) document.querySelector('.chat-gallery-input')?.click(); return true; }
-    const voice = event.target.closest('[data-chat-voice]'); if (voice) { void toggleRecording(voice); return true; }
-    const share = event.target.closest('[data-chat-share-id]');
-    if (share) {
-        const entity = findEntity(share.dataset.chatShareType, Number(share.dataset.chatShareId)), conversation = activeConversation();
-        if (!canShareToConversation(entity, conversation)) { showShareFeedback('Every recipient must have access to this post.'); return true; }
-        state.chatAttachmentPickerOpen = false;
-        saveMessage(conversation, { type: 'shared-post', from: 'me', entityType: share.dataset.chatShareType, entityId: entity.id }); return true;
+    if (event.target.closest('[data-chat-attach]')) {
+        if (canSendToConversation(activeConversation())) {
+            showHomePanel('Share in chat', `<div class="profile-options-list">
+              <button type="button" data-chat-share-kind="file">Share a file</button>
+              <button type="button" data-chat-share-kind="location">Share your location</button>
+              <button type="button" data-chat-share-kind="contact">Share a contact</button>
+            </div>`);
+        }
+        return true;
     }
+    if (event.target.closest('[data-chat-gallery]')) {
+        if (canSendToConversation(activeConversation())) document.querySelector('.chat-gallery-input')?.click();
+        return true;
+    }
+    const share = event.target.closest('[data-chat-share-kind]');
+    if (share) {
+        const conversation = activeConversation();
+        if (!canSendToConversation(conversation)) return true;
+        const kind = share.dataset.chatShareKind;
+        if (kind === 'file') {
+            closeHomePanel();
+            document.querySelector('.chat-file-input')?.click();
+        } else if (kind === 'location' || kind === 'contact') {
+            const location = kind === 'location';
+            showHomePanel(location ? 'Share your location' : 'Share a contact', `
+                <form class="chat-share-details" data-kind="${kind}" data-handle="${escapeHtml(conversation.handle)}">
+                  ${location ? `<label>Current coordinates<input name="place" readonly placeholder="Location not yet fetched" /></label>
+                    <button type="button" data-chat-current-location>Use current location</button>
+                    <p class="chat-location-status" role="status"></p>`
+                    : `<label>Name<input name="contactName" required maxlength="100" /></label>
+                    <label>Phone number<input name="phone" type="tel" required maxlength="60" /></label>`}
+                  <button type="submit"${location ? ' disabled' : ''}>${location ? 'Send location' : 'Send contact'}</button>
+                </form>`);
+        }
+        return true;
+    }
+    const locationButton = event.target.closest('[data-chat-current-location]');
+    if (locationButton) {
+        const form = locationButton.form;
+        const status = form.querySelector('.chat-location-status');
+        const send = form.querySelector('button[type="submit"]');
+        form.elements.place.value = '';
+        send.disabled = true;
+        if (!navigator.geolocation) {
+            status.textContent = 'Current location is unavailable in this browser.';
+            return true;
+        }
+        locationButton.disabled = true;
+        status.textContent = 'Getting your location…';
+        const onPosition = ({ coords }) => {
+            if (!form.isConnected) return;
+            form.elements.place.value = `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`;
+            locationButton.disabled = false;
+            send.disabled = false;
+            const accuracy = Number.isFinite(coords.accuracy) ? ` Estimated accuracy: ±${Math.ceil(coords.accuracy)} m.` : '';
+            status.textContent = `Review your coordinates before sending.${accuracy}`;
+        };
+        function requestPosition(highAccuracy) {
+            navigator.geolocation.getCurrentPosition(onPosition, error => {
+                if (!form.isConnected) return;
+                if (highAccuracy && (error.code === 2 || error.code === 3)) {
+                    status.textContent = 'Trying standard location accuracy…';
+                    requestPosition(false);
+                    return;
+                }
+                locationButton.disabled = false;
+                if (error.code === 1) {
+                    status.textContent = 'Location access is blocked here. Check the site and device settings.';
+                } else if (error.code === 3) {
+                    status.textContent = 'The location request timed out. Try again.';
+                } else {
+                    status.textContent = 'This device could not determine its location. Try opening the app directly in your phone browser.';
+                }
+            }, { timeout: highAccuracy ? 8000 : 12000, enableHighAccuracy: highAccuracy, maximumAge: 0 });
+        }
+        requestPosition(true);
+        return true;
+    }
+    const voice = event.target.closest('[data-chat-voice]'); if (voice) { void toggleRecording(voice); return true; }
     if (event.target.closest('[data-attachment-send]')) {
         if (pendingAttachment) { const { conversation, ...message } = pendingAttachment; saveMessage(conversation, { ...message, from: 'me' }); pendingAttachment = null; closePanel(); }
         return true;
@@ -434,6 +524,10 @@ export function handleMessageClick(event) {
 }
 export function registerMessageFormEvents() {
     registerChatWallpaperEvents();
+    window.addEventListener('pageshow', refreshChatAttachmentExpiry);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) refreshChatAttachmentExpiry();
+    });
     registerGroupPhotoEvents();
     registerInboxChatOptions(document.getElementById('messages-list'));
     document.addEventListener('account-deletion-lock', () => {
@@ -442,23 +536,68 @@ export function registerMessageFormEvents() {
         pendingAttachment = null;
     });
     document.addEventListener('click', event => { if (event.target.closest('[data-view]')) cancelRecording(); });
+    document.addEventListener('pointerdown', event => {
+        const input = document.activeElement;
+        const composer = input?.closest?.('.chat-composer');
+        if (!composer || input.name !== 'message') return;
+        if (event.target.closest('.chat-send-button')?.form === composer) {
+            // Keep the same focused input while the button's click submits the form.
+            event.preventDefault();
+        } else if (!composer.contains(event.target)) {
+            input.blur();
+        }
+    });
     document.getElementById('messages-list').addEventListener('submit', event => {
-        const form = event.target.closest('.chat-composer'); if (!form) return;
-        event.preventDefault(); const conversation = activeConversation(), text = form.elements.message.value.trim();
-        if (conversation && text) saveMessage(conversation, { type: 'text', from: 'me', text });
+        const form = event.target.closest('.chat-composer');
+        if (!form) return;
+        event.preventDefault();
+        const conversation = activeConversation();
+        const input = form.elements.message;
+        const text = input.value.trim();
+        if (conversation && text && saveMessage(conversation, { type: 'text', from: 'me', text }, { preserveComposer: true })) {
+            input.value = '';
+        }
     });
     document.getElementById('messages-list').addEventListener('change', event => {
-        if (!event.target.matches('.chat-gallery-input')) return;
-        const conversation = activeConversation(), file = event.target.files?.[0];
+        if (!event.target.matches('.chat-gallery-input, .chat-file-input')) return;
+        const conversation = activeConversation();
+        const file = event.target.files?.[0];
+        event.target.value = '';
         if (!file || !canSendToConversation(conversation)) return;
-        if ((!file.type.startsWith('image/') && !file.type.startsWith('video/')) || file.size > 20 * 1024 * 1024) { showShareFeedback('Choose a photo or video up to 20 MB.'); return; }
-        const mediaKind = file.type.startsWith('video/') ? 'video' : 'photo';
-        pendingAttachment = { conversation, type: 'attachment', mediaKind, media: URL.createObjectURL(file) };
-        const media = mediaKind === 'video' ? `<video controls playsinline src="${escapeHtml(pendingAttachment.media)}"></video>` : `<img src="${escapeHtml(pendingAttachment.media)}" alt="Attachment preview" />`;
-        showHomePanel('Gallery attachment', `<div class="attachment-preview">${media}</div><div class="panel-actions"><button type="button" data-attachment-send>Send ${mediaKind}</button><button type="button" data-attachment-discard>Discard</button></div>`);
+        const mediaKind = event.target.matches('.chat-file-input') ? 'file'
+            : file.type.startsWith('video/') ? 'video'
+                : file.type.startsWith('image/') ? 'photo' : null;
+        if (!mediaKind) {
+            showShareFeedback('Choose a photo or video.');
+            return;
+        }
+        if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.media);
+        pendingAttachment = {
+            conversation, type: 'attachment', mediaKind,
+            fileName: file.name, fileSize: file.size, media: URL.createObjectURL(file),
+        };
+        const url = escapeHtml(pendingAttachment.media);
+        const preview = mediaKind === 'video' ? `<video controls playsinline src="${url}"></video>`
+            : mediaKind === 'photo' ? `<img src="${url}" alt="Attachment preview" />`
+                : `<p class="attachment-file-name">${escapeHtml(file.name)}</p>`;
+        showHomePanel('Attachment', `<div class="attachment-preview">${preview}</div>
+          ${file.size > TEMPORARY_ATTACHMENT_BYTES ? '<p>Files over 200 MB are available for 24 hours. Download before they expire.</p>' : ''}
+          <div class="panel-actions"><button type="button" data-attachment-send>Send ${mediaKind}</button>
+          <button type="button" data-attachment-discard>Discard</button></div>`);
     });
     document.addEventListener('submit', event => {
         const form = event.target;
+        if (form.matches('.chat-share-details')) {
+            event.preventDefault();
+            const conversation = activeConversation();
+            if (!conversation || conversation.handle !== form.dataset.handle) return;
+            const kind = form.dataset.kind;
+            const details = kind === 'location'
+                ? { place: form.elements.place.value.trim() }
+                : { contactName: form.elements.contactName.value.trim(), phone: form.elements.phone.value.trim() };
+            if (Object.values(details).every(Boolean) && saveMessage(conversation, { type: kind, from: 'me', ...details })) closeHomePanel();
+            return;
+        }
         if (form.matches('.add-group-members-form')) {
             event.preventDefault();
             const group = selectedGroupProfile();
