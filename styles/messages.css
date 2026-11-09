@@ -521,3 +521,17 @@
 
 .chat-file-download { color: inherit; font-weight: 600; overflow-wrap: anywhere; }
 .attachment-file-name { overflow-wrap: anywhere; font-weight: 600; }
+
+.chat-share-card {
+  display: grid;
+  gap: 4px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  color: inherit;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.chat-share-card a { display: grid; gap: 4px; color: inherit; }
+.chat-share-card a[download] { text-decoration: none; }

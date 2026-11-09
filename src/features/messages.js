@@ -8,6 +8,14 @@ import { currentUser } from '../data/sample-data.js';
 import { mayInteract } from '../core/social.js';
 import { canSendToConversation, isJoinedGroup, isGroupAdmin, visibleConversationMessages } from './message-access.js';
 
+function contactFileUrl(name, phone) {
+    const escapedName = String(name ?? '').replace(/\\/g, '\\\\')
+        .replace(/\r\n|\r|\n/g, '\\n').replace(/[;,]/g, '\\$&');
+    const fields = ['BEGIN:VCARD', 'VERSION:3.0', 'N:;' + escapedName + ';;;',
+        'FN:' + escapedName, 'TEL:' + phone, 'END:VCARD', ''];
+    return 'data:text/vcard;charset=utf-8,' + encodeURIComponent(fields.join('\r\n'));
+}
+
 export function conversationAvatar(conversation) {
     return conversation.isGroup ? conversation.photo || conversation.avatar || DEFAULT_AVATAR : visibleAvatar(conversation.handle, conversation.avatar);
 }
@@ -173,21 +181,23 @@ export function renderMessages({ preserveComposer = false } = {}) {
         if (message.type === 'voice') return `<article class="chat-message ${message.from === 'me' ? 'from-me' : 'from-them'}"><audio controls preload="metadata" src="${escapeHtml(message.media)}"></audio><time>${escapeHtml(formatConversationTime(message.sentAt))}</time><small>Voice message · stored in this browser preview</small></article>`;
         if (message.type === 'location' || message.type === 'contact') {
             const location = message.type === 'location';
+            const phone = String(message.phone ?? '').replace(/[^+0-9]/g, '');
             const details = location
-                ? `<a class="chat-file-download" href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(message.place)}" target="_blank" rel="noopener noreferrer">${escapeHtml(message.place)}</a>`
-                : `<strong>${escapeHtml(message.contactName)}</strong><p>${escapeHtml(message.phone)}</p>`;
+                ? `<a class="chat-share-card" href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(message.place)}" target="_blank" rel="noopener noreferrer"><small>Location · Open in Maps</small><strong>${escapeHtml(message.place)}</strong></a>`
+                : `<div class="chat-share-card"><a href="${contactFileUrl(message.contactName, phone)}" download="contact.vcf"><small>Contact · Save to phone</small><strong>${escapeHtml(message.contactName)}</strong></a>
+                    ${phone ? `<a href="tel:${phone}">Call ${escapeHtml(message.phone)}</a>` : ''}</div>`;
             return `<article class="chat-message ${message.from === 'me' ? 'from-me' : 'from-them'}">
-              <small>${location ? 'Location' : 'Contact'}</small>${details}<time>${escapeHtml(formatConversationTime(message.sentAt))}</time></article>`;
+              ${details}<time>${escapeHtml(formatConversationTime(message.sentAt))}</time></article>`;
         }
         if (message.type === 'attachment') {
             const fileName = escapeHtml(message.fileName || 'Attachment');
             const expired = isExpiredAttachment(message);
             const expiresAt = Number.isFinite(message.expiresAt) ? message.expiresAt : null;
             const download = message.media?.startsWith('blob:')
-                ? `<a class="chat-file-download" href="${escapeHtml(message.media)}" download="${fileName}" data-attachment-expires="${expiresAt ?? ''}">${message.mediaKind === 'file' ? fileName : 'Download'}</a>` : '';
+                ? `<a class="${message.mediaKind === 'file' ? 'chat-share-card' : 'chat-file-download'}" href="${escapeHtml(message.media)}" download="${fileName}" data-attachment-expires="${expiresAt ?? ''}">${message.mediaKind === 'file' ? `<small>File · Download</small><strong>${fileName}</strong>` : 'Download'}</a>` : '';
             let content;
             if (expired) {
-                content = `<strong>${fileName}</strong><small>Expired · Ask the sender to resend.</small>`;
+                content = `<div class="chat-share-card"><strong>${fileName}</strong><small>Expired · Ask the sender to resend.</small></div>`;
             } else {
                 const media = message.mediaKind === 'video'
                     ? `<video controls playsinline preload="metadata" src="${escapeHtml(message.media)}"></video>`

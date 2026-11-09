@@ -265,6 +265,29 @@ function openChatMuteOptions(conversation) {
     </div>`);
 }
 
+async function pickChatContact(conversation) {
+    if (!navigator.contacts?.select) {
+        showHomePanel('Share a contact', '<p>This browser cannot open your contacts. You can share a .vcf contact file using Share a file.</p>');
+        return;
+    }
+    try {
+        const [contact] = await navigator.contacts.select(['name', 'tel'], { multiple: false });
+        if (!contact || state.currentView !== 'messages' || activeConversation() !== conversation) return;
+        const phone = (contact.tel || []).find(number => /[0-9]/.test(number))?.trim();
+        if (!phone) { showShareFeedback('Choose a contact with a phone number.'); return; }
+        const contactName = contact.name?.[0]?.trim() || phone;
+        showHomePanel('Share a contact', `
+            <form class="chat-share-contact" data-handle="${escapeHtml(conversation.handle)}">
+              <p><strong>${escapeHtml(contactName)}</strong> · ${escapeHtml(phone)}</p>
+              <input type="hidden" name="contactName" value="${escapeHtml(contactName)}" />
+              <input type="hidden" name="phone" value="${escapeHtml(phone)}" />
+              <button type="submit">Send contact</button>
+            </form>`);
+    } catch (error) {
+        if (error.name !== 'AbortError') showShareFeedback('Could not open contacts. You can share a .vcf contact file using Share a file.');
+    }
+}
+
 export function handleMessageClick(event) {
     const download = event.target.closest('[data-attachment-expires]');
     if (download?.dataset.attachmentExpires && Number(download.dataset.attachmentExpires) <= Date.now()) {
@@ -450,17 +473,17 @@ export function handleMessageClick(event) {
         if (kind === 'file') {
             closeHomePanel();
             document.querySelector('.chat-file-input')?.click();
-        } else if (kind === 'location' || kind === 'contact') {
-            const location = kind === 'location';
-            showHomePanel(location ? 'Share your location' : 'Share a contact', `
-                <form class="chat-share-details" data-kind="${kind}" data-handle="${escapeHtml(conversation.handle)}">
-                  ${location ? `<label>Current coordinates<input name="place" readonly placeholder="Location not yet fetched" /></label>
-                    <button type="button" data-chat-current-location>Use current location</button>
-                    <p class="chat-location-status" role="status"></p>`
-                    : `<label>Name<input name="contactName" required maxlength="100" /></label>
-                    <label>Phone number<input name="phone" type="tel" required maxlength="60" /></label>`}
-                  <button type="submit"${location ? ' disabled' : ''}>${location ? 'Send location' : 'Send contact'}</button>
+        } else if (kind === 'location') {
+            showHomePanel('Share your location', `
+                <form class="chat-share-details" data-handle="${escapeHtml(conversation.handle)}">
+                  <label>Current coordinates<input name="place" readonly placeholder="Location not yet fetched" /></label>
+                  <button type="button" data-chat-current-location>Use current location</button>
+                  <p class="chat-location-status" role="status"></p>
+                  <button type="submit" disabled>Send location</button>
                 </form>`);
+        } else if (kind === 'contact') {
+            closeHomePanel();
+            void pickChatContact(conversation);
         }
         return true;
     }
@@ -593,15 +616,14 @@ export function registerMessageFormEvents() {
     });
     document.addEventListener('submit', event => {
         const form = event.target;
-        if (form.matches('.chat-share-details')) {
+        if (form.matches('.chat-share-details, .chat-share-contact')) {
             event.preventDefault();
             const conversation = activeConversation();
             if (!conversation || conversation.handle !== form.dataset.handle) return;
-            const kind = form.dataset.kind;
-            const details = kind === 'location'
-                ? { place: form.elements.place.value.trim() }
-                : { contactName: form.elements.contactName.value.trim(), phone: form.elements.phone.value.trim() };
-            if (Object.values(details).every(Boolean) && saveMessage(conversation, { type: kind, from: 'me', ...details })) closeHomePanel();
+            const message = form.matches('.chat-share-contact')
+                ? { type: 'contact', contactName: form.elements.contactName.value, phone: form.elements.phone.value }
+                : { type: 'location', place: form.elements.place.value.trim() };
+            if (Object.values(message).every(Boolean) && saveMessage(conversation, { ...message, from: 'me' })) closeHomePanel();
             return;
         }
         if (form.matches('.add-group-members-form')) {
