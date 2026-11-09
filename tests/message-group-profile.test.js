@@ -40,3 +40,54 @@ test('admin transfer replaces the acting admin and protects group management aft
     assert.equal(isGroupAdmin(group), false);
     assert.equal(updateGroupMember(group, '@noahvale', 'remove'), false);
 });
+
+test('group admins can add eligible members and respect invitation review', async () => {
+    const app = await loadApp();
+    const { state } = app.exportsOf('src/core/state.js');
+    const { currentUser, conversations } = app.exportsOf('src/data/sample-data.js');
+    const { addLocalGroupMembers } = app.exportsOf('src/features/message-access.js');
+    const { renderMessages } = app.exportsOf('src/features/messages.js');
+    const group = { isGroup: true, handle: 'group:add-test', user: 'Test group', members: [currentUser.handle], admins: [currentUser.handle] };
+    conversations.push(group);
+    state.accountDirectory.push({ handle: '@direct-invite' }, { handle: '@review-invite', groupJoinMode: 'review' });
+    state.activeGroupProfileHandle = group.handle;
+    renderMessages();
+    assert.match(app.element('#messages-list').innerHTML, /Add group member/);
+    assert.equal(addLocalGroupMembers(group, ['@direct-invite', '@review-invite', '@direct-invite']), true);
+    assert.deepEqual(Array.from(group.members), [currentUser.handle, '@direct-invite']);
+    assert.deepEqual(Array.from(group.pendingMembers), ['@review-invite']);
+    assert.equal(addLocalGroupMembers(group, ['@direct-invite', '@review-invite']), false);
+    group.admins = ['@direct-invite'];
+    assert.equal(addLocalGroupMembers(group, ['@aribloom']), false);
+    renderMessages();
+    assert.doesNotMatch(app.element('#messages-list').innerHTML, /Add group member/);
+});
+
+test('deleting a group chat hides history only for the current viewer', async () => {
+    const app = await loadApp();
+    const { state } = app.exportsOf('src/core/state.js');
+    const { currentUser, conversations } = app.exportsOf('src/data/sample-data.js');
+    const { handleMessageClick } = app.exportsOf('src/features/messages.events.js');
+    const group = {
+        isGroup: true, handle: 'group:clear-test', user: 'Test group',
+        members: [currentUser.handle, '@aribloom'], admins: [currentUser.handle],
+        messages: [{ text: 'Old message', from: 'them' }],
+        lastMessage: 'Old message', unread: true, unreadCount: 1,
+    };
+    conversations.push(group);
+    state.currentView = 'messages';
+    state.activeConversationHandle = null;
+    const button = { dataset: { inboxChatAction: 'confirm-delete', chatHandle: group.handle } };
+    handleMessageClick({ target: { closest: selector => selector === '[data-inbox-chat-action]' ? button : null } });
+    assert.equal(conversations.includes(group), true);
+    assert.equal(group.members.includes(currentUser.handle), true);
+    assert.equal(group.admins.includes(currentUser.handle), true);
+    const { visibleConversationMessages } = app.exportsOf('src/features/message-access.js');
+    assert.equal(group.messages.length, 1);
+    assert.equal(visibleConversationMessages(group).length, 0);
+    assert.equal(visibleConversationMessages(group, '@aribloom')[0].text, 'Old message');
+    assert.doesNotMatch(app.element('#messages-list').innerHTML, /Old message/);
+    group.messages.push({ text: 'New message', from: 'them' });
+    assert.equal(visibleConversationMessages(group)[0].text, 'New message');
+    assert.equal(group.unreadCount, 0);
+});

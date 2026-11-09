@@ -97,3 +97,24 @@ export function updateGroupMember(group, handle, action) {
     }
     return true;
 }
+
+export function availableGroupInvitees(group) {
+    const existing = new Set([currentUser.handle, ...group.members, ...(group.pendingMembers || [])]);
+    return state.accountDirectory.filter(account => !existing.has(account.handle) && !state.blockedHandles.has(account.handle));
+}
+
+export function addLocalGroupMembers(group, handles) {
+    if (!mayInteract() || !isGroupAdmin(group) || !conversations.includes(group)) return false;
+    const selected = new Set(handles);
+    const invitees = availableGroupInvitees(group).filter(account => selected.has(account.handle));
+    if (!invitees.length) return false;
+    group.members = [...group.members, ...invitees.filter(account => account.groupJoinMode !== 'review').map(account => account.handle)];
+    group.pendingMembers = [...(group.pendingMembers || []), ...invitees.filter(account => account.groupJoinMode === 'review').map(account => account.handle)];
+    return true;
+}
+
+// Chat history is appended in order. Remember how much this viewer has cleared.
+export function visibleConversationMessages(conversation, viewer = currentUser.handle) {
+    const cleared = conversation.isGroup ? conversation.clearedMessageCount?.[viewer] ?? 0 : 0;
+    return (conversation.messages || []).slice(cleared);
+}

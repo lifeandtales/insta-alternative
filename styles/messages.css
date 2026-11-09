@@ -494,3 +494,13 @@
 .group-photo-viewer { width: min(84vw, 420px, 75dvh); max-width: none; padding: 0; border: 0; border-radius: 16px; background: transparent; }
 .group-photo-viewer::backdrop { background: #181222b3; }
 .group-photo-viewer img { display: block; width: 100%; height: auto; object-fit: contain; }
+
+.group-add-member {
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 12px;
+  color: var(--primary);
+  background: #eee7fb;
+  font-weight: 600;
+}

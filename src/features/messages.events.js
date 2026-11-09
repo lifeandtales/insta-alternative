@@ -9,7 +9,7 @@ import { escapeHtml } from '../core/utils.js';
 import { findEntity } from '../data/entities.js';
 import { conversations, currentUser } from '../data/sample-data.js';
 import { appendChatMessage, renderMessages, conversationAvatar, markInboxChatRead } from './messages.js';
-import { canSendToConversation, canShareToConversation, createLocalGroup, respondToGroupInvitation, isJoinedGroup, leaveLocalGroup, isGroupAdmin, updateGroupMember } from './message-access.js';
+import { canSendToConversation, canShareToConversation, createLocalGroup, respondToGroupInvitation, isJoinedGroup, leaveLocalGroup, isGroupAdmin, updateGroupMember, availableGroupInvitees, addLocalGroupMembers } from './message-access.js';
 import { closeHomePanel, showHomePanel } from './home-controls.js';
 import { persistSession } from '../storage/local-session.js';
 import { openStoryRepostEditor } from './stories.events.js';
@@ -130,7 +130,11 @@ function registerInboxChatOptions(list) {
 }
 
 function confirmInboxChatDeletion(chat) {
-    showHomePanel('Delete chat?', `<p>Delete your conversation with ${escapeHtml(chat.user)} from this device?</p>
+    const name = escapeHtml(chat.user);
+    const prompt = chat.isGroup
+        ? `Hide the chat history for ${name} from your view? Other members can still see the conversation.`
+        : `Delete your conversation with ${name} from this device?`;
+    showHomePanel('Delete chat?', `<p>${prompt}</p>
       <div class="panel-actions">
         <button type="button" data-inbox-chat-action="cancel-delete" data-chat-handle="${escapeHtml(chat.handle)}">Cancel</button>
         <button type="button" data-inbox-chat-action="confirm-delete" data-chat-handle="${escapeHtml(chat.handle)}">Delete chat</button>
@@ -140,14 +144,19 @@ function confirmInboxChatDeletion(chat) {
 function deleteInboxChat(chat) {
     const index = conversations.indexOf(chat);
     if (index < 0) return;
-    // Retain only the IDs needed to prevent Story sync from recreating old messages.
-    for (const message of chat.messages || []) {
-        if (message.type === 'story-mention') state.deletedChatMentionIds.add(message.id);
+    if (chat.isGroup) {
+        chat.clearedMessageCount = { ...chat.clearedMessageCount, [currentUser.handle]: chat.messages?.length || 0 };
+        markInboxChatRead(chat);
+    } else {
+        // Prevent Story sync from recreating deleted direct messages.
+        for (const message of chat.messages || []) {
+            if (message.type === 'story-mention') state.deletedChatMentionIds.add(message.id);
+        }
+        conversations.splice(index, 1);
     }
-    conversations.splice(index, 1);
     closeHomePanel();
     renderMessages();
-    persistSession().catch(() => showShareFeedback('Chat removed from the inbox, but this device could not save the deletion.'));
+    persistSession().catch(() => showShareFeedback('This device could not save the chat deletion.'));
 }
 
 function openGroupProfile(group) {
@@ -171,6 +180,19 @@ function confirmLeaveGroup(group) {
 
 function selectedGroupProfile() {
     return state.currentView === 'messages' && conversations.find(chat => chat.handle === state.activeGroupProfileHandle);
+}
+
+function openGroupMemberPicker(group) {
+    if (!mayInteract() || !isGroupAdmin(group)) return;
+    const people = availableGroupInvitees(group);
+    showHomePanel('Add group member', people.length ? `
+      <form class="add-group-members-form" data-group-handle="${escapeHtml(group.handle)}">
+        <fieldset><legend>Choose people</legend>
+          ${people.map(person => `<label><input type="checkbox" name="member" value="${escapeHtml(person.handle)}" />
+            ${escapeHtml(person.name || person.handle)} <small>${escapeHtml(person.handle)}${person.groupJoinMode === 'review' ? ' · Invitation review' : ''}</small></label>`).join('')}
+        </fieldset>
+        <button type="submit">Add selected</button>
+      </form>` : '<p>Everyone available is already in the group or invited.</p>');
 }
 
 function showGroupMemberOptions(group, handle) {
@@ -218,6 +240,10 @@ function handleGroupMemberAction(group, button) {
 }
 
 export function handleMessageClick(event) {
+    if (event.target.closest('[data-group-add-member]')) {
+        openGroupMemberPicker(selectedGroupProfile());
+        return true;
+    }
     if (heldTarget && event.detail > 0 && event.target.closest(inboxHoldSelector) === heldTarget) {
         heldTarget = null;
         return true;
@@ -398,6 +424,20 @@ export function registerMessageFormEvents() {
     });
     document.addEventListener('submit', event => {
         const form = event.target;
+        if (form.matches('.add-group-members-form')) {
+            event.preventDefault();
+            const group = selectedGroupProfile();
+            if (!group || group.handle !== form.dataset.groupHandle) return;
+            const handles = [...form.querySelectorAll('input[name="member"]:checked')].map(input => input.value);
+            if (!addLocalGroupMembers(group, handles)) {
+                showShareFeedback('Choose at least one eligible account.');
+                return;
+            }
+            closeHomePanel();
+            renderMessages();
+            persistSession().catch(() => showShareFeedback('The new group members could not be saved on this device.'));
+            return;
+        }
         if (form.matches('.create-group-form')) {
             event.preventDefault();
             const group = createLocalGroup(form.elements.groupName.value, [...form.querySelectorAll('input[name="member"]:checked')].map(input => input.value));

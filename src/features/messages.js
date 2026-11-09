@@ -5,16 +5,16 @@ import { escapeHtml, formatConversationTime } from '../core/utils.js';
 import { conversations, posts, reels } from '../data/sample-data.js';
 import { currentUser } from '../data/sample-data.js';
 import { mayInteract } from '../core/social.js';
-import { canSendToConversation, canShareToConversation, isJoinedGroup, isGroupAdmin } from './message-access.js';
+import { canSendToConversation, canShareToConversation, isJoinedGroup, isGroupAdmin, visibleConversationMessages } from './message-access.js';
 
 export function conversationAvatar(conversation) {
     return conversation.isGroup ? conversation.photo || conversation.avatar || DEFAULT_AVATAR : visibleAvatar(conversation.handle, conversation.avatar);
 }
 
 export function getConversationPreview(conversation) {
-    const lastMessage = conversation.messages?.[conversation.messages.length - 1];
+    const lastMessage = visibleConversationMessages(conversation).at(-1);
     if (!lastMessage)
-        return conversation.lastMessage || "Start a conversation";
+        return conversation.clearedMessageCount?.[currentUser.handle] ? "Start a conversation" : conversation.lastMessage || "Start a conversation";
     if (lastMessage.type === "shared-post") return `${lastMessage.from === "me" ? "You: " : ""}Shared a ${lastMessage.entityType}`;
     if (lastMessage.type === "shared-story") return `${lastMessage.from === "me" ? "You: " : ""}Shared a story`;
     if (lastMessage.type === 'story-mention') return lastMessage.from === 'me' ? 'You mentioned them in your story' : 'Mentioned you in a story';
@@ -38,7 +38,8 @@ export function markInboxChatRead(chat) {
 }
 
 function inboxMessageTime(conversation) {
-    return conversation.messages?.at(-1)?.sentAt ?? conversation.lastActivity ?? 0;
+    return visibleConversationMessages(conversation).at(-1)?.sentAt
+        ?? (conversation.clearedMessageCount?.[currentUser.handle] ? 0 : conversation.lastActivity ?? 0);
 }
 
 function renderGroupProfile(group) {
@@ -69,6 +70,7 @@ function renderGroupProfile(group) {
               </li>`;
           }).join('')}
         </ul>
+        ${admin && mayInteract() ? '<button class="group-add-member" type="button" data-group-add-member>Add group member</button>' : ''}
       </section>`;
 }
 
@@ -124,7 +126,7 @@ export function renderMessages() {
     markInboxChatRead(conversation);
     const canSend = canSendToConversation(conversation);
     const pending = conversation.membershipStatus === 'pending';
-    const messages = conversation.messages || [];
+    const messages = visibleConversationMessages(conversation);
     const messageMarkup = messages.map((message) => {
         if (message.type === 'story-mention') {
             const story = state.stories.find(item => item.id === message.storyId && item.handle === message.actor);
