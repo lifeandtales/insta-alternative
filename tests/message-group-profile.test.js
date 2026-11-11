@@ -126,17 +126,15 @@ test('the 24-hour timer removes shared history only from the enabled conversatio
     assert.equal(chat.messages.map(message => message.id).join(','), 'recent');
 });
 
-test('delete for everyone removes own messages from shared history and preserves group clear boundaries', async () => {
+test('clear chat hides all current messages only for the current viewer', async () => {
     const app = await loadApp();
-    const { deleteSentMessagesForEveryone, visibleConversationMessages } = app.exportsOf('src/features/message-access.js');
-    const chat = {
-        isGroup: true,
-        clearedMessageCount: { '@other': 2 },
-        messages: [{ id: 'sent', from: 'me' }, { id: 'old', from: 'them' }, { id: 'new', from: 'them' }],
-    };
-    assert.equal(deleteSentMessagesForEveryone(chat, ['sent', 'old']), false);
-    assert.equal(chat.messages.length, 3);
-    assert.equal(deleteSentMessagesForEveryone(chat, ['sent']), true);
-    assert.equal(chat.messages.map(message => message.id).join(','), 'old,new');
-    assert.equal(visibleConversationMessages(chat, '@other').map(message => message.id).join(','), 'new');
+    const { clearConversationForViewer, visibleConversationMessages } = app.exportsOf('src/features/message-access.js');
+    for (const isGroup of [false, true]) {
+        const chat = { isGroup, messages: [{ id: 'sent', from: 'me' }, { id: 'received', from: 'them' }] };
+        assert.equal(clearConversationForViewer(chat), true);
+        assert.equal(visibleConversationMessages(chat).length, 0);
+        assert.equal(visibleConversationMessages(chat, '@other').length, 2);
+        chat.messages.push({ id: 'new', from: 'them' });
+        assert.equal(visibleConversationMessages(chat)[0].id, 'new');
+    }
 });

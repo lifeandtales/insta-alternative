@@ -10,8 +10,8 @@ import { state } from '../core/state.js';
 import { escapeHtml } from '../core/utils.js';
 import { findEntity } from '../data/entities.js';
 import { conversations, currentUser } from '../data/sample-data.js';
-import { appendChatMessage, renderMessages, conversationAvatar, markInboxChatRead } from './messages.js';
-import { canSendToConversation, createLocalGroup, respondToGroupInvitation, isJoinedGroup, leaveLocalGroup, isGroupAdmin, updateGroupMember, availableGroupInvitees, addLocalGroupMembers, visibleConversationMessages, hideConversationMessages, deleteSentMessagesForEveryone, refreshConversationTimers } from './message-access.js';
+import { appendChatMessage, renderMessages, renderReplyQuote, conversationAvatar, markInboxChatRead } from './messages.js';
+import { canSendToConversation, createLocalGroup, respondToGroupInvitation, isJoinedGroup, leaveLocalGroup, isGroupAdmin, updateGroupMember, availableGroupInvitees, addLocalGroupMembers, visibleConversationMessages, hideConversationMessages, clearConversationForViewer, refreshConversationTimers } from './message-access.js';
 import { closeHomePanel, openReportPanel, showHomePanel } from './home-controls.js';
 import { persistSession } from '../storage/local-session.js';
 import { openStoryRepostEditor } from './stories.events.js';
@@ -23,13 +23,76 @@ const POST_DOUBLE_TAP_MS = 300;
 const MESSAGE_HOLD_MS = 750;
 const MESSAGE_REACTIONS = [['❤️', 'Like'], ['😂', 'Laugh'], ['😮', 'Surprised'], ['😢', 'Sad'], ['😡', 'Angry'], ['👍', 'Thumbs up']];
 let recorder, recordingStream, recordingTimer, recordingGeneration = 0, pendingAttachment;
+let voiceComposer, voiceDraft, stopVoiceMeter;
+let copiedVoice;
 const activeConversation = () => conversations.find(item => item.handle === state.activeConversationHandle);
 const closePanel = () => { document.querySelector('.home-controls-backdrop').hidden = true; };
+const replyTargets = new WeakMap();
 
-function setMessageReaction(bubble, reaction) {
+function findMessageForBubble(bubble) {
     const chat = activeConversation();
     const id = bubble?.dataset.reactableMessage;
-    const message = chat && id && visibleConversationMessages(chat).find(item => String(item.id) === id);
+    return chat && id ? visibleConversationMessages(chat).find(item => String(item.id) === id) : undefined;
+}
+
+function isGalleryAttachment(message) {
+    return message?.type === 'attachment' && (message.mediaKind === 'photo' || message.mediaKind === 'video');
+}
+
+function downloadGalleryAttachment(message) {
+    if (!isGalleryAttachment(message) || !message.media?.startsWith('blob:')) return;
+    if (Number.isFinite(message.expiresAt) && message.expiresAt <= Date.now()) {
+        refreshChatAttachmentExpiry();
+        return;
+    }
+    const link = document.createElement('a');
+    link.href = message.media;
+    link.download = message.fileName || (message.mediaKind === 'photo' ? 'Photo' : 'Video');
+    document.body.append(link);
+    link.click();
+    link.remove();
+}
+
+async function copyMessageText(bubble) {
+    const message = findMessageForBubble(bubble);
+    if (message?.type !== 'text' || typeof message.text !== 'string') return;
+    try {
+        await navigator.clipboard.writeText(message.text);
+        showShareFeedback('Message copied.');
+    } catch {
+        showShareFeedback('Could not copy the message.');
+    }
+}
+
+async function copyVoiceMessage(message) {
+    if (message?.type !== 'voice' || !message.media) return;
+    try {
+        const response = await fetch(message.media);
+        if (!response.ok) throw new Error('Audio unavailable');
+        copiedVoice = { blob: await response.blob(), durationSeconds: message.durationSeconds };
+        showShareFeedback('Audio copied. Use + → Paste audio in a chat.');
+    } catch {
+        showShareFeedback('Could not copy the audio.');
+    }
+}
+
+function canForwardMessage(message) {
+    return message && !['call', 'story-mention'].includes(message.type)
+        && (message.type !== 'attachment' || (message.media && !(message.expiresAt <= Date.now())));
+}
+
+function openForwardMessage(message) {
+    const targets = conversations.filter(canSendToConversation);
+    if (!canForwardMessage(message) || !targets.length) return;
+    showHomePanel('Forward message', `<form class="chat-forward-form" data-message-id="${escapeHtml(String(message.id))}">
+      <label>Choose chat<select name="recipient" required><option value="">Select a conversation</option>
+        ${targets.map(chat => `<option value="${escapeHtml(chat.handle)}">${escapeHtml(chat.user)}</option>`).join('')}
+      </select></label><button type="submit">Forward</button>
+    </form>`);
+}
+
+function setMessageReaction(bubble, reaction) {
+    const message = findMessageForBubble(bubble);
     if (!message) return;
     message.reactionsBy = { ...message.reactionsBy, [currentUser.handle]: reaction };
     const badge = bubble.querySelector('.chat-message-reaction');
@@ -38,42 +101,128 @@ function setMessageReaction(bubble, reaction) {
     persistSession().catch(() => showShareFeedback('This message reaction could not be saved on this device.'));
 }
 
+function startChatReply(bubble) {
+    const chat = activeConversation();
+    const message = findMessageForBubble(bubble);
+    const form = bubble?.closest('.chat-window')?.querySelector('.chat-composer');
+    if (!message || !form || bubble.closest('.selecting-messages')) return false;
+    clearTimeout(pendingPostTap?.timer);
+    pendingPostTap = null;
+    replyTargets.set(form, message.id);
+    form.querySelector('.chat-reply-draft')?.remove();
+    form.insertAdjacentHTML('afterbegin', `<div class="chat-reply-draft">
+        ${renderReplyQuote(message, chat)}
+        <button type="button" data-cancel-chat-reply aria-label="Cancel reply">×</button>
+    </div>`);
+    form.elements.message.focus();
+    return true;
+}
+
 function registerMessageReactionGestures(list) {
     let hold, suppressedBubble, openBubble;
     const closeTray = () => { list.querySelector('.chat-reaction-tray')?.remove(); openBubble = null; };
-    const cancelHold = () => { clearTimeout(hold?.timer); hold = null; };
+    const cancelHold = () => {
+        clearTimeout(hold?.timer);
+        hold?.bubble.style.removeProperty('--chat-reply-offset');
+        hold = null;
+    };
     list.addEventListener('pointerdown', event => {
         if (event.target.closest('.chat-reaction-tray')) return;
         closeTray();
         cancelHold();
         suppressedBubble = null;
-        const bubble = event.target.closest('[data-reactable-message]');
-        if (!bubble || bubble.closest('.selecting-messages') || !event.isPrimary || event.button !== 0) return;
-        hold = { x: event.clientX, y: event.clientY, pointerId: event.pointerId, timer: window.setTimeout(() => {
+        const history = event.target.closest('.chat-history');
+        if (!history || history.classList.contains('selecting-messages') || event.target.closest('input, audio, video[controls]') || !event.isPrimary || event.button !== 0) return;
+        const pressedBubble = event.target.closest('[data-reactable-message]');
+        const bubble = pressedBubble || [...history.children].find(row => {
+            if (!row.hasAttribute('data-reactable-message')) return false;
+            const { top, bottom } = row.getBoundingClientRect();
+            return event.clientY >= top && event.clientY < bottom;
+        });
+        if (!bubble) return;
+        hold = { bubble, x: event.clientX, y: event.clientY, pointerId: event.pointerId };
+        if (!pressedBubble) return;
+        hold.timer = window.setTimeout(() => {
             if (!bubble.isConnected || bubble.closest('.selecting-messages') || state.currentView !== 'messages') return;
             suppressedBubble = openBubble = bubble;
             clearTimeout(pendingPostTap?.timer);
             pendingPostTap = null;
+            const message = findMessageForBubble(bubble);
+            const canCopy = message?.type === 'text';
+            const canDownload = isGalleryAttachment(message) && message.media?.startsWith('blob:')
+                && (!Number.isFinite(message.expiresAt) || message.expiresAt > Date.now());
             bubble.closest('.chat-window').insertAdjacentHTML('beforeend', `<div class="chat-reaction-tray" role="group" aria-label="React to message">
               ${MESSAGE_REACTIONS.map(([emoji, label]) => `<button type="button" data-message-reaction="${emoji}" aria-label="${label}">${emoji}</button>`).join('')}
+              ${message && bubble.closest('.chat-window').querySelector('.chat-composer') ? '<button type="button" data-reply-to-message>Reply</button>' : ''}
+              ${canCopy ? '<button type="button" data-copy-message>Copy</button>' : ''}
+              ${message?.type === 'voice' && message.media ? '<button type="button" data-copy-voice>Copy audio</button>' : ''}
+              ${canDownload ? '<button type="button" data-download-gallery>Download</button>' : ''}
+              ${canForwardMessage(message) ? '<button type="button" data-forward-message>Forward</button>' : ''}
+              ${message ? '<button type="button" data-delete-one-message>Delete</button>' : ''}
             </div>`);
             const tray = list.querySelector('.chat-reaction-tray');
             const bounds = bubble.getBoundingClientRect();
             const frame = list.getBoundingClientRect();
             tray.style.left = `${Math.max(frame.left + 4, Math.min(bounds.left, frame.right - tray.offsetWidth - 4))}px`;
             tray.style.top = `${bounds.top - tray.offsetHeight - 6 >= frame.top ? bounds.top - tray.offsetHeight - 6 : bounds.bottom + 6}px`;
-        }, MESSAGE_HOLD_MS) };
+        }, MESSAGE_HOLD_MS);
     });
     list.addEventListener('pointermove', event => {
-        if (hold?.pointerId === event.pointerId && Math.hypot(event.clientX - hold.x, event.clientY - hold.y) > 10) cancelHold();
+        if (hold?.pointerId !== event.pointerId) return;
+        const x = event.clientX - hold.x;
+        const y = Math.abs(event.clientY - hold.y);
+        if (Math.hypot(x, y) <= 10) return;
+        const form = hold.bubble.closest('.chat-window')?.querySelector('.chat-composer');
+        if (x <= y || !form) { cancelHold(); return; }
+        clearTimeout(hold.timer);
+        closeTray();
+        hold.bubble.setPointerCapture?.(event.pointerId);
+        hold.bubble.style.setProperty('--chat-reply-offset', `${Math.min(x, 40)}px`);
     });
-    for (const type of ['pointerup', 'pointercancel', 'pointerleave']) list.addEventListener(type, cancelHold);
+    list.addEventListener('pointerup', event => {
+        if (hold?.pointerId !== event.pointerId) return;
+        const { bubble, x, y } = hold;
+        const distance = event.clientX - x;
+        if (distance >= 48 && distance > Math.abs(event.clientY - y)) {
+            if (startChatReply(bubble)) {
+                suppressedBubble = bubble;
+                closeTray();
+            }
+        }
+        cancelHold();
+    });
+    for (const type of ['pointercancel', 'pointerleave']) list.addEventListener(type, cancelHold);
+    list.addEventListener('dragstart', event => {
+        if (event.target.closest('[data-reactable-message]')) event.preventDefault();
+    });
     list.addEventListener('contextmenu', event => {
         if (event.target.closest('[data-reactable-message]') && !event.target.closest('.selecting-messages')) event.preventDefault();
     });
     list.addEventListener('click', event => {
         const reaction = event.target.closest('[data-message-reaction]');
-        if (reaction) {
+        if (event.target.closest('[data-reply-to-message]')) {
+            startChatReply(openBubble);
+            closeTray();
+        } else if (event.target.closest('[data-copy-message]')) {
+            void copyMessageText(openBubble);
+            closeTray();
+        } else if (event.target.closest('[data-copy-voice]')) {
+            void copyVoiceMessage(findMessageForBubble(openBubble));
+            closeTray();
+        } else if (event.target.closest('[data-forward-message]')) {
+            openForwardMessage(findMessageForBubble(openBubble));
+            closeTray();
+        } else if (event.target.closest('[data-delete-one-message]')) {
+            const message = findMessageForBubble(openBubble);
+            closeTray();
+            if (message && hideConversationMessages(activeConversation(), [message.id])) {
+                renderMessages({ preserveComposer: true });
+                persistSession().catch(() => showShareFeedback('This device could not save the chat deletion.'));
+            }
+        } else if (event.target.closest('[data-download-gallery]')) {
+            downloadGalleryAttachment(findMessageForBubble(openBubble));
+            closeTray();
+        } else if (reaction) {
             setMessageReaction(openBubble, reaction.dataset.messageReaction);
             closeTray();
         } else if (suppressedBubble && suppressedBubble.contains(event.target)) {
@@ -148,10 +297,69 @@ function openGroupManager(group) {
     const members = [...new Set([...(group.members || []), ...(group.pendingMembers || [])])].filter(handle => handle !== currentUser.handle);
     showHomePanel('Manage group', `<form class="manage-group-form" data-group-handle="${escapeHtml(group.handle)}"><label>Group name<input name="groupName" maxlength="60" required value="${escapeHtml(group.user)}" /></label><fieldset><legend>Remove members or cancel invitations</legend>${members.map(handle => `<label><input type="checkbox" name="removeMember" value="${escapeHtml(handle)}" /> ${escapeHtml(getAccount(handle)?.name || handle)}${group.pendingMembers?.includes(handle) ? ' · Invited' : ''}</label>`).join('') || '<p>No other members.</p>'}</fieldset><button type="submit">Save group</button></form>`);
 }
+function resetVoiceComposer() {
+    voiceComposer?.classList.remove('chat-composer-voice');
+    voiceComposer?.querySelector('.chat-voice-composer-row')?.remove();
+    voiceComposer = null;
+}
+
 function cancelRecording() {
-    recordingGeneration += 1; clearTimeout(recordingTimer);
+    recordingGeneration += 1;
+    clearTimeout(recordingTimer);
+    stopVoiceMeter?.();
+    stopVoiceMeter = null;
     if (recorder?.state === 'recording') recorder.stop();
+    recorder = null;
     recordingStream?.getTracks().forEach(track => track.stop());
+    recordingStream = null;
+    if (voiceDraft) URL.revokeObjectURL(voiceDraft.media);
+    voiceDraft = null;
+    resetVoiceComposer();
+}
+
+function voiceClock(seconds) {
+    return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+}
+
+function startVoiceMeter(form, stream, startedAt) {
+    form.classList.add('chat-composer-voice');
+    form.insertAdjacentHTML('beforeend', `<div class="chat-voice-composer-row">
+        <span class="chat-recording-time" aria-label="Recording time">0:00</span>
+        <div class="chat-recording-wave" aria-hidden="true">${'<i></i>'.repeat(22)}</div>
+        <button type="button" class="chat-recording-stop" data-stop-voice aria-label="Stop recording">■</button>
+    </div>`);
+    const timer = form.querySelector('.chat-recording-time');
+    const bars = [...form.querySelectorAll('.chat-recording-wave i')];
+    let context, analyser, samples;
+    try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+            context = new AudioContextClass();
+            analyser = context.createAnalyser();
+            analyser.fftSize = 512;
+            context.createMediaStreamSource(stream).connect(analyser);
+            samples = new Uint8Array(analyser.fftSize);
+            context.resume().catch(() => {});
+        }
+    } catch {
+        analyser = null;
+    }
+    const levels = bars.map(() => 0);
+    const interval = window.setInterval(() => {
+        if (!form.isConnected) { cancelRecording(); return; }
+        timer.textContent = voiceClock((Date.now() - startedAt) / 1000);
+        if (!analyser) return;
+        analyser.getByteTimeDomainData(samples);
+        let peak = 0;
+        for (const sample of samples) peak = Math.max(peak, Math.abs(sample - 128) / 128);
+        levels.shift();
+        levels.push(peak);
+        bars.forEach((bar, index) => { bar.style.height = `${3 + Math.min(1, levels[index] * 2) * 23}px`; });
+    }, 80);
+    return () => {
+        window.clearInterval(interval);
+        if (context && context.state !== 'closed') context.close().catch(() => {});
+    };
 }
 
 function syncVoicePlayer(audio) {
@@ -171,34 +379,69 @@ function syncVoicePlayer(audio) {
     player.querySelector('.chat-voice-time').textContent = `${clock(audio.currentTime)} / ${duration > 0 ? clock(duration) : '–:––'}`;
 }
 
+function prepareVoiceDraft(form, conversation, blob, durationSeconds) {
+    voiceComposer = form;
+    voiceDraft = { conversation, type: 'voice', durationSeconds, media: URL.createObjectURL(blob) };
+    form.classList.add('chat-composer-voice');
+    form.querySelector('.chat-voice-composer-row')?.remove();
+    form.insertAdjacentHTML('beforeend', `<div class="chat-voice-composer-row">
+        <button type="button" data-discard-voice aria-label="Discard recording">×</button>
+        <span class="chat-voice-ready">Voice message${durationSeconds ? ` · ${voiceClock(durationSeconds)}` : ''}</span>
+        <button type="submit" class="chat-send-button">Send</button>
+    </div>`);
+}
+
 async function toggleRecording(button) {
-    if (recorder?.state === 'recording') { recorder.stop(); return; }
     const conversation = activeConversation();
-    if (!canSendToConversation(conversation)) return;
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') { showShareFeedback('Voice recording is unavailable in this browser.'); return; }
+    const form = button.form;
+    if (voiceComposer && !voiceComposer.isConnected) cancelRecording();
+    if (!canSendToConversation(conversation) || !form || recorder || voiceDraft) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+        showShareFeedback('Voice recording is unavailable in this browser.');
+        return;
+    }
     button.disabled = true;
+    const generation = ++recordingGeneration;
     try {
-        recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        if (activeConversation() !== conversation || !canSendToConversation(conversation)) { recordingStream.getTracks().forEach(track => track.stop()); return; }
-        const chunks = [], generation = ++recordingGeneration, stream = recordingStream;
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (generation !== recordingGeneration || !form.isConnected || activeConversation() !== conversation || !canSendToConversation(conversation)) {
+            stream.getTracks().forEach(track => track.stop());
+            return;
+        }
+        recordingStream = stream;
+        const chunks = [];
         const recording = new MediaRecorder(stream);
         const startedAt = Date.now();
         recorder = recording;
-        recorder.addEventListener('dataavailable', event => { if (event.data.size) chunks.push(event.data); });
-        recorder.addEventListener('stop', () => {
+        voiceComposer = form;
+        recording.addEventListener('dataavailable', event => { if (event.data.size) chunks.push(event.data); });
+        recording.addEventListener('stop', () => {
             stream.getTracks().forEach(track => track.stop());
-            const mimeType = recording.mimeType;
-            if (recorder === recording) recorder = null;
-            if (generation !== recordingGeneration || !chunks.length) return;
+            if (generation !== recordingGeneration) return;
             clearTimeout(recordingTimer);
-            pendingAttachment = { conversation, type: 'voice', durationSeconds: Math.max(0.01, (Date.now() - startedAt) / 1000), media: URL.createObjectURL(new Blob(chunks, { type: mimeType })) };
-            showHomePanel('Voice message', `<audio controls src="${escapeHtml(pendingAttachment.media)}"></audio><p>Listen before adding this recording to the local conversation.</p><div class="panel-actions"><button type="button" data-attachment-send>Send voice message</button><button type="button" data-attachment-discard>Discard</button></div>`);
-            renderMessages();
+            stopVoiceMeter?.();
+            stopVoiceMeter = null;
+            recordingStream = null;
+            recorder = null;
+            if (!form.isConnected || !chunks.length) { resetVoiceComposer(); return; }
+            const durationSeconds = Math.max(0.01, (Date.now() - startedAt) / 1000);
+            prepareVoiceDraft(form, conversation, new Blob(chunks, { type: recording.mimeType }), durationSeconds);
         });
-        recorder.start(); button.textContent = '■'; button.setAttribute('aria-label', 'Stop voice recording'); button.classList.add('recording');
-        recordingTimer = window.setTimeout(() => { if (recorder?.state === 'recording') recorder.stop(); }, 120000);
-    } catch { recordingStream?.getTracks().forEach(track => track.stop()); showShareFeedback('Microphone access was unavailable. You can still send text or gallery attachments.'); }
-    finally { button.disabled = false; }
+        recording.addEventListener('error', () => {
+            if (generation !== recordingGeneration) return;
+            cancelRecording();
+            showShareFeedback('The recording could not be saved.');
+        });
+        recording.start();
+        form.elements.message.blur();
+        stopVoiceMeter = startVoiceMeter(form, stream, startedAt);
+        recordingTimer = window.setTimeout(() => { if (recording.state === 'recording') recording.stop(); }, 120000);
+    } catch {
+        if (generation === recordingGeneration) cancelRecording();
+        showShareFeedback('Microphone access was unavailable. You can still send text or gallery attachments.');
+    } finally {
+        button.disabled = false;
+    }
 }
 let heldTarget = null;
 const inboxHoldSelector = '[data-open-conversation], [data-group-photo][data-has-photo]';
@@ -315,14 +558,14 @@ function openMessageDeletion(chat) {
     history.querySelectorAll(':scope > article').forEach((bubble, index) => {
         for (const child of bubble.children) child.inert = true;
         bubble.insertAdjacentHTML('beforeend', `<button type="button" class="chat-message-select"
-            data-select-chat-message="${escapeHtml(messages[index].id)}" data-sent-by-me="${messages[index].from === 'me'}" aria-pressed="false"
+            data-select-chat-message="${escapeHtml(String(messages[index].id))}" aria-pressed="false"
             aria-label="Select message ${index + 1}"><span aria-hidden="true">✓</span></button>`);
     });
     history.insertAdjacentHTML('afterend', `<div class="chat-selection-actions">
       <span class="chat-selection-hint" role="status">Tap messages to select</span>
       <button type="button" data-cancel-message-deletion>Cancel</button>
-      <button type="button" data-confirm-message-deletion="me" disabled>Delete for me</button>
-      <button type="button" data-confirm-message-deletion="everyone" disabled>Delete for everyone</button>
+      <button type="button" data-confirm-message-deletion="selected" disabled>Delete</button>
+      <button type="button" data-confirm-message-deletion="clear">Clear chat</button>
     </div>`);
     history.querySelector('.chat-message-select')?.focus({ preventScroll: true });
 }
@@ -452,6 +695,29 @@ async function pickChatContact(conversation) {
 }
 
 export function handleMessageClick(event) {
+    const cancelReply = event.target.closest('[data-cancel-chat-reply]');
+    if (cancelReply) {
+        const form = cancelReply.form;
+        replyTargets.delete(form);
+        cancelReply.closest('.chat-reply-draft').remove();
+        form.elements.message.focus();
+        return true;
+    }
+    const gallery = event.target.closest('[data-open-gallery-attachment]');
+    if (gallery) {
+        const message = findMessageForBubble(gallery.closest('[data-reactable-message]'));
+        if (!isGalleryAttachment(message) || !message.media) return true;
+        if (Number.isFinite(message.expiresAt) && message.expiresAt <= Date.now()) {
+            refreshChatAttachmentExpiry();
+            return true;
+        }
+        const source = escapeHtml(message.media);
+        const video = message.mediaKind === 'video';
+        showHomePanel(video ? 'Video' : 'Photo', `<div class="attachment-preview">${video
+            ? `<video controls playsinline preload="metadata" src="${source}"></video>`
+            : `<img src="${source}" alt="Photo attachment" />`}</div>`);
+        return true;
+    }
     if (event.target.closest('[data-shared-post-back]')) {
         window.history.back();
         return true;
@@ -644,12 +910,8 @@ export function handleMessageClick(event) {
     if (selectMessage) {
         selectMessage.setAttribute('aria-pressed', String(selectMessage.getAttribute('aria-pressed') !== 'true'));
         const selected = [...document.querySelectorAll('[data-select-chat-message][aria-pressed="true"]')];
-        document.querySelector('[data-confirm-message-deletion="me"]').disabled = !selected.length;
-        const includesReceived = selected.some(button => button.dataset.sentByMe !== 'true');
-        document.querySelector('[data-confirm-message-deletion="everyone"]').disabled = !selected.length || includesReceived;
-        document.querySelector('.chat-selection-hint').textContent = includesReceived
-            ? 'You can only delete your own messages for everyone.'
-            : selected.length ? `${selected.length} selected` : 'Tap messages to select';
+        document.querySelector('[data-confirm-message-deletion="selected"]').disabled = !selected.length;
+        document.querySelector('.chat-selection-hint').textContent = selected.length ? `${selected.length} selected` : 'Tap messages to select';
         return true;
     }
     if (event.target.closest('[data-cancel-message-deletion]')) {
@@ -664,9 +926,11 @@ export function handleMessageClick(event) {
         if (!chat || !history || (chat.isGroup && !isJoinedGroup(chat))) return true;
         const ids = [...history.querySelectorAll('[data-select-chat-message][aria-pressed="true"]')]
             .map(button => button.dataset.selectChatMessage);
-        const deleted = deleteSelection.dataset.confirmMessageDeletion === 'everyone'
-            ? deleteSentMessagesForEveryone(chat, ids)
-            : hideConversationMessages(chat, ids);
+        const selectedIds = new Set(ids);
+        const deleted = deleteSelection.dataset.confirmMessageDeletion === 'clear'
+            ? clearConversationForViewer(chat)
+            : hideConversationMessages(chat, visibleConversationMessages(chat)
+                .filter(message => selectedIds.has(String(message.id))).map(message => message.id));
         if (deleted) {
             const scrollTop = history.scrollTop;
             closeMessageDeletion();
@@ -694,6 +958,7 @@ export function handleMessageClick(event) {
               <button type="button" data-chat-share-kind="file">Share a file</button>
               <button type="button" data-chat-share-kind="location">Share your location</button>
               <button type="button" data-chat-share-kind="contact">Share a contact</button>
+              ${copiedVoice ? '<button type="button" data-chat-share-kind="paste-audio">Paste audio</button>' : ''}
             </div>`);
         }
         return true;
@@ -707,7 +972,13 @@ export function handleMessageClick(event) {
         const conversation = activeConversation();
         if (!canSendToConversation(conversation)) return true;
         const kind = share.dataset.chatShareKind;
-        if (kind === 'file') {
+        if (kind === 'paste-audio') {
+            const form = document.querySelector('.chat-composer');
+            if (form && copiedVoice && !recorder && !voiceDraft) {
+                closeHomePanel();
+                prepareVoiceDraft(form, conversation, copiedVoice.blob, copiedVoice.durationSeconds);
+            }
+        } else if (kind === 'file') {
             closeHomePanel();
             document.querySelector('.chat-file-input')?.click();
         } else if (kind === 'location') {
@@ -766,6 +1037,12 @@ export function handleMessageClick(event) {
         requestPosition(true);
         return true;
     }
+    const stopVoice = event.target.closest('[data-stop-voice]');
+    if (stopVoice) {
+        if (recorder?.state === 'recording') { stopVoice.disabled = true; recorder.stop(); }
+        return true;
+    }
+    if (event.target.closest('[data-discard-voice]')) { cancelRecording(); return true; }
     const voice = event.target.closest('[data-chat-voice]'); if (voice) { void toggleRecording(voice); return true; }
     if (event.target.closest('[data-attachment-send]')) {
         if (!pendingAttachment) return true;
@@ -787,6 +1064,37 @@ export function handleMessageClick(event) {
     if (event.target.closest('[data-call-end]')) { closePanel(); return true; }
     return false;
 }
+async function forwardChatMessage(form) {
+    const source = activeConversation();
+    const target = conversations.find(chat => chat.handle === form.elements.recipient.value);
+    const original = source && visibleConversationMessages(source).find(message => String(message.id) === form.dataset.messageId);
+    if (!canForwardMessage(original) || !canSendToConversation(target)) return;
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit.disabled) return;
+    submit.disabled = true;
+    const { id, sentAt, from, reactionsBy, likedBy, replyToId, expiresAt, ...message } = original;
+    let copiedMedia;
+    try {
+        if (typeof message.media === 'string' && message.media.startsWith('blob:')) {
+            const response = await fetch(message.media);
+            if (!response.ok) throw new Error('Attachment unavailable');
+            copiedMedia = URL.createObjectURL(await response.blob());
+            message.media = copiedMedia;
+        }
+        if (!form.isConnected || form.closest('.home-controls-backdrop')?.hidden || activeConversation() !== source || !canForwardMessage(original)) return;
+        if (saveMessage(target, { ...message, from: 'me' }, { preserveComposer: true })) {
+            copiedMedia = null;
+            closeHomePanel();
+            showShareFeedback('Message forwarded.');
+        }
+    } catch {
+        showShareFeedback('Could not forward the message.');
+    } finally {
+        if (copiedMedia) URL.revokeObjectURL(copiedMedia);
+        submit.disabled = false;
+    }
+}
+
 export function registerMessageFormEvents() {
     const messagesList = document.getElementById('messages-list');
     registerMessageReactionGestures(messagesList);
@@ -811,6 +1119,7 @@ export function registerMessageFormEvents() {
     registerInboxChatOptions(document.getElementById('messages-list'));
     document.addEventListener('account-deletion-lock', () => {
         cancelRecording();
+        copiedVoice = null;
         if (pendingAttachment?.media?.startsWith('blob:')) URL.revokeObjectURL(pendingAttachment.media);
         pendingAttachment = null;
     });
@@ -831,10 +1140,23 @@ export function registerMessageFormEvents() {
         if (!form) return;
         event.preventDefault();
         const conversation = activeConversation();
+        if (form === voiceComposer) {
+            if (voiceDraft && voiceDraft.conversation === conversation) {
+                const { conversation: target, ...message } = voiceDraft;
+                if (saveMessage(target, { ...message, from: 'me' }, { preserveComposer: true })) {
+                    voiceDraft = null;
+                    resetVoiceComposer();
+                }
+            }
+            return;
+        }
         const input = form.elements.message;
         const text = input.value.trim();
-        if (conversation && text && saveMessage(conversation, { type: 'text', from: 'me', text }, { preserveComposer: true })) {
+        const replyToId = replyTargets.get(form);
+        if (conversation && text && saveMessage(conversation, { type: 'text', from: 'me', text, ...(replyToId != null ? { replyToId } : {}) }, { preserveComposer: true })) {
             input.value = '';
+            replyTargets.delete(form);
+            form.querySelector('.chat-reply-draft')?.remove();
         }
     });
     document.getElementById('messages-list').addEventListener('change', event => {
@@ -877,6 +1199,11 @@ export function registerMessageFormEvents() {
             closeHomePanel();
             refreshChatAttachmentExpiry();
             persistSession().catch(() => showShareFeedback('Chat timer could not be saved on this device.'));
+            return;
+        }
+        if (form.matches('.chat-forward-form')) {
+            event.preventDefault();
+            void forwardChatMessage(form);
             return;
         }
         if (form.matches('.chat-share-details, .chat-share-contact')) {

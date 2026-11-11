@@ -82,4 +82,4 @@ export function registerHomeControlEvents() {
     });
 }
 
-export function closeHomePanel() { const panel=document.querySelector('.home-panel');panel.classList.remove('story-repost-visit-prompt');panel.removeAttribute('aria-label');Object.assign(panel.style,{position:'',left:'',top:''});document.querySelector('.home-controls-backdrop').hidden = true; if (!document.querySelector('.story-viewer-backdrop').hidden) resumeStory(); }
+export function closeHomePanel() { const panel=document.querySelector('.home-panel');panel.querySelectorAll('video').forEach(video => video.pause());panel.classList.remove('story-repost-visit-prompt');panel.removeAttribute('aria-label');Object.assign(panel.style,{position:'',left:'',top:''});document.querySelector('.home-controls-backdrop').hidden = true; if (!document.querySelector('.story-viewer-backdrop').hidden) resumeStory(); }

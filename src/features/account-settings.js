@@ -27,7 +27,7 @@ function saveAccountChanges() {
 export function openAccountSettings() {
     if (syncDeletionLock()) return;
     const pending = state.verificationStatus !== 'approved';
-    showHomePanel('Settings', `<div class="settings-menu"><p class="settings-account">${escapeHtml(currentUser.name)} <small>${escapeHtml(currentUser.handle)}</small></p>${state.deletionRequestedAt ? deletionNotice() : ''}<button type="button" data-settings-page="verification">Verification · ${pending ? 'Pending' : 'Approved demo account'}</button>${pending ? '<p>You can browse accessible content and Stories while review is pending. Social actions become available after approval.</p>' : `<button type="button" data-edit-profile>Edit profile</button><button type="button" data-settings-page="privacy">Account privacy and followers</button><button type="button" data-settings-page="friends">Close Friends and muted accounts</button><button type="button" data-settings-page="activity">Your Activity</button><button type="button" data-settings-page="blocked">Blocked accounts</button><button type="button" data-settings-page="groups">Group invitations</button><button type="button" data-settings-page="audience">Creator audience</button><button type="button" data-settings-page="deletion">${state.deletionRequestedAt ? 'Cancel deletion request' : 'Delete account'}</button>`}<button type="button" data-settings-page="help">Help</button><button type="button" data-preview-logout>Log out of preview</button></div>`);
+    showHomePanel('Settings', `<div class="settings-menu"><p class="settings-account">${escapeHtml(currentUser.name)} <small>${escapeHtml(currentUser.handle)}</small></p>${state.deletionRequestedAt ? deletionNotice() : ''}<button type="button" data-settings-page="verification">Verification · ${pending ? 'Pending' : 'Approved demo account'}</button>${pending ? '<p>You can browse accessible content and Stories while review is pending. Social actions become available after approval.</p>' : `<button type="button" data-edit-profile>Edit profile</button><button type="button" data-settings-page="privacy">Account privacy and followers</button><button type="button" data-settings-page="friends">Close Friends and muted accounts</button><button type="button" data-settings-page="activity">Your Activity</button><button type="button" data-settings-page="blocked">Blocked accounts</button><button type="button" data-settings-page="groups">Group invitations</button><button type="button" data-settings-page="audience">Creator audience</button><button type="button" data-settings-page="deletion">${state.deletionRequestedAt ? 'Cancel deletion request' : 'Delete account'}</button>`}<button type="button" data-settings-page="theme">Theme</button><button type="button" data-settings-page="help">Help</button><button type="button" data-preview-logout>Log out of preview</button></div>`);
 }
 function deletionNotice() {
     const end = new Date(state.deletionRequestedAt + 15 * 86400000);
@@ -67,6 +67,7 @@ function drawCrop(canvas, image, form) {
     canvas.getContext('2d').drawImage(image, x, y, size, size, 0, 0, canvas.width, canvas.height);
 }
 function openSettingsPage(page) {
+    if (page === 'theme') showHomePanel('Theme', '');
     if (page === 'privacy') openPrivacySettings();
     if (page === 'friends') openHomeSettings();
     if (page === 'activity') openActivity();

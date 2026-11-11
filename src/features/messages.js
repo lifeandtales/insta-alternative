@@ -24,6 +24,10 @@ export function getConversationPreview(conversation) {
     const lastMessage = visibleConversationMessages(conversation).at(-1);
     if (!lastMessage)
         return conversation.messages?.length ? "Start a conversation" : conversation.lastMessage || "Start a conversation";
+    return messagePreview(lastMessage);
+}
+
+function messagePreview(lastMessage) {
     if (lastMessage.type === "shared-post") return `${lastMessage.from === "me" ? "You: " : ""}Shared a ${lastMessage.entityType}`;
     if (lastMessage.type === "shared-story") return `${lastMessage.from === "me" ? "You: " : ""}Shared a story`;
     if (lastMessage.type === 'story-mention') return lastMessage.from === 'me' ? 'You mentioned them in your story' : 'Mentioned you in a story';
@@ -40,6 +44,23 @@ export function getConversationPreview(conversation) {
         return `Shared a ${lastMessage.mediaKind === 'video' ? 'video' : 'photo'}`;
     }
     return `${lastMessage.from === "me" ? "You: " : ""}${lastMessage.text}`;
+}
+
+export function renderReplyQuote(message, conversation) {
+    if (!message) return '<div class="chat-reply-quote">Original message unavailable</div>';
+    const author = message.from === 'me' ? 'You' : getAccount(message.from)?.name || conversation.user;
+    const preview = message.type === 'text' ? message.text : messagePreview(message);
+    const entity = message.type === 'shared-post' ? findEntity(message.entityType, message.entityId) : null;
+    const showPreview = entity && canViewMedia(entity)
+        && (!mediaNeedsWarning(entity) || state.revealedMediaKeys.has(`${message.entityType}:${entity.id}`));
+    const cover = showPreview && (entity.cover || entity.poster || entity.media);
+    const video = showPreview && (entity.videoUrl || entity.video);
+    const thumbnail = cover ? `<img src="${escapeHtml(cover)}" alt="" />`
+        : video ? `<video src="${escapeHtml(video)}" preload="metadata" muted playsinline aria-hidden="true"></video>` : '';
+    return `<div class="chat-reply-quote">
+        <div class="chat-reply-copy"><strong>${escapeHtml(author)}</strong><span>${escapeHtml(preview || 'Message')}</span></div>
+        ${thumbnail}
+    </div>`;
 }
 
 export function getUnreadMessageCount(conversation) {
@@ -141,6 +162,7 @@ export function renderMessages({ preserveComposer = false } = {}) {
     const canSend = canSendToConversation(conversation);
     const pending = conversation.membershipStatus === 'pending';
     const messages = visibleConversationMessages(conversation);
+    const messagesById = new Map(messages.map(message => [message.id, message]));
     const messageMarkup = messages.map((message) => {
         if (message.type === 'story-mention') {
             const story = state.stories.find(item => item.id === message.storyId && item.handle === message.actor);
@@ -225,12 +247,11 @@ export function renderMessages({ preserveComposer = false } = {}) {
                 content = `<div class="chat-share-card"><strong>${fileName}</strong><small>Expired · Ask the sender to resend.</small></div>`;
             } else {
                 const media = message.mediaKind === 'video'
-                    ? `<video controls playsinline preload="metadata" src="${escapeHtml(message.media)}"></video>`
+                    ? `<button type="button" class="chat-gallery-preview" data-open-gallery-attachment aria-label="Open video attachment"><video muted playsinline preload="metadata" src="${escapeHtml(message.media)}"></video><span aria-hidden="true">▶</span></button>`
                     : message.mediaKind === 'file' ? download
-                        : `<img src="${escapeHtml(message.media)}" alt="Photo attachment" />`;
+                        : `<button type="button" class="chat-gallery-preview" data-open-gallery-attachment aria-label="Open photo attachment"><img src="${escapeHtml(message.media)}" alt="" /></button>`;
                 content = media;
                 if (expiresAt) {
-                    if (message.mediaKind !== 'file') content += download;
                     content += `<small>Download by ${escapeHtml(new Date(expiresAt).toLocaleString())}</small>`;
                 }
             }
@@ -238,6 +259,7 @@ export function renderMessages({ preserveComposer = false } = {}) {
         }
         return `
       <article class="chat-message chat-text-message ${message.from === "me" ? "from-me" : "from-them"}">
+        ${message.replyToId != null ? renderReplyQuote(messagesById.get(message.replyToId), conversation) : ''}
         <p>${escapeHtml(message.text)}</p>
         <time>${escapeHtml(formatConversationTime(message.sentAt))}</time>
       </article>
