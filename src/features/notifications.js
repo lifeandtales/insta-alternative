@@ -3,7 +3,7 @@ import { captionMentions } from '../components/caption.js';
 import { openProfileMedia } from './profile.js';
 import { setView } from '../core/navigation.js';
 import { state } from '../core/state.js';
-import { conversations, currentUser, posts, reels } from '../data/sample-data.js';
+import { conversations, currentUser, posts, reels, demoContentEnabled } from '../data/sample-data.js';
 import { getAccount, canViewStory, canViewMedia } from '../core/social.js';
 import { escapeHtml, normalizeHandle } from '../core/utils.js';
 import { persistPreferences } from '../storage/preferences.js';
@@ -246,7 +246,7 @@ export function openNotifications(button){
 
 export function renderNotificationsPage(){
     if(state.deletionRequestedAt)return;
-    ensureDemoStoryLike();
+    if (demoContentEnabled) ensureDemoStoryLike();
     updateNotificationBadge();
     const items = availableLocalNotifications();
     document.querySelector('.notifications-content').innerHTML = items.length

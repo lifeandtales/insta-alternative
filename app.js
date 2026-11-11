@@ -1,3 +1,5 @@
+import { currentUser } from './src/data/sample-data.js';
+import { DEFAULT_AVATAR } from './src/core/social.js';
 import { registerStoryShortcutEvents } from './src/features/story-shortcuts.js';
 import { processScheduledPosts } from './src/features/create.js';
 import { registerStoryExportEvents } from './src/features/story-export.js';
@@ -223,6 +225,11 @@ document.addEventListener('submit', event => {
 });
 
 loadPreferences();
+currentUser.avatar ||= DEFAULT_AVATAR;
+document.querySelectorAll('.profile-nav-button img, .profile-card img, .mini-avatar-wrap img, .desktop-profile-button img')
+    .forEach(image => { image.src = currentUser.avatar; });
+document.querySelectorAll('.profile-card strong, .mini-profile strong')
+    .forEach(label => { label.textContent = currentUser.name; });
 registerDeletionLock(() => { setView('home'); openMediaFromHash(); });
 syncDeletionLock();
 state.savedItems = loadSavedItems();

@@ -1,6 +1,6 @@
 import { state } from '../core/state.js';
-import { currentUser, posts, reels } from '../data/sample-data.js';
-import { initializeSocialState } from '../core/social.js';
+import { currentUser, posts, reels, demoContentEnabled } from '../data/sample-data.js';
+import { DEFAULT_AVATAR, initializeSocialState } from '../core/social.js';
 
 const KEY = 'insta-preferences-v1';
 const setFields = ['hiddenPostKeys', 'mutedPostHandles', 'mutedStoryHandles', 'blockedHandles',
@@ -27,6 +27,21 @@ export function loadPreferences() {
                 Object.assign(item, {handle: currentUser.handle, user: currentUser.name, avatar: currentUser.avatar, public: !currentUser.isPrivate});
             });
             state.profileHandle = currentUser.handle;
+        }
+        if (!demoContentEnabled) {
+            const demoHandles = new Set(state.accountDirectory.filter(account => String(account.id).startsWith('demo:')).map(account => account.handle));
+            state.accountDirectory = state.accountDirectory.filter(account => !demoHandles.has(account.handle));
+            state.followedAccountHandles = new Set([...state.followedAccountHandles].filter(handle => !demoHandles.has(handle)));
+            for (const account of state.accountDirectory) {
+                account.followers = (account.followers || []).filter(handle => !demoHandles.has(handle));
+                account.following = (account.following || []).filter(handle => !demoHandles.has(handle));
+            }
+            state.localStoryNotifications = state.localStoryNotifications.filter(notice => !notice.demo && !demoHandles.has(notice.actor));
+            if (currentUser.name === 'Mila Rose') currentUser.name = 'Your profile';
+            if (currentUser.bio === 'Design storyteller ✨ Finding beauty in little things.') currentUser.bio = '';
+            if (currentUser.avatar?.includes('photo-1494790108377-be9c29b29330')) currentUser.avatar = DEFAULT_AVATAR;
+            const owner = state.accountDirectory.find(account => account.handle === currentUser.handle);
+            if (owner) Object.assign(owner, { name: currentUser.name, avatar: currentUser.avatar || DEFAULT_AVATAR, bio: currentUser.bio });
         }
         [...posts, ...reels].forEach(item => { item.followed = state.followedAccountHandles.has(item.handle); });
     } catch (error) {

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
 // A small DOM substitute for logic/rendering tests. Browser checks still cover layout.
-export function createEnvironment() {
+export function createEnvironment({ demoFixtures = true } = {}) {
     const elements = new Map();
     const listeners = [];
     const storage = new Map();
@@ -59,7 +59,7 @@ export function createEnvironment() {
     const historyEntries = [null];
     let historyIndex = 0;
     const window = {
-        setTimeout: () => 1, clearTimeout() {}, location: {href: 'http://localhost:8000/'},
+        setTimeout: () => 1, clearTimeout() {}, location: {href: demoFixtures ? 'http://localhost:8000/?demo-fixtures=1' : 'http://localhost:8000/'},
         addEventListener: (type, callback) => listeners.push({key: 'window', type, callback}),
         history: {
             get state() { return historyEntries[historyIndex]; },
@@ -82,8 +82,8 @@ export function createEnvironment() {
     return {context, document, element, elements, listeners, storage};
 }
 
-export async function loadApp() {
-    const environment = createEnvironment();
+export async function loadApp(options) {
+    const environment = createEnvironment(options);
     const modules = new Map();
     function getModule(filename) {
         filename = path.resolve(filename);

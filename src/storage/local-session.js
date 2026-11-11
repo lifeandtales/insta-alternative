@@ -1,6 +1,6 @@
 // Browser persistence for local content. Real accounts and delivery belong to the server.
 import { state } from '../core/state.js';
-import { posts, reels, conversations, demoViewCounts } from '../data/sample-data.js';
+import { posts, reels, conversations, demoViewCounts, removeDemoContent } from '../data/sample-data.js';
 import { openInstaDatabase, waitForTransaction, waitForRequest, storeInstaData } from './browser-storage.js';
 import { repairDemoVideoSources } from '../media/demo-sources.js';
 
@@ -51,6 +51,7 @@ export async function loadSession() {
     } finally { db.close(); }
     if (!saved) return;
     const restored = unpack(saved);
+    const demoContentRemoved = removeDemoContent(restored);
     for (const [target, key] of [[posts, 'posts'], [reels, 'reels'], [conversations, 'conversations']]) {
         if (Array.isArray(restored[key])) target.splice(0, target.length, ...restored[key]);
     }
@@ -71,4 +72,5 @@ export async function loadSession() {
             if(notice.storyId===savedPreview.storyId&&notice.postId===savedPreview.postId&&notice.recipient===savedPreview.recipient)notice.storyPreview=savedPreview.storyPreview;
         }
     }
+    if (demoContentRemoved) await persistSession();
 }

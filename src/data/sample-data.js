@@ -442,3 +442,64 @@ export const conversations = [
         ]
     }
 ];
+
+// Keep fixtures available for automated tests. Normal app launches start empty.
+export const demoContentEnabled = new URL(window.location.href).searchParams.get('demo-fixtures') === '1'
+    && ['localhost', '127.0.0.1', '[::1]'].includes(new URL(window.location.href).hostname);
+
+const demoPostIds = new Set(posts.map(post => post.id));
+const demoReelIds = new Set(reels.map(reel => reel.id));
+const demoStoryIds = new Set(initialStories.map(story => story.id));
+const demoChatHandles = new Set(conversations.map(chat => chat.handle));
+const demoMessageIds = new Set(conversations.flatMap(chat => chat.messages.map(message => message.id)));
+
+function isDemoChatMessage(message) {
+    return demoMessageIds.has(message.id) || demoStoryIds.has(message.storyId)
+        || String(message.id).startsWith('local-ari-post-demo-');
+}
+
+export function removeDemoContent(snapshot) {
+    if (demoContentEnabled) return false;
+    let changed = false;
+    for (const [key, demoIds] of [['posts', demoPostIds], ['reels', demoReelIds]]) {
+        if (!Array.isArray(snapshot[key])) continue;
+        const retained = snapshot[key].filter(item => !demoIds.has(item.id));
+        changed = changed || retained.length !== snapshot[key].length;
+        snapshot[key] = retained;
+    }
+    if (Array.isArray(snapshot.conversations)) {
+        const retainedChats = snapshot.conversations.filter(chat => {
+            const messages = chat.messages || [];
+            const retained = messages.filter(message => !isDemoChatMessage(message));
+            if (retained.length !== messages.length) {
+                changed = true;
+                if (chat.clearedMessageCount) {
+                    for (const [viewer, count] of Object.entries(chat.clearedMessageCount)) {
+                        chat.clearedMessageCount[viewer] = messages.slice(0, count).filter(message => !isDemoChatMessage(message)).length;
+                    }
+                }
+                chat.messages = retained;
+                chat.lastMessage = '';
+                chat.lastActivity = retained.at(-1)?.sentAt ?? 0;
+                chat.unread = false;
+                chat.unreadCount = 0;
+            }
+            return chat.isGroup || retained.length > 0 || !demoChatHandles.has(chat.handle);
+        });
+        changed = changed || retainedChats.length !== snapshot.conversations.length;
+        snapshot.conversations = retainedChats;
+    }
+    return changed;
+}
+
+if (!demoContentEnabled) {
+    posts.length = 0;
+    reels.length = 0;
+    communities.length = 0;
+    initialStories.length = 0;
+    conversations.length = 0;
+    demoViewCounts.clear();
+    currentUser.name = 'Your profile';
+    currentUser.bio = '';
+    currentUser.avatar = '';
+}
