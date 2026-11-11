@@ -53,3 +53,23 @@ run the initial setup file first. The image-post migration creates the
 `image_posts` table and private `post-images` bucket. Signed-in accounts can
 publish and reload their own image-only posts. Scheduled posts, videos and Reels
 continue to use local storage.
+
+## Full app schema
+
+For the connected project, run `migrations/20261112000200_app_backend.sql` in
+one SQL Editor query. It assumes the initial accounts/chat setup is already
+applied and includes the image-post setup, whether or not that separate
+migration was applied. It leaves existing image posts in their current table.
+
+The new schema includes media posts, Reels and Stories, group chats,
+attachments, reactions, per-viewer chat preferences, follows and blocks,
+comments and saved media, highlights, drafts, communities, notifications, and
+reports. Storage buckets are private and the SQL sets authenticated access
+policies. The migration does not seed any demo data.
+
+The existing Free-compatible chat and media buckets cap each file at 50 MB.
+The schema records the 24-hour expiry for chat attachments above 200 MB when
+the project and bucket support uploads that large. Policies stop access on
+expiry. Removing expired objects from Storage requires a scheduled server
+cleanup. UI integration for the new tables, notification delivery, and
+moderation workflows are separate from this migration.
