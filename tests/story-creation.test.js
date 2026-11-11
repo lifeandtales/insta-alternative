@@ -24,15 +24,10 @@ test('Story editor places Save Draft before Share while retaining each action bi
     assert.match(events,/event\.target\.closest\('\.story-publish-selected'\)/);
 });
 
-test('welcome pause is reversible and applies only to local development hosts', async () => {
-    const app = await loadApp();
-    const preview = app.exportsOf('src/core/local-preview.js');
-    assert.equal(preview.opensDirectlyToHome('http://127.0.0.1:8000/'),true);
-    assert.equal(preview.opensDirectlyToHome('http://localhost:8000/'),true);
-    assert.equal(preview.opensDirectlyToHome('https://example.com/'),false);
-    assert.equal(preview.opensDirectlyToHome('http://127.0.0.1:8000/?welcome=1'),false);
-    preview.localPreviewSettings.pauseWelcome=false;
-    assert.equal(preview.opensDirectlyToHome('http://127.0.0.1:8000/'),false);
+test('normal startup keeps the app hidden until an account is verified', async () => {
+    const app = await loadApp({ demoFixtures: false });
+    assert.equal(app.element('.app-shell').hidden, true);
+    assert.equal(app.exportsOf('src/core/state.js').state.signedInAccountId, undefined);
 });
 
 test('Story creation starts with media only and canceled or unsupported selection does not advance', async () => {

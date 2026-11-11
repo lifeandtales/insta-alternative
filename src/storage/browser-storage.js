@@ -4,13 +4,17 @@ import { communities, currentUser } from '../data/sample-data.js';
 import { renderProfile } from '../features/profile.js';
 import { renderStories } from '../features/stories.js';
 
+export function accountStorageKey(key) {
+    return state.signedInAccountId ? `${key}:${state.signedInAccountId}` : key;
+}
+
 export function getSavedItemKey(type, id) {
     return `${type}:${id}`;
 }
 
 export function loadSavedItems() {
     try {
-        const stored = JSON.parse(localStorage.getItem("insta-saved-items") || "[]");
+        const stored = JSON.parse(localStorage.getItem(accountStorageKey("insta-saved-items")) || "[]");
         if (!Array.isArray(stored) || stored.some((item) => typeof item !== "string")) {
             state.savedStorageWarning = true;
             return new Set();
@@ -25,7 +29,7 @@ export function loadSavedItems() {
 
 export function persistSavedItems() {
     try {
-        localStorage.setItem("insta-saved-items", JSON.stringify([...state.savedItems]));
+        localStorage.setItem(accountStorageKey("insta-saved-items"), JSON.stringify([...state.savedItems]));
         return true;
     }
     catch {
@@ -35,7 +39,7 @@ export function persistSavedItems() {
 
 export function loadJoinedCommunities() {
     try {
-        const stored = JSON.parse(localStorage.getItem("insta-joined-communities") || "[]");
+        const stored = JSON.parse(localStorage.getItem(accountStorageKey("insta-joined-communities")) || "[]");
         if (!Array.isArray(stored) || stored.some((id) => typeof id !== "string")) {
             return new Set();
         }
@@ -49,7 +53,7 @@ export function loadJoinedCommunities() {
 
 export function persistJoinedCommunities() {
     try {
-        localStorage.setItem("insta-joined-communities", JSON.stringify([...state.joinedCommunityIds]));
+        localStorage.setItem(accountStorageKey("insta-joined-communities"), JSON.stringify([...state.joinedCommunityIds]));
         return true;
     }
     catch (error) {
@@ -64,7 +68,7 @@ export function openInstaDatabase() {
             reject(new Error("IndexedDB is not available in this browser."));
             return;
         }
-        const request = window.indexedDB.open("insta-browser-data", 1);
+        const request = window.indexedDB.open(accountStorageKey("insta-browser-data"), 1);
         request.onupgradeneeded = () => {
             if (!request.result.objectStoreNames.contains("app-data")) {
                 request.result.createObjectStore("app-data");

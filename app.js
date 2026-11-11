@@ -1,4 +1,4 @@
-import { currentUser } from './src/data/sample-data.js';
+import { currentUser, demoContentEnabled } from './src/data/sample-data.js';
 import { DEFAULT_AVATAR } from './src/core/social.js';
 import { registerStoryShortcutEvents } from './src/features/story-shortcuts.js';
 import { processScheduledPosts } from './src/features/create.js';
@@ -56,59 +56,101 @@ import { loadPreferences, persistPreferences } from './src/storage/preferences.j
 import { registerDeletionLock, syncDeletionLock } from './src/core/account-lock.js';
 import { openMediaFromHash } from './src/core/media-links.js';
 import { registerNotificationEvents, updateNotificationBadge, syncIncomingPostMentions, syncIncomingStoryMentions } from './src/features/notifications.js';
-import { opensDirectlyToHome } from './src/core/local-preview.js';
+import { getSupabaseClient } from './src/storage/supabase.js';
+import { ensureSupabaseProfile, profileDetails, signOutAccount } from './src/features/account-auth.js';
 import { registerStoryToolEvents } from './src/features/story-tools.js';
 import { registerStoryOptionEvents } from './src/features/story-options.js';
 
-// Local welcome forms are transient only; this prototype has no credential service.
 const welcomeScreen = document.getElementById('welcome-screen');
 const welcomeMessage = document.getElementById('welcome-message');
 const welcomeEntry = document.getElementById('welcome-entry');
 const welcomeForms = [...document.querySelectorAll('[data-entry-form]')];
-function clearWelcomeForms() {
-    welcomeForms.forEach(form => {
+const welcomeStatus = document.getElementById('welcome-auth-status');
+let pendingProfileUser;
+let authBusy = false;
+
+function showWelcomeForm(mode, status = '') {
+    welcomeMessage.hidden = Boolean(mode);
+    welcomeEntry.hidden = !mode;
+    welcomeStatus.textContent = status;
+    welcomeStatus.hidden = !status;
+    for (const form of welcomeForms) {
         form.reset();
-        const fileInput = form.querySelector('input[type="file"]');
-        if (fileInput) fileInput.value = '';
-        const fileSelection = form.querySelector('.welcome-file-selection');
-        if (fileSelection) fileSelection.hidden = true;
-        const fileDetails = form.querySelector('.welcome-file-selection span');
-        if (fileDetails) fileDetails.textContent = '';
-        form.querySelectorAll('input[type="password"]').forEach(input => { input.type = 'password'; });
-        form.querySelectorAll('.welcome-password-toggle').forEach(button => {
+        form.hidden = form.dataset.entryForm !== mode;
+        form.querySelector('.welcome-form-error').hidden = true;
+        for (const input of form.querySelectorAll('.welcome-password-wrap input')) input.type = 'password';
+        for (const button of form.querySelectorAll('[data-toggle-password]')) {
             button.textContent = 'Show';
             button.setAttribute('aria-label', 'Show password');
             button.setAttribute('aria-pressed', 'false');
-        });
-        const error = form.querySelector('.welcome-form-error');
-        error.textContent = '';
-        error.hidden = true;
-    });
-}
-function enterLocalDemo(ageBand = '', announce = true) {
-    if (syncDeletionLock()) return;
-    if (ageBand) {
-        // Keep only the non-secret age-band choice so existing local access filters apply.
-        state.viewerAgeBand = ageBand;
-        persistPreferences();
+        }
     }
-    clearWelcomeForms();
-    welcomeScreen.hidden = true;
-    document.querySelector('.app-shell').hidden = false;
-    document.querySelector('.mobile-nav').hidden = false;
+    const titles = { signup: 'Create account', login: 'Log in', profile: 'Complete your profile' };
+    document.getElementById('welcome-entry-title').textContent = titles[mode] || '';
+    document.getElementById('welcome-entry-eyebrow').textContent = '';
+    document.getElementById('welcome-entry-description').textContent = '';
+    welcomeForms.find(form => form.dataset.entryForm === mode)?.querySelector('input')?.focus();
+}
+
+function loadAccountPreferences() {
+    loadPreferences();
+    currentUser.avatar ||= DEFAULT_AVATAR;
+    state.savedItems = loadSavedItems();
+    state.joinedCommunityIds = loadJoinedCommunities();
+}
+
+function renderAccountIdentity() {
+    document.querySelectorAll('.profile-nav-button img, .profile-card img, .mini-avatar-wrap img, .desktop-profile-button img')
+        .forEach(image => { image.src = currentUser.avatar; });
+    document.querySelectorAll('.profile-card strong, .mini-profile strong')
+        .forEach(label => { label.textContent = currentUser.name; });
+}
+
+async function loadAccountContent() {
+    const [sessionResult] = await Promise.allSettled([loadSession(), loadStoryHighlights()]);
+    if (demoContentEnabled && sessionResult.status === 'rejected') return;
+    refreshChatAttachmentExpiry();
+    processScheduledPosts();
+    syncIncomingStoryMentions();
+    syncIncomingPostMentions();
     setView(state.currentView);
     openMediaFromHash();
-    if (announce) showShareFeedback('Local preview opened. No account was created or verified; your entries were cleared without being saved.');
+    updateNotificationBadge();
 }
-document.addEventListener('click', event => {
-    if (event.target.closest('[data-remove-verification-file]')) {
-        const form = event.target.closest('form');
-        const fileInput = form.querySelector('input[type="file"]');
-        fileInput.value = '';
-        form.querySelector('.welcome-file-selection').hidden = true;
-        form.querySelector('.welcome-file-selection span').textContent = '';
-        return;
+
+async function enterAccount(user, profile) {
+    state.signedInAccountId = user.id;
+    const identity = { handle: '@' + profile.username, name: profile.display_name, bio: profile.bio || '' };
+    Object.assign(currentUser, identity);
+    loadAccountPreferences();
+    Object.assign(currentUser, identity);
+    state.profileHandle = currentUser.handle;
+    const account = state.accountDirectory.find(item => item.id === user.id || item.id === 'local-owner');
+    if (account) Object.assign(account, { id: user.id, ...identity, avatar: currentUser.avatar });
+    state.viewerAgeBand = user.user_metadata?.age_band === 'adult' ? 'adult' : 'minor';
+    renderAccountIdentity();
+    await loadAccountContent();
+    for (const form of welcomeForms) form.reset();
+    pendingProfileUser = null;
+    welcomeScreen.hidden = true;
+    if (syncDeletionLock()) return;
+    document.querySelector('.app-shell').hidden = false;
+    document.querySelector('.mobile-nav').hidden = false;
+}
+
+async function continueWithUser(client, user, details) {
+    const profile = await ensureSupabaseProfile(client, user, details);
+    if (profile) {
+        await enterAccount(user, profile);
+    } else {
+        pendingProfileUser = user;
+        showWelcomeForm('profile', 'Choose an available username to finish creating your profile.');
+        const form = welcomeForms.find(item => item.dataset.entryForm === 'profile');
+        if (form) form.elements.displayName.value = details?.display_name || user.user_metadata?.display_name || '';
     }
+}
+
+document.addEventListener('click', event => {
     const toggle = event.target.closest('[data-toggle-password]');
     if (toggle) {
         const input = document.getElementById(toggle.dataset.togglePassword);
@@ -120,120 +162,85 @@ document.addEventListener('click', event => {
         return;
     }
     const action = event.target.closest('[data-welcome-action]')?.dataset.welcomeAction;
-    if (!action) return;
-    if (action === 'signup' || action === 'login') {
-        const signup = action === 'signup';
-        clearWelcomeForms();
-        welcomeForms.forEach(form => { form.hidden = form.dataset.entryForm !== action; });
-        document.getElementById('welcome-entry-eyebrow').textContent = signup ? 'Create account' : 'Welcome back';
-        document.getElementById('welcome-entry-title').textContent = signup ? 'Join the conversation.' : 'Good to see you again.';
-        document.getElementById('welcome-entry-description').textContent = signup
-            ? 'Choose a username and password to continue into the local demo.'
-            : 'Enter your details to continue into the local demo.';
-        welcomeMessage.hidden = true;
-        welcomeEntry.hidden = false;
-        (signup ? document.getElementById('signup-username') : document.getElementById('login-username')).focus();
-    } else if (action === 'back') {
-        clearWelcomeForms();
-        welcomeForms.forEach(form => { form.hidden = true; });
-        welcomeEntry.hidden = true;
-        welcomeMessage.hidden = false;
-        document.getElementById('welcome-title').focus?.();
-    }
+    if (!action || authBusy) return;
+    if (action === 'signup' || action === 'login') showWelcomeForm(action);
+    else if (action === 'back') showWelcomeForm();
+    else if (action === 'signout') void signOutAccount().catch(() => showWelcomeForm('profile', 'Could not log out. Try again.'));
 });
-document.addEventListener('beforeinput', event => {
-    const input = event.target;
-    if (!input.matches('.welcome-password-wrap input') || !input.closest('[data-entry-form]')) return;
-    if (/\s/.test(event.data || '')) event.preventDefault();
-});
-document.addEventListener('paste', event => {
-    const input = event.target;
-    if (!input.matches('.welcome-password-wrap input') || !input.closest('[data-entry-form]')) return;
-    if (/\s/.test(event.clipboardData?.getData('text') || '')) event.preventDefault();
-});
-document.addEventListener('change', event => {
-    if (event.target.id !== 'signup-verification-file') return;
-    const input = event.target;
-    const form = input.closest('form');
-    const errorElement = form.querySelector('.welcome-form-error');
-    const file = input.files?.[0];
-    const selection = form.querySelector('.welcome-file-selection');
-    const details = form.querySelector('.welcome-file-selection span');
-    if (!file) { selection.hidden = true; details.textContent = ''; return; }
-    const isImageOrPdf = file.type.startsWith('image/') || file.type === 'application/pdf' || /\.(png|jpe?g|gif|webp|heic|heif|pdf)$/i.test(file.name);
-    if (!isImageOrPdf || file.size > 20 * 1024 * 1024) {
-        input.value = '';
-        selection.hidden = true;
-        details.textContent = '';
-        errorElement.textContent = 'Choose an image or PDF no larger than 20 MB.';
-        errorElement.hidden = false;
-        input.focus();
-        return;
-    }
-    errorElement.textContent = '';
-    errorElement.hidden = true;
-    const filename = (file.name.split(/[\\/]/).pop() || 'Selected file').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f]/g, '').slice(0, 100);
-    details.textContent = `${filename || 'Selected file'} · ${(file.size / (1024 * 1024)).toFixed(1)} MB`;
-    selection.hidden = false;
-});
-document.addEventListener('submit', event => {
+
+document.addEventListener('submit', async event => {
     const form = event.target.closest('[data-entry-form]');
     if (!form) return;
     event.preventDefault();
-    const signup = form.dataset.entryForm === 'signup';
-    const ageBand = signup ? form.elements.ageBand.value : '';
-    const fullName = signup ? form.querySelector('#signup-full-name').value.trim() : '';
-    const verificationFile = signup ? form.querySelector('#signup-verification-file').files?.[0] : null;
-    const username = form.elements.username.value;
-    const password = form.elements.password.value;
-    const confirmation = signup ? form.elements.confirmPassword.value : '';
-    let error = '';
-    let focusTarget = null;
-    if (signup && !['minor', 'adult'].includes(ageBand)) {
-        error = 'Choose Under 18 or 18 or older to continue.';
-        focusTarget = form.querySelector('input[name="ageBand"]');
-    } else if (signup && !fullName) {
-        error = 'Enter your full name.';
-        focusTarget = form.querySelector('#signup-full-name');
-    } else if (!username) { error = 'Enter a username.'; focusTarget = form.elements.username; }
-    else if (!/^[a-zA-Z0-9._]{8,20}$/.test(username)) {
-        error = 'Use 8–20 characters: letters, numbers, dots or underscores. No spaces or required character mix.';
-        focusTarget = form.elements.username;
-    } else if (signup && verificationFile && (verificationFile.size > 20 * 1024 * 1024 || !(verificationFile.type.startsWith('image/') || verificationFile.type === 'application/pdf' || /\.(png|jpe?g|gif|webp|heic|heif|pdf)$/i.test(verificationFile.name)))) {
-        error = 'Choose an image or PDF no larger than 20 MB.';
-        focusTarget = form.querySelector('#signup-verification-file');
-    } else if (!password) { error = 'Enter a password to continue.'; focusTarget = form.elements.password; }
-    else if (/\s/.test(password) || (signup && /\s/.test(confirmation))) {
-        error = 'Passwords cannot contain spaces.';
-        focusTarget = /\s/.test(password) ? form.elements.password : form.elements.confirmPassword;
-    }
-    else if ([...password].length < 8) {
-        error = 'Use at least 8 characters in your password.';
-        focusTarget = form.elements.password;
-    }
-    else if (signup && !confirmation) { error = 'Confirm your password.'; focusTarget = form.elements.confirmPassword; }
-    else if (signup && password !== confirmation) { error = 'The passwords do not match.'; focusTarget = form.elements.confirmPassword; }
+    if (authBusy) return;
+    const mode = form.dataset.entryForm;
     const errorElement = form.querySelector('.welcome-form-error');
-    if (error) {
-        clearWelcomeForms();
-        errorElement.textContent = error;
+    const submit = form.querySelector('button[type="submit"]');
+    errorElement.hidden = true;
+    authBusy = true;
+    submit.disabled = true;
+    try {
+        const details = mode !== 'login' ? profileDetails(form) : undefined;
+        if (mode === 'profile') {
+            if (!pendingProfileUser) throw new Error('Log in again to finish setting up your profile.');
+            await continueWithUser(await getSupabaseClient(), pendingProfileUser, details);
+            return;
+        }
+        const email = form.elements.email.value.trim();
+        const password = form.elements.password.value;
+        if (!email || !form.elements.email.validity.valid) throw new Error('Enter a valid email address.');
+        if (!password) throw new Error('Enter your password.');
+        if (mode === 'signup') {
+            if (password.length < 8) throw new Error('Use at least 8 characters in your password.');
+            if (password !== form.elements.confirmPassword.value) throw new Error('The passwords do not match.');
+            const ageBand = form.elements.ageBand.value;
+            if (!['minor', 'adult'].includes(ageBand)) throw new Error('Choose your age band.');
+            const client = await getSupabaseClient();
+            const { data, error } = await client.auth.signUp({
+                email, password,
+                options: {
+                    data: { ...details, age_band: ageBand },
+                    emailRedirectTo: 'https://lifeandtales.github.io/insta-alternative/',
+                },
+            });
+            if (error) throw error;
+            if (data.session && data.user) await continueWithUser(client, data.user, details);
+            else showWelcomeForm('login', 'Check your email to confirm your account, then log in.');
+        } else {
+            const client = await getSupabaseClient();
+            const { data, error } = await client.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            await continueWithUser(client, data.user);
+        }
+    } catch (error) {
+        errorElement.textContent = error.message || 'Could not continue. Try again.';
         errorElement.hidden = false;
-        focusTarget.focus();
-        return;
+    } finally {
+        authBusy = false;
+        submit.disabled = false;
     }
-    enterLocalDemo(ageBand);
 });
 
-loadPreferences();
-currentUser.avatar ||= DEFAULT_AVATAR;
-document.querySelectorAll('.profile-nav-button img, .profile-card img, .mini-avatar-wrap img, .desktop-profile-button img')
-    .forEach(image => { image.src = currentUser.avatar; });
-document.querySelectorAll('.profile-card strong, .mini-profile strong')
-    .forEach(label => { label.textContent = currentUser.name; });
+async function restoreAccount() {
+    const client = await getSupabaseClient();
+    const { data, error } = await client.auth.getSession();
+    if (error) throw error;
+    if (data.session) {
+        const verified = await client.auth.getUser();
+        if (verified.error) throw verified.error;
+        await continueWithUser(client, verified.data.user);
+    }
+    client.auth.onAuthStateChange((event) => {
+        if (event === 'SIGNED_OUT' && state.signedInAccountId) window.location.reload();
+    });
+}
+
+if (demoContentEnabled) {
+    loadAccountPreferences();
+    renderAccountIdentity();
+}
 registerDeletionLock(() => { setView('home'); openMediaFromHash(); });
 syncDeletionLock();
-state.savedItems = loadSavedItems();
-state.joinedCommunityIds = loadJoinedCommunities();
 initializeVideoObserver();
 // Preserve the original click priority: a handled action stops dispatch.
 const clickHandlers = [
@@ -294,22 +301,14 @@ if (document.documentElement.classList.contains("mobile-splash-pending")) {
     }, 1000);
 }
 setView("home");
-if (opensDirectlyToHome(window.location.href)) enterLocalDemo('', false);
-loadSession().then(() => { refreshChatAttachmentExpiry(); processScheduledPosts(); syncIncomingStoryMentions(); syncIncomingPostMentions(); setView(state.currentView); openMediaFromHash(); updateNotificationBadge(); }).catch(() => {
-    showShareFeedback('Local content storage is unavailable. New work may not survive closing this page.');
-});
+if (demoContentEnabled) void loadAccountContent();
+else void restoreAccount().catch(() => showWelcomeForm('login', 'Sign in to connect to your account.'));
 window.addEventListener?.('hashchange', () => openMediaFromHash());
 let localSaveTimer;
 for (const eventName of ['click', 'submit', 'change']) document.addEventListener(eventName, event => {
     // Welcome actions do not mutate local content or trigger a session write.
-    if (event.target.closest('#welcome-screen')) return;
+    if ((!state.signedInAccountId && !demoContentEnabled) || event.target.closest('#welcome-screen')) return;
     if (event.target.closest('.notifications-backdrop, .home-notifications')) return;
     clearTimeout(localSaveTimer);
     localSaveTimer = window.setTimeout(() => persistSession().catch(() => showShareFeedback('Your latest changes could not be saved on this device.')), 300);
-});
-if (state.savedStorageWarning)
-    showShareFeedback("The saved collection couldn't be loaded from browser storage.");
-loadStoryHighlights().catch((error) => {
-    console.error("Could not load saved story highlights", error);
-    showShareFeedback("Saved story highlights couldn't be loaded from browser storage.");
 });

@@ -77,23 +77,14 @@ test('pending accounts cannot like, save, message, create groups or follow but r
     assert.ok(!app.element('#messages-list').innerHTML.includes('class="chat-composer"'));
 });
 
-test('username entry forms enforce 8–20 characters with no whitespace or required mix', async () => {
+test('account signup validates usernames before using Supabase', async () => {
     const app = await loadApp();
-    const submit = app.listeners.find(item => item.key === 'document' && item.type === 'submit' && String(item.callback).includes("form.dataset.entryForm === 'signup'")).callback;
-    for (const mode of ['login', 'signup']) {
-        for (const [username, valid] of [['abcdefgh', true], ['1'.repeat(20), true], ['........', true], ['________', true], ['a'.repeat(7), false], ['a'.repeat(21), false], [' abcdefgh', false], ['abcdefgh ', false], ['abcd efgh', false], ['abcd\tefgh', false]]) {
-            const error = {textContent: '', hidden: true};
-            const field = value => ({value, focus() {}});
-            const form = {
-                dataset: {entryForm: mode},
-                elements: {username: field(username), password: field('sample-only'), confirmPassword: field('sample-only'), ageBand: field('adult')},
-                querySelector: selector => selector === '.welcome-form-error' ? error : selector === '#signup-full-name' ? field('Demo Person') : {files: []}
-            };
-            app.element('.app-shell').hidden = true;
-            submit({target: {closest: () => form}, preventDefault() {}});
-            assert.equal(app.element('.app-shell').hidden, !valid, `${mode}: ${JSON.stringify(username)}`);
-            assert.equal(Boolean(error.textContent), !valid);
-        }
+    const { profileDetails } = app.exportsOf('src/features/account-auth.js');
+    const form = { elements: { username: { value: 'Example123' }, displayName: { value: 'Example Person' } } };
+    assert.equal(profileDetails(form).username, 'example123');
+    for (const invalid of ['short', 'a'.repeat(21), 'abcd efgh']) {
+        form.elements.username.value = invalid;
+        assert.throws(() => profileDetails(form), /8–20/);
     }
 });
 

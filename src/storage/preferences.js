@@ -1,3 +1,4 @@
+import { accountStorageKey } from './browser-storage.js';
 import { state } from '../core/state.js';
 import { currentUser, posts, reels, demoContentEnabled } from '../data/sample-data.js';
 import { DEFAULT_AVATAR, initializeSocialState } from '../core/social.js';
@@ -12,7 +13,7 @@ const scalarFields = ['accountDirectory', 'followRequests', 'incomingFollowReque
 export function loadPreferences() {
     initializeSocialState();
     try {
-        const data = JSON.parse(localStorage.getItem(KEY) || 'null');
+        const data = JSON.parse(localStorage.getItem(accountStorageKey(KEY)) || 'null');
         if (!data || data.version !== 1) return;
         for (const field of setFields) {
             if (Array.isArray(data[field])) state[field] = new Set(data[field]);
@@ -54,7 +55,7 @@ export function persistPreferences() {
         const data = {version: 1, profile: {...currentUser}};
         for (const field of setFields) data[field] = [...state[field]];
         for (const field of scalarFields) data[field] = state[field];
-        localStorage.setItem(KEY, JSON.stringify(data));
+        localStorage.setItem(accountStorageKey(KEY), JSON.stringify(data));
         return true;
     } catch (error) {
         console.error('Could not save app preferences', error);
