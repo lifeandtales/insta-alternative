@@ -1,3 +1,5 @@
+import { loadCloudImagePosts } from './src/storage/image-posts.js';
+import { registerHomePullToRefresh } from './src/features/home.js';
 import { currentUser, demoContentEnabled } from './src/data/sample-data.js';
 import { DEFAULT_AVATAR } from './src/core/social.js';
 import { registerStoryShortcutEvents } from './src/features/story-shortcuts.js';
@@ -109,6 +111,8 @@ function renderAccountIdentity() {
 async function loadAccountContent() {
     const [sessionResult] = await Promise.allSettled([loadSession(), loadStoryHighlights()]);
     if (demoContentEnabled && sessionResult.status === 'rejected') return;
+    try { await loadCloudImagePosts(); }
+    catch { showShareFeedback('Could not load your saved image posts. Pull down on Home to retry.'); }
     refreshChatAttachmentExpiry();
     processScheduledPosts();
     syncIncomingStoryMentions();
@@ -300,6 +304,18 @@ if (document.documentElement.classList.contains("mobile-splash-pending")) {
         document.documentElement.classList.remove("mobile-splash-pending");
     }, 1000);
 }
+registerHomePullToRefresh(document.querySelector('.app-shell'), document.getElementById('home-refresh-status'), async () => {
+    try {
+        const [local] = await Promise.allSettled([loadSession()]);
+        const [cloud] = await Promise.allSettled([loadCloudImagePosts()]);
+        processScheduledPosts();
+        syncIncomingPostMentions();
+        if (state.currentView === 'home') setView('home');
+        if (local.status === 'rejected' || cloud.status === 'rejected') throw new Error('Refresh incomplete');
+    } catch {
+        showShareFeedback('Could not refresh Home. Try again.');
+    }
+});
 setView("home");
 if (demoContentEnabled) void loadAccountContent();
 else void restoreAccount().catch(() => showWelcomeForm('login', 'Sign in to connect to your account.'));

@@ -1,3 +1,4 @@
+import { publishImagePost } from '../storage/image-posts.js';
 import { bindReelEditorPlayback } from '../media/reel-editor-playback.js';
 import { resetReelCover, suspendReelCover, renderReelCover, getReelCover } from './reel-cover.js';
 import { renderSquareCover } from '../media/cover-canvas.js';
@@ -140,7 +141,20 @@ export function closeCreateUpload(discard = false) {
     }
 }
 
+let publishingMedia = false;
+const imagePublishIds = new WeakMap();
+
 export async function publishCreatedMedia() {
+    if (publishingMedia) return;
+    publishingMedia = true;
+    try {
+        await publishPreparedMedia();
+    } finally {
+        publishingMedia = false;
+    }
+}
+
+async function publishPreparedMedia() {
     if (!mayInteract()) return;
     if (!state.createDetailsOpen || !state.createFinalizedItems?.length) { showShareFeedback('Tap Next to review your post first.'); return; }
     const scheduledValue = document.getElementById('create-schedule').value;
@@ -156,6 +170,7 @@ export async function publishCreatedMedia() {
     const caption = document.getElementById("create-caption").value.trim();
     const mediaType = getSupportedStoryFileType(state.createMediaFile);
     const createdAt = Date.now();
+    let cloudPublished = false;
     if (state.createMediaType === "reel") {
         const reel = {
             id: createdAt,
@@ -208,11 +223,37 @@ export async function publishCreatedMedia() {
             reel: false,
             mine: true
         };
-        if (scheduledAt) (state.scheduledPosts ??= []).push({type:'post',item:post,scheduledAt}); else { posts.unshift(post);recordPostMentions(post); }
+        if (!scheduledAt && state.signedInAccountId && post.mediaItems.every(item => item.type === 'image')) {
+            const finalized = state.createFinalizedItems;
+            const previousId = imagePublishIds.get(finalized);
+            if (previousId) post.id = previousId;
+            else imagePublishIds.set(finalized, post.id);
+            const button = document.querySelector('.create-publish-button');
+            button.disabled = true;
+            try {
+                await publishImagePost(post, { retry: Boolean(previousId) });
+                cloudPublished = true;
+            } catch (error) {
+                showShareFeedback(`Could not save this post to Supabase. ${error.message || 'Try again.'}`);
+                return;
+            } finally {
+                button.disabled = false;
+            }
+        }
+        if (scheduledAt) (state.scheduledPosts ??= []).push({type:'post',item:post,scheduledAt});
+        else {
+            if (!posts.some(item => item.id === post.id)) posts.unshift(post);
+            recordPostMentions(post);
+        }
     }
     state.draftItems = state.draftItems.filter(item => item.id !== state.activeDraftId);
     try { await persistSession(); }
-    catch { showShareFeedback('Published on this screen, but storage failed. Keep this page open.'); return; }
+    catch {
+        if (!cloudPublished) {
+            showShareFeedback('Published on this screen, but storage failed. Keep this page open.');
+            return;
+        }
+    }
     armScheduledPosts();
     const publishedType = state.createMediaType;
     state.createMediaUrl = "";

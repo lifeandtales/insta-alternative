@@ -44,3 +44,12 @@ For a data test, sign in two test accounts with Supabase Auth and insert each ac
 ## Email confirmation
 
 In Supabase Authentication → URL Configuration, add `https://lifeandtales.github.io/insta-alternative/` to Redirect URLs. On Android, confirm the email in a browser, then return to the app and sign in.
+
+## Image posts
+
+For an existing project that already has the account and chat schema, run only
+`migrations/20261112000100_image_posts.sql` in the SQL Editor. For a fresh project,
+run the initial setup file first. The image-post migration creates the
+`image_posts` table and private `post-images` bucket. Signed-in accounts can
+publish and reload their own image-only posts. Scheduled posts, videos and Reels
+continue to use local storage.

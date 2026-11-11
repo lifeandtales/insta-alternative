@@ -41,6 +41,7 @@ export function persistSession() {
     return writeQueue;
 }
 export async function loadSession() {
+    await writeQueue.catch(() => {});
     const db = await openInstaDatabase();
     let saved;
     try {

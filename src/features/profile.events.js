@@ -1,3 +1,4 @@
+import { deleteCloudImagePost, updateCloudImagePost } from '../storage/image-posts.js';
 import { openProfileScanner, registerProfileScannerEvents } from './profile-scanner.js';
 import qrcode from '../vendor/qrcode.js';
 import { persistPreferences } from '../storage/preferences.js';
@@ -132,8 +133,14 @@ export function registerProfileEditorEvents() {
             showShareFeedback("This media is no longer available to edit.");
             return;
         }
-        entity.location = document.getElementById("media-edit-location").value.trim();
-        entity.caption = document.getElementById("media-edit-caption").value.trim();
+        const location = document.getElementById("media-edit-location").value.trim();
+        const caption = document.getElementById("media-edit-caption").value.trim();
+        if (entity.cloudImagePaths) {
+            try { await updateCloudImagePost(entity, { location, caption }); }
+            catch { showShareFeedback('Could not save your post changes. Try again.'); return; }
+        }
+        entity.location = location;
+        entity.caption = caption;
         const coverFile = document.getElementById('media-edit-cover').files?.[0];
         if (coverFile) {
             try { entity.cover = await readSquareCover(coverFile, Number(document.getElementById('media-edit-cover-x').value), Number(document.getElementById('media-edit-cover-y').value)); }
@@ -150,6 +157,11 @@ export function registerProfileEditorEvents() {
         if (!state.activeMediaDelete)
             return;
         const { type, id, origin } = state.activeMediaDelete;
+        const entity = findEntity(type, id);
+        if (entity?.cloudImagePaths && entity.handle === currentUser.handle) {
+            try { await deleteCloudImagePost(entity); }
+            catch { showShareFeedback('Could not delete the saved post. Try again.'); return; }
+        }
         closeMediaDeleteConfirmation();
         if (!deleteProfileMedia(type, id, {fromHome:origin==='home'})) {
             showShareFeedback("This media is no longer available to delete.");return;

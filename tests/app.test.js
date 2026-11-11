@@ -164,3 +164,35 @@ test('Explore hashtag counts include public posts but exclude Reels', async () =
     assert.equal(nightwalk?.count, 1);
     assert.ok(!getPublicHashtags().some(tag => tag.name.toLowerCase() === 'travel'));
 });
+
+test('Home shows your new post before you follow any accounts', async () => {
+    const app = await loadApp({ demoFixtures: false });
+    const { currentUser, posts } = app.exportsOf('src/data/sample-data.js');
+    const post = { id: 100001, handle: currentUser.handle, caption: 'My first upload', public: false, createdAt: Date.now() };
+    posts.push(post);
+    assert.equal(app.exportsOf('src/features/home.js').getHomeFeedItems()[0], post);
+});
+
+test('Home refreshes on release only after a downward pull from the top', async () => {
+    const app = await loadApp();
+    const { registerHomePullToRefresh } = app.exportsOf('src/features/home.js');
+    const shell = app.element('pull-test-shell');
+    const indicator = { hidden: true };
+    let refreshes = 0;
+    registerHomePullToRefresh(shell, indicator, async () => { refreshes++; });
+    const trigger = (type, y) => app.listeners.find(item => item.key === 'pull-test-shell' && item.type === type).callback({
+        touches: [{ clientX: 10, clientY: y }], cancelable: true, preventDefault() {},
+    });
+    trigger('touchstart', 20);
+    trigger('touchmove', 105);
+    assert.equal(indicator.textContent, 'Release to refresh');
+    await trigger('touchend', 105);
+    assert.equal(refreshes, 1);
+    assert.equal(indicator.hidden, true);
+
+    shell.scrollTop = 10;
+    trigger('touchstart', 20);
+    trigger('touchmove', 120);
+    await trigger('touchend', 120);
+    assert.equal(refreshes, 1);
+});
