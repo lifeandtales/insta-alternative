@@ -119,6 +119,7 @@
 }
 
 .chat-window {
+  position: relative;
   min-width: 0;
   height: 100%;
   display: flex;
@@ -790,8 +791,11 @@
 .chat-message-reaction[hidden] { display: none; }
 
 .chat-reaction-tray {
-  position: fixed;
-  z-index: 6;
+  position: absolute;
+  z-index: 12;
+  top: 0;
+  left: 0;
+  max-width: calc(100% - 8px);
   display: flex;
   gap: 2px;
   padding: 4px;
@@ -850,7 +854,7 @@
 }
 .chat-message.from-me .chat-reply-quote { background: rgb(255 255 255 / 16%); }
 
-.chat-reaction-tray:has([data-reply-to-message]) { flex-wrap: wrap; width: max-content; max-width: min(330px, calc(100vw - 16px)); }
+.chat-reaction-tray { flex-wrap: wrap; width: max-content; max-width: min(330px, calc(100% - 8px)); }
 .chat-reaction-tray button[data-reply-to-message] { width: auto; padding-inline: 8px; font-size: .78rem; }
 
 .chat-reply-quote { display: flex; align-items: center; gap: 8px; }

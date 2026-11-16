@@ -151,7 +151,8 @@ function registerMessageReactionGestures(list) {
         const canCopy = message?.type === 'text';
         const canDownload = isGalleryAttachment(message) && message.media?.startsWith('blob:')
             && (!Number.isFinite(message.expiresAt) || message.expiresAt > Date.now());
-        bubble.closest('.chat-window').insertAdjacentHTML('beforeend', `<div class="chat-reaction-tray" role="group" aria-label="React to message">
+        const chatWindow = bubble.closest('.chat-window');
+        chatWindow.insertAdjacentHTML('beforeend', `<div class="chat-reaction-tray" role="group" aria-label="React to message">
           ${MESSAGE_REACTIONS.map(([emoji, label]) => `<button type="button" data-message-reaction="${emoji}" aria-label="${label}">${emoji}</button>`).join('')}
           ${message && bubble.closest('.chat-window').querySelector('.chat-composer') ? '<button type="button" data-reply-to-message>Reply</button>' : ''}
           ${canCopy ? '<button type="button" data-copy-message>Copy</button>' : ''}
@@ -160,15 +161,16 @@ function registerMessageReactionGestures(list) {
           ${canForwardMessage(message) && (!activeConversation()?.cloudId || message.type === 'text') ? '<button type="button" data-forward-message>Forward</button>' : ''}
           ${message ? '<button type="button" data-delete-one-message>Delete</button>' : ''}
         </div>`);
-        const tray = list.querySelector('.chat-reaction-tray');
+        const tray = chatWindow.querySelector('.chat-reaction-tray');
         const bounds = bubble.getBoundingClientRect();
-        const frame = list.getBoundingClientRect();
-        tray.style.left = `${Math.max(frame.left + 4, Math.min(bounds.left, frame.right - tray.offsetWidth - 4))}px`;
-        const top = Math.max(4, frame.top);
-        const bottom = Math.min(window.innerHeight, frame.bottom);
-        const above = bounds.top - tray.offsetHeight - 6;
-        const preferred = above >= top ? above : bounds.bottom + 6;
-        tray.style.top = `${Math.max(top, Math.min(preferred, bottom - tray.offsetHeight - 4))}px`;
+        const frame = chatWindow.getBoundingClientRect();
+        const left = bounds.left - frame.left;
+        const top = bounds.top - frame.top;
+        const bottom = bounds.bottom - frame.top;
+        const above = top - tray.offsetHeight - 6;
+        const preferred = above >= 4 ? above : bottom + 6;
+        tray.style.left = `${Math.max(4, Math.min(left, chatWindow.clientWidth - tray.offsetWidth - 4))}px`;
+        tray.style.top = `${Math.max(4, Math.min(preferred, chatWindow.clientHeight - tray.offsetHeight - 4))}px`;
     };
     const messageAtPoint = (history, target, y) => target.closest('[data-reactable-message]') ||
         [...history.children].find(row => {
