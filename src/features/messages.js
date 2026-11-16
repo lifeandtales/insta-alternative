@@ -239,7 +239,7 @@ function renderConversationActions(conversation, canSend) {
 
 function renderChatComposer() {
     return `<form class="chat-composer">
-        <button class="chat-attach-button" type="button" data-chat-attach aria-label="More attachment options">＋</button>
+        <button class="chat-attach-button" type="button" data-chat-attach aria-label="More attachment options"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
         <button class="chat-attach-button" type="button" data-chat-gallery aria-label="Attach a photo or video"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 17H3V5a2 2 0 0 1 2-2h12v2"/><g transform="translate(3 3) scale(.85)"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8" cy="9" r="1.5"/><path d="m4 17 5-5 4 3 3-5 4 6"/></g></svg></button>
         <input class="chat-gallery-input" type="file" accept="image/*,video/*" hidden />
         <input class="chat-file-input" type="file" hidden />
@@ -357,11 +357,15 @@ function renderConversationMessage(message, conversation, messagesById) {
 function renderConnectedChat(list, chat, { preserveComposer, preserveHistoryAnchor, scrollToLatest }) {
     const messages = state.blockedHandles.has(chat.handle) ? [] : chat.messages;
     const byId = new Map(messages.map(message => [message.id, message]));
+    const seenAt = Date.parse(chat.peerSeenAt);
+    const seenMessage = messages.findLast(message => message.from === 'me' && message.sentAt <= seenAt);
+    const wallpaper = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(chat.wallpaper || '') ? chat.wallpaper : '';
     const bubbles = messages.map(message => {
         const markup = renderConversationMessage(message, chat, byId);
         const badges = (message.reactions || []).map(reaction => reaction.emoji).join(' ');
+        const receipt = seenMessage === message ? '<span class="chat-read-receipt">Seen</span>' : '';
         return markup.replace('<article ', `<article data-reactable-message="${escapeHtml(String(message.id))}" `)
-            .replace('</article>', `<span class="chat-message-reaction" role="status"${badges ? '' : ' hidden'}>${escapeHtml(badges)}</span></article>`);
+            .replace('</article>', `<span class="chat-message-reaction" role="status"${badges ? '' : ' hidden'}>${escapeHtml(badges)}</span>${receipt}</article>`);
     }).join('') || `<p class="chat-empty">${chat.cloudLoaded ? 'Start with a message.' : 'Loading messages…'}</p>`;
     const markup = (chat.cloudHasOlder && messages.length
         ? '<button type="button" class="chat-load-older" data-load-older-chat>Load older messages</button>'
@@ -375,6 +379,8 @@ function renderConnectedChat(list, chat, { preserveComposer, preserveHistoryAnch
         if (avatar) avatar.src = chat.avatar;
         const name = list.querySelector('.chat-header-copy strong');
         if (name) name.textContent = chat.user;
+        history.classList.toggle('chat-history-custom', Boolean(wallpaper));
+        history.style.backgroundImage = wallpaper ? `url("${wallpaper}")` : '';
         history.innerHTML = markup;
         if (preserveHistoryAnchor) history.scrollTop = previousTop + history.scrollHeight - previousHeight;
         else if (atBottom || scrollToLatest) history.scrollTop = history.scrollHeight;
@@ -392,7 +398,7 @@ function renderConnectedChat(list, chat, { preserveComposer, preserveHistoryAnch
           </button>
             ${renderConversationActions(chat, chat.cloudCanSend)}
         </header>
-        <div class="chat-history${/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(chat.wallpaper || '') ? ` chat-history-custom" style="background-image:url(${chat.wallpaper})` : ''}" aria-live="polite">${markup}</div>
+        <div class="chat-history${wallpaper ? ` chat-history-custom" style="background-image:url(${wallpaper})` : ''}" aria-live="polite">${markup}</div>
         ${chat.cloudCanSend ? renderChatComposer() : chat.cloudLoaded ? '<p class="chat-empty">Messaging requires an accepted follow between these accounts.</p>' : ''}
       </section>`;
     history = list.querySelector('.chat-history');

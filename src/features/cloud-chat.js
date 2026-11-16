@@ -88,12 +88,15 @@ export async function loadCloudChat(chat) {
     const owner = state.signedInAccountId;
     const client = await getSupabaseClient();
     const sendRevision = chat.sendRevision;
-    const [history, profile, permissions, settings, preferences] = await Promise.all([
+    const wallpaperRevision = chat.wallpaperRevision;
+    const [history, profile, permissions, settings, preferences, wallpaper, receipt] = await Promise.all([
         historyQuery(client, chat).limit(historyPageSize + 1),
         client.rpc('social_profile', { target: chat.peerId }),
         client.rpc('connected_chat_can_send', { target: chat.cloudId }),
         client.from('conversations').select('retention_hours').eq('id', chat.cloudId).maybeSingle(),
-        client.from('conversation_preferences').select('pinned,muted,calls_muted').eq('conversation_id', chat.cloudId).eq('user_id', owner).maybeSingle()
+        client.from('conversation_preferences').select('pinned,muted,calls_muted').eq('conversation_id', chat.cloudId).eq('user_id', owner).maybeSingle(),
+        client.from('conversation_preferences').select('wallpaper_version').eq('conversation_id', chat.cloudId).eq('user_id', owner).maybeSingle(),
+        client.rpc('direct_chat_read_receipt', { target: chat.cloudId })
     ]);
     if (history.error) throw history.error;
     if (profile.error) throw profile.error;
@@ -109,6 +112,20 @@ export async function loadCloudChat(chat) {
         chat.muted = preferences.data.muted;
         chat.callsMuted = preferences.data.calls_muted;
     }
+    let wallpaperChanged = false;
+    const wallpaperVersion = wallpaper.data?.wallpaper_version;
+    if (wallpaperVersion && wallpaperVersion !== chat.wallpaperVersion && wallpaperRevision === chat.wallpaperRevision) {
+        const { data } = await client.from('conversation_preferences').select('wallpaper_jpeg,wallpaper_version')
+            .eq('conversation_id', chat.cloudId).eq('user_id', owner).maybeSingle();
+        if (owner !== state.signedInAccountId) return false;
+        if (data?.wallpaper_version && wallpaperRevision === chat.wallpaperRevision) {
+            wallpaperChanged = chat.wallpaper !== data.wallpaper_jpeg;
+            chat.wallpaper = data.wallpaper_jpeg;
+            chat.wallpaperVersion = data.wallpaper_version;
+        }
+    }
+    const receiptChanged = !receipt.error && chat.peerSeenAt !== receipt.data;
+    if (!receipt.error) chat.peerSeenAt = receipt.data;
     const previous = chat.messages;
     const canSend = Boolean(permissions.error ? profile.data?.mutual : permissions.data) && !state.blockedHandles.has(chat.handle);
     const page = history.data.slice(0, historyPageSize);
@@ -140,7 +157,7 @@ export async function loadCloudChat(chat) {
     if (changed) chat.messages = messages;
     chat.cloudHasMessages = chat.messages.length > 0;
     const latest = history.data[0];
-    if (latest && state.currentView === 'messages' && state.activeConversationHandle === chat.handle &&
+    if (latest && !document.hidden && state.currentView === 'messages' && state.activeConversationHandle === chat.handle &&
         (!chat.cloudLastReadAt || Date.parse(latest.created_at) > Date.parse(chat.cloudLastReadAt))) {
         const { error } = await client.rpc('mark_direct_chat_read', { target: chat.cloudId, seen_at: latest.created_at });
         if (!error) {
@@ -148,7 +165,7 @@ export async function loadCloudChat(chat) {
             chat.unread = false;
         }
     }
-    return changed || sendChanged;
+    return changed || sendChanged || wallpaperChanged || receiptChanged;
 }
 
 export async function loadOlderCloudMessages(chat) {
@@ -251,6 +268,19 @@ export async function muteConnectedCalls(chat, muted) {
     }, { onConflict: 'conversation_id,user_id' });
     if (error) throw error;
     chat.callsMuted = muted;
+}
+
+export async function setCloudChatWallpaper(chat, image) {
+    const owner = state.signedInAccountId;
+    const client = await getSupabaseClient();
+    const { data, error } = await client.from('conversation_preferences').upsert({
+        conversation_id: chat.cloudId, user_id: owner, wallpaper_jpeg: image
+    }, { onConflict: 'conversation_id,user_id' }).select('wallpaper_version').single();
+    if (error) throw error;
+    if (owner !== state.signedInAccountId) return false;
+    chat.wallpaperRevision = (chat.wallpaperRevision || 0) + 1;
+    chat.wallpaperVersion = data.wallpaper_version;
+    return true;
 }
 
 export async function updateCloudChatTimer(chat, enabled) {

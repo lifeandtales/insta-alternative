@@ -1,5 +1,7 @@
 import { accountStorageKey } from '../storage/browser-storage.js';
 import { persistSession } from '../storage/local-session.js';
+import { setCloudChatWallpaper } from './cloud-chat.js';
+import { state } from '../core/state.js';
 import { showShareFeedback } from '../components/feedback.js';
 
 let editing;
@@ -15,7 +17,7 @@ export function openChatWallpaper(conversation) {
     if (!history) return;
     release();
     editing = {
-        conversation, history,
+        conversation,
         ratio: history.clientWidth / Math.max(1, history.clientHeight),
         x: .5, y: .5, zoom: 1,
     };
@@ -47,20 +49,34 @@ function paint(session, frame, image) {
     image.style.top = `${-100 * crop.y / crop.height}%`;
 }
 
-function applyWallpaper(session, url) {
-    if (!session.history.isConnected) return;
-    if (url) session.conversation.wallpaper = url;
-    else delete session.conversation.wallpaper;
-    session.history.style.backgroundImage = url ? `url("${url}")` : '';
-    session.history.classList.toggle('chat-history-custom', Boolean(url));
-    dialog().close();
-    if (session.conversation.cloudId) {
+async function applyWallpaper(session, url) {
+    const chat = session.conversation;
+    const panel = dialog();
+    if (session.saving) return;
+    if (chat.cloudId) {
+        session.saving = true;
+        panel.querySelector('[role="status"]').textContent = 'Saving wallpaper…';
         try {
-            const key = accountStorageKey('insta-chat-wallpaper:' + session.conversation.cloudId);
-            if (url) localStorage.setItem(key, url);
-            else localStorage.removeItem(key);
-        } catch { showShareFeedback('The wallpaper could not be saved on this device.'); }
-    } else persistSession().catch(() => showShareFeedback('The wallpaper could not be saved on this device.'));
+            if (!await setCloudChatWallpaper(chat, url)) return;
+        } catch {
+            if (editing === session) panel.querySelector('[role="status"]').textContent = 'Could not sync wallpaper. Try again.';
+            return;
+        } finally {
+            session.saving = false;
+        }
+        try { localStorage.removeItem(accountStorageKey('insta-chat-wallpaper:' + chat.cloudId)); } catch {}
+    }
+    if (url) chat.wallpaper = url;
+    else delete chat.wallpaper;
+    if (state.currentView === 'messages' && state.activeConversationHandle === chat.handle) {
+        const history = document.querySelector('.chat-history');
+        if (history) {
+            history.style.backgroundImage = url ? `url("${url}")` : '';
+            history.classList.toggle('chat-history-custom', Boolean(url));
+        }
+    }
+    if (editing === session) panel.close();
+    if (!chat.cloudId) persistSession().catch(() => showShareFeedback('The wallpaper could not be saved on this device.'));
 }
 
 export function registerChatWallpaperEvents() {
@@ -81,7 +97,7 @@ export function registerChatWallpaperEvents() {
     });
     panel.addEventListener('click', event => {
         if (event.target === panel || event.target.closest('[data-wallpaper-close]')) panel.close();
-        if (!editing) return;
+        if (!editing || editing.saving) return;
         if (event.target.closest('[data-wallpaper-pick]')) picker.click();
         if (event.target.closest('[data-wallpaper-reset]')) applyWallpaper(editing, '');
         if (event.target.closest('[data-wallpaper-save]') && !crop.hidden) {

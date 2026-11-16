@@ -911,3 +911,23 @@
 .direct-call-dialog video[data-call-local] { width: 28%; max-height: 14dvh; margin: 8px 0 8px auto; }
 .direct-call-dialog [hidden] { display: none; }
 .direct-call-dialog .panel-actions { flex-wrap: wrap; }
+
+.chat-window,
+.chat-wallpaper-dialog {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.chat-window :is(input, textarea) {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.chat-read-receipt {
+  display: block;
+  margin-top: 2px;
+  text-align: right;
+  font-size: .7rem;
+}
