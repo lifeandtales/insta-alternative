@@ -119,3 +119,21 @@ export async function loadCloudFollowing() {
     if (error) throw error;
     if (state.signedInAccountId === owner) state.cloudFollowingIds = new Set(data.map(row => row.followed_id));
 }
+
+export async function setCloudBlock(handle, blocked) {
+    const owner = state.signedInAccountId;
+    if (!owner) return;
+    const key = 'insta-cloud-block:' + owner + ':' + handle;
+    const peer = cloudPerson(handle)?.id || localStorage.getItem(key);
+    if (!peer) return;
+    const client = await getSupabaseClient();
+    const table = client.from('account_blocks');
+    const result = blocked
+        ? await table.upsert({ blocker_id: owner, blocked_id: peer }, { ignoreDuplicates: true })
+        : await table.delete().eq('blocker_id', owner).eq('blocked_id', peer);
+    if (result.error) throw result.error;
+    try {
+        if (blocked) localStorage.setItem(key, peer);
+        else localStorage.removeItem(key);
+    } catch {}
+}

@@ -1,5 +1,6 @@
-import { findMessageRecipients, hideCloudMessage, loadCloudChat, loadOlderCloudMessages, openCloudChat, sendCloudText,
-    setCloudChatPreference, setCloudMessageReaction } from './cloud-chat.js';
+import { startInAppCall } from './in-app-calls.js';
+import { findMessageRecipients, hideCloudMessage, hideCloudMessages, loadCloudChat, loadOlderCloudMessages, muteConnectedCalls, openCloudChat, sendCloudMedia, sendCloudText,
+    setCloudChatPreference, setCloudMessageReaction, updateCloudChatTimer } from './cloud-chat.js';
 import { TEMPORARY_ATTACHMENT_BYTES, expireChatAttachments } from './chat-attachment-expiry.js';
 import { openChatWallpaper, registerChatWallpaperEvents } from './chat-wallpaper.js';
 import { openGroupPhotoPicker, openGroupPhotoViewer, registerGroupPhotoEvents } from './group-photo.js';
@@ -367,6 +368,20 @@ export function refreshChatAttachmentExpiry() {
     }
     if (Number.isFinite(nextExpiry)) {
         expiryTimer = window.setTimeout(refreshChatAttachmentExpiry, Math.min(2_147_483_647, Math.max(1, nextExpiry - Date.now())));
+    }
+}
+
+async function sendConnectedMedia(chat, message, button, onSent) {
+    if (button.disabled) return;
+    button.disabled = true;
+    try {
+        await sendCloudMedia(chat, message);
+        onSent();
+        if (activeConversation() === chat) renderMessages({ preserveComposer: true, scrollToLatest: true });
+    } catch (error) {
+        showShareFeedback(error?.message?.includes('50 MB') ? error.message : 'Could not send the message. Try again.');
+    } finally {
+        button.disabled = false;
     }
 }
 
@@ -923,8 +938,28 @@ export function handleMessageClick(event) {
         const chat = activeConversation();
         if (!chat || state.currentView !== 'messages') return true;
         switch (mute.dataset.chatMute) {
-            case 'messages': chat.muted = !chat.muted; break;
-            case 'calls': chat.callsMuted = !chat.callsMuted; break;
+            case 'messages':
+                if (chat.cloudId) {
+                    mute.disabled = true;
+                    void setCloudChatPreference(chat, 'mute', !chat.muted).then(() => {
+                        if (activeConversation() === chat) openChatMuteOptions(chat);
+                    }).catch(() => showShareFeedback('Could not update mute.'))
+                        .finally(() => { mute.disabled = false; });
+                    return true;
+                }
+                chat.muted = !chat.muted;
+                break;
+            case 'calls':
+                if (chat.cloudId) {
+                    mute.disabled = true;
+                    void muteConnectedCalls(chat, !chat.callsMuted).then(() => {
+                        if (activeConversation() === chat) openChatMuteOptions(chat);
+                    }).catch(() => showShareFeedback('Could not update call mute.'))
+                        .finally(() => { mute.disabled = false; });
+                    return true;
+                }
+                chat.callsMuted = !chat.callsMuted;
+                break;
             case 'story':
                 if (chat.isGroup) return true;
                 if (state.mutedStoryHandles.has(chat.handle)) state.mutedStoryHandles.delete(chat.handle);
@@ -1103,7 +1138,7 @@ export function handleMessageClick(event) {
         const chat = activeConversation();
         if (chat && !chat.isGroup) {
             closeChatOptions();
-            openReportPanel({ id: chat.handle }, 'profile');
+            openReportPanel({ id: chat.peerId || chat.handle, cloud: Boolean(chat.cloudId) }, 'profile');
         }
         return true;
     }
@@ -1111,6 +1146,13 @@ export function handleMessageClick(event) {
     if (option) {
         const conversation = activeConversation(); if (!conversation) return true;
         const action = option.dataset.chatOption;
+        if (action === 'pin' && conversation.cloudId) {
+            closeChatOptions();
+            void setCloudChatPreference(conversation, 'pin', !conversation.pinned)
+                .then(() => { if (activeConversation() === conversation) renderMessages(); })
+                .catch(() => showShareFeedback('Could not update pin.'));
+            return true;
+        }
         if (action === 'pin') conversation.pinned = !conversation.pinned;
         if (action === 'mute' || action === 'wallpaper' || action === 'delete' || action === 'timer') {
             closeChatOptions();
@@ -1145,6 +1187,19 @@ export function handleMessageClick(event) {
         if (!chat || !history || (chat.isGroup && !isJoinedGroup(chat))) return true;
         const ids = [...history.querySelectorAll('[data-select-chat-message][aria-pressed="true"]')]
             .map(button => button.dataset.selectChatMessage);
+        if (chat.cloudId) {
+            if (deleteSelection.disabled) return true;
+            deleteSelection.disabled = true;
+            const deletion = deleteSelection.dataset.confirmMessageDeletion === 'clear'
+                ? setCloudChatPreference(chat, 'clear') : hideCloudMessages(chat, ids);
+            void deletion.then(() => {
+                if (activeConversation() !== chat) return;
+                closeMessageDeletion();
+                renderMessages({ preserveComposer: true });
+            }).catch(() => showShareFeedback('Could not delete messages for you.'))
+                .finally(() => { deleteSelection.disabled = false; });
+            return true;
+        }
         const selectedIds = new Set(ids);
         const deleted = deleteSelection.dataset.confirmMessageDeletion === 'clear'
             ? clearConversationForViewer(chat)
@@ -1266,6 +1321,17 @@ export function handleMessageClick(event) {
     if (event.target.closest('[data-attachment-send]')) {
         if (!pendingAttachment) return true;
         const { conversation, ...message } = pendingAttachment;
+        if (conversation.cloudId) {
+            const button = event.target.closest('[data-attachment-send]');
+            void sendConnectedMedia(conversation, message, button, () => {
+                URL.revokeObjectURL(message.media);
+                if (pendingAttachment?.media === message.media) {
+                    pendingAttachment = null;
+                    if (button.isConnected) closeHomePanel();
+                }
+            });
+            return true;
+        }
         const sent = saveMessage(conversation, { ...message, from: 'me' });
         pendingAttachment = null;
         if (!sent) URL.revokeObjectURL(message.media);
@@ -1276,6 +1342,11 @@ export function handleMessageClick(event) {
     const call = event.target.closest('[data-chat-call]');
     if (call) {
         const conversation = activeConversation(); if (!canSendToConversation(conversation)) return true;
+        if (conversation.cloudId) {
+            closeChatOptions();
+            void startInAppCall(conversation, call.dataset.chatCall);
+            return true;
+        }
         showHomePanel(`${call.dataset.chatCall === 'video' ? 'Video' : 'Audio'} call preview`, `<div class="call-preview"><img src="${escapeHtml(conversationAvatar(conversation))}" alt="" /><h3>${escapeHtml(conversation.user)}</h3><p>Preview only. Nobody is being called.</p><p>Connected calls will be available after realtime calling is added.</p><div class="panel-actions"><button type="button" data-call-toggle aria-pressed="false">Microphone on</button>${call.dataset.chatCall === 'video' ? '<button type="button" data-call-toggle aria-pressed="false">Camera on</button>' : ''}<button type="button" data-call-end>End preview</button></div></div>`); return true;
     }
     const callToggle = event.target.closest('[data-call-toggle]');
@@ -1377,6 +1448,17 @@ export function registerMessageFormEvents() {
         if (form === voiceComposer) {
             if (voiceDraft && voiceDraft.conversation === conversation) {
                 const { conversation: target, ...message } = voiceDraft;
+                if (target.cloudId) {
+                    const send = form.querySelector('.chat-voice-composer-row .chat-send-button');
+                    void sendConnectedMedia(target, message, send, () => {
+                        URL.revokeObjectURL(message.media);
+                        if (voiceDraft?.media === message.media) {
+                            voiceDraft = null;
+                            resetVoiceComposer();
+                        }
+                    });
+                    return;
+                }
                 if (saveMessage(target, { ...message, from: 'me' }, { preserveComposer: true })) {
                     voiceDraft = null;
                     resetVoiceComposer();
@@ -1414,6 +1496,10 @@ export function registerMessageFormEvents() {
         const file = event.target.files?.[0];
         event.target.value = '';
         if (!file || !canSendToConversation(conversation)) return;
+        if (conversation.cloudId && file.size > 50000000) {
+            showShareFeedback('Attachments must be no larger than 50 MB.');
+            return;
+        }
         const mediaKind = event.target.matches('.chat-file-input') ? 'file'
             : file.type.startsWith('video/') ? 'video'
                 : file.type.startsWith('image/') ? 'photo' : null;
@@ -1443,6 +1529,15 @@ export function registerMessageFormEvents() {
             const chat = activeConversation();
             if (!chat || chat.handle !== form.dataset.handle || chat.isGroup) return;
             const enabled = form.elements.retention.value === '24-hours';
+            if (chat.cloudId) {
+                void updateCloudChatTimer(chat, enabled).then(() => {
+                    if (activeConversation() === chat) {
+                        closeHomePanel();
+                        renderMessages({ preserveComposer: true });
+                    }
+                }).catch(() => showShareFeedback('Could not update the chat timer.'));
+                return;
+            }
             if (!enabled && chat.chatTimerEnabled) refreshChatAttachmentExpiry();
             chat.chatTimerEnabled = enabled;
             closeHomePanel();
@@ -1462,7 +1557,12 @@ export function registerMessageFormEvents() {
             const message = form.matches('.chat-share-contact')
                 ? { type: 'contact', contactName: form.elements.contactName.value, phone: form.elements.phone.value }
                 : { type: 'location', place: form.elements.place.value.trim() };
-            if (Object.values(message).every(Boolean) && saveMessage(conversation, { ...message, from: 'me' })) closeHomePanel();
+            if (!Object.values(message).every(Boolean)) return;
+            if (conversation.cloudId) {
+                void sendConnectedMedia(conversation, message, form.querySelector('button[type="submit"]'), () => {
+                    if (form.isConnected) closeHomePanel();
+                });
+            } else if (saveMessage(conversation, { ...message, from: 'me' })) closeHomePanel();
             return;
         }
         if (form.matches('.add-group-members-form')) {

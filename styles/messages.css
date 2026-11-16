@@ -895,3 +895,19 @@
   line-height: 1;
 }
 .message-recipient-results { max-height: min(52vh, 24rem); overflow-y: auto; }
+
+.direct-call-dialog {
+  width: min(92vw, 440px);
+  max-height: 90dvh;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  color: var(--text);
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+.direct-call-dialog::backdrop { background: rgb(28 19 45 / 54%); }
+.direct-call-dialog video { display: block; width: 100%; max-height: 42dvh; background: #161221; border-radius: 12px; }
+.direct-call-dialog video[data-call-local] { width: 28%; max-height: 14dvh; margin: 8px 0 8px auto; }
+.direct-call-dialog [hidden] { display: none; }
+.direct-call-dialog .panel-actions { flex-wrap: wrap; }

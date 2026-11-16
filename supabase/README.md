@@ -84,3 +84,26 @@ avatars are restricted to their owner and accepted followers. Direct text
 sending requires mutual following. A chat appears in the recipient's inbox
 after the first message. Reels reads published public video rows from
 `media_content`; older device-only media and chats are not uploaded.
+
+## Activate in-app calling
+
+1. In Supabase SQL Editor, run the `20261116000700_in_app_calls.sql` migration after the Connected Chat Controls migration.
+2. Install the new Android APK or serve the new web build over HTTPS. Open Insta Alternative on both devices, sign in with different connected accounts, open the chat, and grant microphone or camera access when prompted.
+3. Call from the upper-right Voice or Video button. On the other device choose **Accept**. Verify that both devices can hear each other, then repeat with video and test **Decline** and **End call**.
+
+## TURN relay
+
+The default STUN server supports direct media connections when both networks permit them. For networks that require relaying, configure a TURN service that supports shared-secret (TURN REST) credentials. Set these values as Supabase Edge Function secrets:
+
+- `TURN_URLS` with the provider's comma-separated TURN URLs
+- `TURN_SHARED_SECRET` with the provider's shared secret
+
+From the linked Supabase project root, deploy the `call-ice` Edge Function.
+
+```sh
+supabase functions deploy call-ice --no-verify-jwt
+```
+
+The function validates the caller's Supabase access token before issuing short-lived credentials. Keep the shared secret in the Edge Function environment.
+
+Calls are scoped to an open app. Android background and lock-screen ringing will need the native push setup separately. Connected chat attachments use the existing 50 MB Storage bucket limit.

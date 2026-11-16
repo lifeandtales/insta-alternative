@@ -7,7 +7,7 @@ export function conversationMembers(conversation) {
 }
 
 export function canSendToConversation(conversation) {
-    if (!conversation || !mayInteract()) return false;
+    if (!conversation || !mayInteract() || (conversation.cloudId && conversation.cloudCanSend === false)) return false;
     if (conversation.isGroup && (!(conversation.members || []).includes(currentUser.handle) || conversation.membershipStatus === 'pending')) return false;
     return !conversationMembers(conversation).some(handle => state.blockedHandles.has(handle));
 }

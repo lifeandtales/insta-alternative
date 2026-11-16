@@ -171,7 +171,85 @@ export function renderMessages({ preserveComposer = false, preserveHistoryAnchor
     const pending = conversation.membershipStatus === 'pending';
     const messages = visibleConversationMessages(conversation);
     const messagesById = new Map(messages.map(message => [message.id, message]));
-    const messageMarkup = messages.map((message) => {
+    const messageMarkup = messages.map(message => renderConversationMessage(message, conversation, messagesById))
+    .map((markup, index) => {
+        const message = messages[index];
+        if (message.id == null) return markup;
+        const reaction = message.reactionsBy?.[currentUser.handle] ?? (message.likedBy?.includes(currentUser.handle) ? '❤️' : '');
+        return markup.replace('<article ', `<article data-reactable-message="${escapeHtml(String(message.id))}" `)
+            .replace('</article>', `<span class="chat-message-reaction" role="status"${reaction ? '' : ' hidden'}>${escapeHtml(reaction)}</span></article>`);
+    }).join("");
+    if (preserveComposer) {
+        const history = list.querySelector('.chat-history');
+        if (history) {
+            history.innerHTML = messageMarkup;
+            history.scrollTop = history.scrollHeight;
+            return;
+        }
+    }
+    const identity = `
+        <img src="${escapeHtml(conversationAvatar(conversation))}" alt="" />
+        <span class="chat-header-copy"><strong>${escapeHtml(conversation.user)}</strong><small>${conversation.isGroup ? `${conversation.members?.length || 0} members` : escapeHtml(conversation.handle)}</small></span>`;
+    list.innerHTML = `
+    <section class="chat-window" aria-label="Chat with ${escapeHtml(conversation.user)}">
+      <header class="chat-header">
+        <button class="chat-back-button" type="button" data-chat-back aria-label="Back to messages">‹</button>
+        ${conversation.isGroup
+            ? `<div class="chat-header-identity">${identity}</div>`
+            : `<button type="button" class="chat-header-identity" data-chat-profile
+                data-profile-handle="${escapeHtml(conversation.handle)}" aria-label="Visit ${escapeHtml(conversation.user)}'s profile">${identity}</button>`}
+        ${renderConversationActions(conversation, canSend)}
+      </header>
+      <div class="chat-history${/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(conversation.wallpaper || '') ? ` chat-history-custom" style="background-image:url(${conversation.wallpaper})` : ''}" aria-live="polite">
+        ${canSend ? '' : `<p class="chat-empty">${conversation.membershipStatus === 'pending' ? 'Accept this group invitation before viewing its history.' : state.verificationStatus !== 'approved' ? 'Messaging is unavailable while verification is pending.' : 'Messaging is paused while this account is blocked.'}</p>`}
+        ${pending ? `<div class="group-invitation-actions"><button type="button" data-group-invite="accept">Accept invitation</button><button type="button" data-group-invite="decline">Decline</button></div>` : messageMarkup || '<p class="chat-empty">Start a conversation with a message or shared post.</p>'}
+      </div>
+      ${canSend ? renderChatComposer() : ''}
+    </section>
+  `;
+    const history = list.querySelector(".chat-history");
+    history.scrollTop = history.scrollHeight;
+}
+
+function renderConversationActions(conversation, canSend) {
+    return `
+        <button class="chat-call-button" type="button" data-chat-call="voice" aria-label="Voice call" title="Voice call" ${canSend ? '' : 'disabled'}><svg viewBox="0 0 24 24" width="23" height="23" fill="currentColor" aria-hidden="true"><path d="M7.1 2.8H4.5A1.7 1.7 0 0 0 2.8 4.6c.5 8.8 7.8 16.1 16.6 16.6a1.7 1.7 0 0 0 1.8-1.7v-2.6l-5.4-2.3-2 2c-2.9-1.1-5.3-3.5-6.4-6.4l2-2z"/></svg></button>
+        <button class="chat-call-button" type="button" data-chat-call="video" aria-label="Video call" title="Video call" ${canSend ? '' : 'disabled'}><svg viewBox="0 0 24 24" width="23" height="23" fill="currentColor" aria-hidden="true"><rect x="2" y="5" width="14" height="14" rx="3.5"/><path d="m17 10 4.5-2.5v9L17 14z"/></svg></button>
+        <div class="chat-options-wrap">
+          <button class="chat-options-button" type="button" data-chat-options aria-label="Chat options" aria-expanded="false">•••</button>
+          <div class="chat-options-menu" role="menu" hidden>
+            <button type="button" role="menuitem" data-chat-option="pin">${conversation.pinned ? "Unpin chat" : "Pin chat"}</button>
+            <button type="button" role="menuitem" data-chat-option="mute">Mute</button>
+            <button type="button" role="menuitem" data-chat-option="wallpaper">Change chat wallpaper</button>
+            ${!conversation.isGroup ? '<button type="button" role="menuitem" data-chat-option="timer">Chat timer</button>' : ''}
+            ${!conversation.isGroup || isJoinedGroup(conversation) ? '<button type="button" role="menuitem" data-chat-option="delete">Delete chat</button>' : ''}
+            ${conversation.isGroup ? '' : `<button type="button" role="menuitem" data-chat-profile data-profile-handle="${escapeHtml(conversation.handle)}">View profile</button>`}
+            ${isJoinedGroup(conversation) ? '<button type="button" role="menuitem" data-chat-option="group-profile">View group profile</button><button type="button" role="menuitem" data-chat-option="leave-group">Leave group</button>' : ''}
+            ${conversation.isGroup && conversation.admins?.includes(currentUser.handle) ? '<button type="button" role="menuitem" data-chat-option="manage-group">Manage group</button>' : ''}
+            ${conversation.isGroup ? '' : `<div class="chat-more-wrap">
+              <button class="chat-more-toggle" type="button" role="menuitem" data-chat-more aria-haspopup="menu" aria-expanded="false" aria-controls="chat-more-menu">More <span aria-hidden="true">›</span></button>
+              <div class="chat-more-menu" id="chat-more-menu" role="menu" aria-label="More chat options" hidden>
+                <button type="button" role="menuitem" data-chat-report>Report</button>
+                <button type="button" role="menuitem" data-account-block="${escapeHtml(conversation.handle)}" ${state.blockedHandles.has(conversation.handle) ? 'disabled' : ''}>${state.blockedHandles.has(conversation.handle) ? 'Blocked' : 'Block'}</button>
+              </div>
+            </div>`}
+          </div>
+        </div>`;
+}
+
+function renderChatComposer() {
+    return `<form class="chat-composer">
+        <button class="chat-attach-button" type="button" data-chat-attach aria-label="More attachment options">＋</button>
+        <button class="chat-attach-button" type="button" data-chat-gallery aria-label="Attach a photo or video"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 17H3V5a2 2 0 0 1 2-2h12v2"/><g transform="translate(3 3) scale(.85)"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8" cy="9" r="1.5"/><path d="m4 17 5-5 4 3 3-5 4 6"/></g></svg></button>
+        <input class="chat-gallery-input" type="file" accept="image/*,video/*" hidden />
+        <input class="chat-file-input" type="file" hidden />
+        <button class="chat-attach-button" type="button" data-chat-voice aria-label="Record a voice message"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3" fill="currentColor" stroke="none"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5m-3 0h6"/></svg></button>
+        <input name="message" type="text" maxlength="1000" placeholder="Message..." aria-label="Message" autocomplete="off" enterkeyhint="send" />
+        <button class="chat-send-button" type="submit">Send</button>
+      </form>`;
+}
+
+function renderConversationMessage(message, conversation, messagesById) {
         if (message.type === 'story-mention') {
             const story = state.stories.find(item => item.id === message.storyId && item.handle === message.actor);
             const incoming = message.recipient === currentUser.handle && message.from !== 'me';
@@ -248,10 +326,12 @@ export function renderMessages({ preserveComposer = false, preserveHistoryAnchor
             const fileName = escapeHtml(message.fileName || 'Attachment');
             const expired = isExpiredAttachment(message);
             const expiresAt = Number.isFinite(message.expiresAt) ? message.expiresAt : null;
-            const download = message.media?.startsWith('blob:')
+            const download = (message.media?.startsWith('blob:') || (conversation.cloudId && message.media))
                 ? `<a class="${message.mediaKind === 'file' ? 'chat-share-card' : 'chat-file-download'}" href="${escapeHtml(message.media)}" download="${fileName}" data-attachment-expires="${expiresAt ?? ''}">${message.mediaKind === 'file' ? `<small>File · Download</small><strong>${fileName}</strong>` : 'Download'}</a>` : '';
             let content;
-            if (expired) {
+            if (!message.media && !expired) {
+                content = `<div class="chat-share-card"><strong>${fileName}</strong><small>Attachment unavailable.</small></div>`;
+            } else if (expired) {
                 content = `<div class="chat-share-card"><strong>${fileName}</strong><small>Expired · Ask the sender to resend.</small></div>`;
             } else {
                 const media = message.mediaKind === 'video'
@@ -272,83 +352,17 @@ export function renderMessages({ preserveComposer = false, preserveHistoryAnchor
         <time>${escapeHtml(formatConversationTime(message.sentAt))}</time>
       </article>
     `;
-    }).map((markup, index) => {
-        const message = messages[index];
-        if (message.id == null) return markup;
-        const reaction = message.reactionsBy?.[currentUser.handle] ?? (message.likedBy?.includes(currentUser.handle) ? '❤️' : '');
-        return markup.replace('<article ', `<article data-reactable-message="${escapeHtml(String(message.id))}" `)
-            .replace('</article>', `<span class="chat-message-reaction" role="status"${reaction ? '' : ' hidden'}>${escapeHtml(reaction)}</span></article>`);
-    }).join("");
-    if (preserveComposer) {
-        const history = list.querySelector('.chat-history');
-        if (history) {
-            history.innerHTML = messageMarkup;
-            history.scrollTop = history.scrollHeight;
-            return;
-        }
-    }
-    const identity = `
-        <img src="${escapeHtml(conversationAvatar(conversation))}" alt="" />
-        <span class="chat-header-copy"><strong>${escapeHtml(conversation.user)}</strong><small>${conversation.isGroup ? `${conversation.members?.length || 0} members` : escapeHtml(conversation.handle)}</small></span>`;
-    list.innerHTML = `
-    <section class="chat-window" aria-label="Chat with ${escapeHtml(conversation.user)}">
-      <header class="chat-header">
-        <button class="chat-back-button" type="button" data-chat-back aria-label="Back to messages">‹</button>
-        ${conversation.isGroup
-            ? `<div class="chat-header-identity">${identity}</div>`
-            : `<button type="button" class="chat-header-identity" data-chat-profile
-                data-profile-handle="${escapeHtml(conversation.handle)}" aria-label="Visit ${escapeHtml(conversation.user)}'s profile">${identity}</button>`}
-        <button class="chat-call-button" type="button" data-chat-call="voice" aria-label="Open voice call preview" title="Voice call" ${canSend ? '' : 'disabled'}><svg viewBox="0 0 24 24" width="23" height="23" fill="currentColor" aria-hidden="true"><path d="M7.1 2.8H4.5A1.7 1.7 0 0 0 2.8 4.6c.5 8.8 7.8 16.1 16.6 16.6a1.7 1.7 0 0 0 1.8-1.7v-2.6l-5.4-2.3-2 2c-2.9-1.1-5.3-3.5-6.4-6.4l2-2z"/></svg></button>
-        <button class="chat-call-button" type="button" data-chat-call="video" aria-label="Open video call preview" title="Video call" ${canSend ? '' : 'disabled'}><svg viewBox="0 0 24 24" width="23" height="23" fill="currentColor" aria-hidden="true"><rect x="2" y="5" width="14" height="14" rx="3.5"/><path d="m17 10 4.5-2.5v9L17 14z"/></svg></button>
-        <div class="chat-options-wrap">
-          <button class="chat-options-button" type="button" data-chat-options aria-label="Chat options" aria-expanded="false">•••</button>
-          <div class="chat-options-menu" role="menu" hidden>
-            <button type="button" role="menuitem" data-chat-option="pin">${conversation.pinned ? "Unpin chat" : "Pin chat"}</button>
-            <button type="button" role="menuitem" data-chat-option="mute">Mute</button>
-            <button type="button" role="menuitem" data-chat-option="wallpaper">Change chat wallpaper</button>
-            ${!conversation.isGroup ? '<button type="button" role="menuitem" data-chat-option="timer">Chat timer</button>' : ''}
-            ${!conversation.isGroup || isJoinedGroup(conversation) ? '<button type="button" role="menuitem" data-chat-option="delete">Delete chat</button>' : ''}
-            ${conversation.isGroup ? '' : `<button type="button" role="menuitem" data-chat-profile data-profile-handle="${escapeHtml(conversation.handle)}">View profile</button>`}
-            ${isJoinedGroup(conversation) ? '<button type="button" role="menuitem" data-chat-option="group-profile">View group profile</button><button type="button" role="menuitem" data-chat-option="leave-group">Leave group</button>' : ''}
-            ${conversation.isGroup && conversation.admins?.includes(currentUser.handle) ? '<button type="button" role="menuitem" data-chat-option="manage-group">Manage group</button>' : ''}
-            ${conversation.isGroup ? '' : `<div class="chat-more-wrap">
-              <button class="chat-more-toggle" type="button" role="menuitem" data-chat-more aria-haspopup="menu" aria-expanded="false" aria-controls="chat-more-menu">More <span aria-hidden="true">›</span></button>
-              <div class="chat-more-menu" id="chat-more-menu" role="menu" aria-label="More chat options" hidden>
-                <button type="button" role="menuitem" data-chat-report>Report</button>
-                <button type="button" role="menuitem" data-account-block="${escapeHtml(conversation.handle)}" ${state.blockedHandles.has(conversation.handle) ? 'disabled' : ''}>${state.blockedHandles.has(conversation.handle) ? 'Blocked' : 'Block'}</button>
-              </div>
-            </div>`}
-          </div>
-        </div>
-      </header>
-      <div class="chat-history${/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(conversation.wallpaper || '') ? ` chat-history-custom" style="background-image:url(${conversation.wallpaper})` : ''}" aria-live="polite">
-        ${canSend ? '' : `<p class="chat-empty">${conversation.membershipStatus === 'pending' ? 'Accept this group invitation before viewing its history.' : state.verificationStatus !== 'approved' ? 'Messaging is unavailable while verification is pending.' : 'Messaging is paused while this account is blocked.'}</p>`}
-        ${pending ? `<div class="group-invitation-actions"><button type="button" data-group-invite="accept">Accept invitation</button><button type="button" data-group-invite="decline">Decline</button></div>` : messageMarkup || '<p class="chat-empty">Start a conversation with a message or shared post.</p>'}
-      </div>
-      ${canSend ? `<form class="chat-composer">
-        <button class="chat-attach-button" type="button" data-chat-attach aria-label="More attachment options">＋</button>
-        <button class="chat-attach-button" type="button" data-chat-gallery aria-label="Attach a photo or video"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 17H3V5a2 2 0 0 1 2-2h12v2"/><g transform="translate(3 3) scale(.85)"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8" cy="9" r="1.5"/><path d="m4 17 5-5 4 3 3-5 4 6"/></g></svg></button>
-        <input class="chat-gallery-input" type="file" accept="image/*,video/*" hidden />
-        <input class="chat-file-input" type="file" hidden />
-        <button class="chat-attach-button" type="button" data-chat-voice aria-label="Record a voice message"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3" fill="currentColor" stroke="none"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5m-3 0h6"/></svg></button>
-        <input name="message" type="text" maxlength="1000" placeholder="Message..." aria-label="Message" autocomplete="off" enterkeyhint="send" />
-        <button class="chat-send-button" type="submit">Send</button>
-      </form>` : ''}
-    </section>
-  `;
-    const history = list.querySelector(".chat-history");
-    history.scrollTop = history.scrollHeight;
 }
 
 function renderConnectedChat(list, chat, { preserveComposer, preserveHistoryAnchor, scrollToLatest }) {
     const messages = state.blockedHandles.has(chat.handle) ? [] : chat.messages;
     const byId = new Map(messages.map(message => [message.id, message]));
-    const bubbles = messages.map(message => `
-      <article data-reactable-message="${escapeHtml(String(message.id))}" class="chat-message chat-text-message ${message.from === 'me' ? 'from-me' : 'from-them'}">
-        ${message.replyToId ? renderReplyQuote(byId.get(message.replyToId), chat) : ''}
-        <p>${escapeHtml(message.text)}</p><time>${escapeHtml(formatConversationTime(message.sentAt))}</time>
-        <span class="chat-message-reaction" role="status"${message.reactions?.length ? '' : ' hidden'}>${escapeHtml((message.reactions || []).map(reaction => reaction.emoji).join(' '))}</span>
-      </article>`).join('') || `<p class="chat-empty">${chat.cloudLoaded ? 'Start with a message.' : 'Loading messages…'}</p>`;
+    const bubbles = messages.map(message => {
+        const markup = renderConversationMessage(message, chat, byId);
+        const badges = (message.reactions || []).map(reaction => reaction.emoji).join(' ');
+        return markup.replace('<article ', `<article data-reactable-message="${escapeHtml(String(message.id))}" `)
+            .replace('</article>', `<span class="chat-message-reaction" role="status"${badges ? '' : ' hidden'}>${escapeHtml(badges)}</span></article>`);
+    }).join('') || `<p class="chat-empty">${chat.cloudLoaded ? 'Start with a message.' : 'Loading messages…'}</p>`;
     const markup = (chat.cloudHasOlder && messages.length
         ? '<button type="button" class="chat-load-older" data-load-older-chat>Load older messages</button>'
         : '') + bubbles;
@@ -376,12 +390,10 @@ function renderConnectedChat(list, chat, { preserveComposer, preserveHistoryAnch
               <strong>${escapeHtml(chat.user)}</strong><small>${escapeHtml(chat.handle)}</small>
             </span>
           </button>
+            ${renderConversationActions(chat, chat.cloudCanSend)}
         </header>
-        <div class="chat-history" aria-live="polite">${markup}</div>
-        ${chat.cloudCanSend ? `<form class="chat-composer">
-          <input name="message" type="text" maxlength="1000" placeholder="Message..." aria-label="Message" autocomplete="off" enterkeyhint="send" />
-          <button class="chat-send-button" type="submit">Send</button>
-        </form>` : chat.cloudLoaded ? '<p class="chat-empty">Messaging requires an accepted follow between these accounts.</p>' : ''}
+        <div class="chat-history${/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(chat.wallpaper || '') ? ` chat-history-custom" style="background-image:url(${chat.wallpaper})` : ''}" aria-live="polite">${markup}</div>
+        ${chat.cloudCanSend ? renderChatComposer() : chat.cloudLoaded ? '<p class="chat-empty">Messaging requires an accepted follow between these accounts.</p>' : ''}
       </section>`;
     history = list.querySelector('.chat-history');
     history.scrollTop = history.scrollHeight;

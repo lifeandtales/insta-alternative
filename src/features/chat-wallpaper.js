@@ -1,3 +1,4 @@
+import { accountStorageKey } from '../storage/browser-storage.js';
 import { persistSession } from '../storage/local-session.js';
 import { showShareFeedback } from '../components/feedback.js';
 
@@ -53,7 +54,13 @@ function applyWallpaper(session, url) {
     session.history.style.backgroundImage = url ? `url("${url}")` : '';
     session.history.classList.toggle('chat-history-custom', Boolean(url));
     dialog().close();
-    persistSession().catch(() => showShareFeedback('The wallpaper could not be saved on this device.'));
+    if (session.conversation.cloudId) {
+        try {
+            const key = accountStorageKey('insta-chat-wallpaper:' + session.conversation.cloudId);
+            if (url) localStorage.setItem(key, url);
+            else localStorage.removeItem(key);
+        } catch { showShareFeedback('The wallpaper could not be saved on this device.'); }
+    } else persistSession().catch(() => showShareFeedback('The wallpaper could not be saved on this device.'));
 }
 
 export function registerChatWallpaperEvents() {

@@ -1,3 +1,4 @@
+import { registerInAppCallControls } from './src/features/in-app-calls.js';
 import { loadCloudSavedKeys, subscribeToSavedChanges } from './src/storage/cloud-saved-items.js';
 import { subscribeToSocialUpdates } from './src/features/social-updates.js';
 import { readCloudAvatar } from './src/storage/cloud-avatars.js';
@@ -299,6 +300,7 @@ registerStoryShortcutEvents();
 registerCommentEvents();
 registerKeyboardEvents();
 registerMessageFormEvents();
+registerInAppCallControls();
 registerExploreSearchEvents();
 registerCommentComposerEvents();
 registerHighlightEvents();

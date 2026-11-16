@@ -1,3 +1,4 @@
+import { getSupabaseClient } from '../storage/supabase.js';
 import { state } from '../core/state.js';
 import { currentUser } from '../data/sample-data.js';
 import { escapeHtml } from '../core/utils.js';
@@ -41,8 +42,8 @@ function renderMuted(handles, type) {
     return [...handles].map(handle => `<p>${escapeHtml(handle)} <button type="button" data-unmute="${type}" data-handle="${escapeHtml(handle)}">Unmute</button></p>`).join('') || '<p>None</p>';
 }
 export function openReportPanel(post, type) {
-    state.reportingMedia = { type, id: post.id };
-    showHomePanel(type === 'profile' ? 'Report profile' : type === 'story' ? 'Report story' : 'Report post', `<p>Choose a reason. In this local prototype, reports are saved on this device; they are not sent to a moderation service.</p><form class="local-report-form"><label>Reason<select name="reason" required><option value="">Choose a reason</option><option>Spam</option><option>Harassment</option><option>Unsafe content</option><option>Impersonation</option><option>Other</option></select></label><label>Details (optional)<textarea name="details" maxlength="500"></textarea></label><button type="submit">Save local report</button></form>`);
+    state.reportingMedia = { type, id: post.id, ...(post.cloud ? { cloud: true } : {}) };
+    showHomePanel(type === 'profile' ? 'Report profile' : type === 'story' ? 'Report story' : 'Report post', `${post.cloud ? '<p>Choose a reason to submit your report.</p>' : '<p>Choose a reason. This report is saved on this device.</p>'}<form class="local-report-form"><label>Reason<select name="reason" required><option value="">Choose a reason</option><option>Spam</option><option>Harassment</option><option>Unsafe content</option><option>Impersonation</option><option>Other</option></select></label><label>Details (optional)<textarea name="details" maxlength="500"></textarea></label><button type="submit">${post.cloud ? 'Submit report' : 'Save local report'}</button></form>`);
 }
 export function registerHomeControlEvents() {
     document.querySelector('.home-panel-close').addEventListener('click', closeHomePanel);
@@ -73,6 +74,24 @@ export function registerHomeControlEvents() {
         if (!mayInteract()) return;
         const reason = event.target.elements.reason.value;
         if (!reason) return;
+        const report = state.reportingMedia;
+        if (report?.cloud) {
+            const form = event.target;
+            const button = form.querySelector('button[type="submit"]');
+            if (button.disabled) return;
+            button.disabled = true;
+            const details = form.elements.details.value.trim();
+            void getSupabaseClient().then(client => client.from('content_reports').insert({
+                target_kind: report.type, target_ref: report.id,
+                reason: (details ? reason + ': ' + details : reason).slice(0, 500),
+            })).then(({ error }) => {
+                if (error) throw error;
+                if (form.isConnected) closeHomePanel();
+                showShareFeedback('Report submitted.');
+            }).catch(() => showShareFeedback('Could not submit the report.'))
+                .finally(() => { button.disabled = false; });
+            return;
+        }
         state.localReports = state.localReports || [];
         state.localReports.push({ ...state.reportingMedia, reason, details: event.target.elements.details.value.trim(), createdAt: Date.now() });
         persistSession().then(() => {

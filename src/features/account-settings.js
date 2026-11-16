@@ -1,3 +1,4 @@
+import { setCloudBlock } from './cloud-people.js';
 import { readCloudAvatar, saveCloudAvatar } from '../storage/cloud-avatars.js';
 import { saveSupabaseProfile, signOutAccount } from './account-auth.js';
 import { state } from '../core/state.js';
@@ -95,14 +96,20 @@ export function registerAccountSettingsEvents() {
     document.addEventListener('click', event => {
         if (event.target.closest('[data-edit-profile]')) openProfileEditor();
         const page = event.target.closest('[data-settings-page]'); if (page) openSettingsPage(page.dataset.settingsPage);
-        const block = event.target.closest('[data-account-block]');
-        if (block && setAccountBlocked(block.dataset.accountBlock, true)) {
-            saveAccountChanges();
-            if (state.currentView === 'messages') renderMessages();
-            showShareFeedback('Account blocked. Chat history is kept.');
+        const block = event.target.closest('[data-account-block], [data-account-unblock]');
+        if (block && !block.disabled && mayInteract()) {
+            const handle = block.dataset.accountBlock || block.dataset.accountUnblock;
+            const blocked = Boolean(block.dataset.accountBlock);
+            block.disabled = true;
+            void setCloudBlock(handle, blocked).then(() => {
+                if (!setAccountBlocked(handle, blocked)) return;
+                saveAccountChanges();
+                if (state.currentView === 'messages') renderMessages();
+                if (blocked) showShareFeedback('Account blocked. Chat history is kept.');
+                else openBlockedAccounts();
+            }).catch(() => showShareFeedback('Could not update this account block.'))
+                .finally(() => { block.disabled = false; });
         }
-        const unblock = event.target.closest('[data-account-unblock]');
-        if (unblock && setAccountBlocked(unblock.dataset.accountUnblock, false)) { saveAccountChanges(); openBlockedAccounts(); }
         const request = event.target.closest('[data-follow-request]');
         if (request && respondToFollowRequest(request.dataset.handle, request.dataset.followRequest === 'accept')) { saveAccountChanges(); openPrivacySettings(); }
         const remove = event.target.closest('[data-remove-follower]'); if (remove && removeFollower(remove.dataset.removeFollower)) { saveAccountChanges(); openPrivacySettings(); }
