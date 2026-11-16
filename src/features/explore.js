@@ -1,3 +1,4 @@
+import { cloudFollowLabel, cloudPerson, searchCloudPeople } from './cloud-people.js';
 import { renderMedia } from '../components/post-card.js';
 import { exploreCommunityView, exploreSearchInput, exploreSearchResults, viewHeading } from '../core/dom.js';
 import { state } from '../core/state.js';
@@ -185,8 +186,22 @@ export function renderSearchGroup(title, content) {
     return content ? `<div class="search-result-group"><p class="search-result-heading">${title}</p>${content}</div>` : "";
 }
 
+let peopleQuery;
+let peopleSearch;
+
+export function refreshExplorePeople() {
+    peopleSearch?.abort();
+    peopleQuery = null;
+    renderExploreSearchResults();
+}
+
 export function renderExploreSearchResults() {
     const rawQuery = exploreSearchInput.value.trim();
+    if (peopleQuery?.raw !== rawQuery || peopleQuery?.account !== state.signedInAccountId) {
+        peopleSearch?.abort();
+        peopleSearch = null;
+        peopleQuery = { raw: rawQuery, account: state.signedInAccountId, status: 'idle', results: [] };
+    }
     if (!rawQuery) {
         exploreSearchResults.hidden = true;
         exploreSearchResults.replaceChildren();
@@ -197,7 +212,41 @@ export function renderExploreSearchResults() {
     const isUsernameSearch = rawQuery.startsWith("@");
     const query = normalizeSearchText(rawQuery.replace(/^[@#]/, ""));
     const sections = [];
-    if (!isHashtagSearch) {
+    if (!isHashtagSearch && query && state.signedInAccountId) {
+        if (peopleQuery.status === 'idle') {
+            peopleQuery.status = 'loading';
+            const request = peopleQuery;
+            const controller = new AbortController();
+            peopleSearch = controller;
+            setTimeout(async () => {
+                if (controller.signal.aborted) return;
+                try {
+                    request.results = await searchCloudPeople(rawQuery, controller.signal);
+                    request.status = 'ready';
+                } catch {
+                    request.status = 'error';
+                }
+                if (!controller.signal.aborted && !exploreSearchResults.hidden && state.currentView === 'explore') {
+                    renderExploreSearchResults();
+                }
+            }, 220);
+        }
+        const rows = peopleQuery.results
+            .map(person => cloudPerson(person.handle) || person)
+            .filter(person => !state.blockedHandles.has(person.handle))
+            .map(person => `
+      <div class="search-result-row">
+        <button class="search-result search-result-main" type="button" role="option" data-profile-handle="${escapeHtml(person.handle)}">
+          <img src="${escapeHtml(person.avatar)}" alt="" />
+          <span><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.handle)}</small></span>
+        </button>
+        <button class="search-follow-button" type="button" data-follow-kind="account" data-follow-value="${escapeHtml(person.handle)}">
+          ${cloudFollowLabel(person)}
+        </button>
+      </div>`).join('');
+        const message = { loading: 'Searching people…', error: 'Could not search people. Change the search to retry.', ready: 'No matching people.' };
+        sections.push(renderSearchGroup('People', rows || `<p class="search-results-empty" role="status">${message[peopleQuery.status]}</p>`));
+    } else if (!isHashtagSearch) {
         const matchingAccounts = getSearchableAccounts()
             .map((account) => {
             const handle = normalizeSearchText(account.handle.replace(/^@/, ""));

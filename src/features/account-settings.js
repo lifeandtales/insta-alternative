@@ -1,4 +1,4 @@
-import { signOutAccount } from './account-auth.js';
+import { saveSupabaseProfile, signOutAccount } from './account-auth.js';
 import { state } from '../core/state.js';
 import { currentUser, posts, reels } from '../data/sample-data.js';
 import { escapeHtml } from '../core/utils.js';
@@ -10,7 +10,7 @@ import { showShareFeedback } from '../components/feedback.js';
 import { persistPreferences } from '../storage/preferences.js';
 import { persistSession } from '../storage/local-session.js';
 import { persistStoryHighlights, persistActiveStories } from '../storage/browser-storage.js';
-import { updateOwnProfile, updateOwnAvatar, setAccountPrivacy, setAccountBlocked, respondToFollowRequest, removeFollower } from './account-model.js';
+import { validateProfile, updateOwnProfile, updateOwnAvatar, setAccountPrivacy, setAccountBlocked, respondToFollowRequest, removeFollower } from './account-model.js';
 import { syncDeletionLock } from '../core/account-lock.js';
 import { refreshEntityComments } from './comments.js';
 import { renderMessages } from './messages.js';
@@ -41,7 +41,7 @@ function openProfileEditor() {
     const usernameMin = currentUsernameIsLegacy ? Math.min(8, currentUsername.length) : 8;
     const usernameMax = currentUsernameIsLegacy ? Math.max(20, currentUsername.length) : 20;
     const usernamePattern = currentUsernameIsLegacy ? '[a-zA-Z0-9._]{1,35}' : '[a-zA-Z0-9._]{8,20}';
-    showHomePanel('Edit profile', `<form class="account-profile-form"><label>Display name<input name="displayName" maxlength="100" required value="${escapeHtml(currentUser.name)}" /></label><label>Username<input name="username" minlength="${usernameMin}" maxlength="${usernameMax}" pattern="${usernamePattern}" required value="${escapeHtml(currentUsername)}" /></label><p>New usernames must contain 8–20 letters, numbers, dots or underscores; no particular character mix is required. Spaces and other whitespace are not allowed. Your current username can stay unchanged. ${5 - state.usernameChanges} of five lifetime username changes remain. A former username is held for you for one day. Reclaiming it counts as a username change. Availability is checked against local demo accounts.</p><label>Bio (optional)<textarea name="bio" rows="4">${escapeHtml(currentUser.bio || '')}</textarea></label><small class="bio-character-count">${[...(currentUser.bio || '')].length}/200 characters</small><label>Links (up to five, one per line)<textarea name="links" rows="3" placeholder="https://example.com">${escapeHtml((currentUser.links || []).join('\n'))}</textarea></label><button type="submit">Save profile</button><button type="button" data-settings-page="photo">Change profile photo</button></form>`);
+    showHomePanel('Edit profile', `<form class="account-profile-form"><label>Display name<input name="displayName" maxlength="100" required value="${escapeHtml(currentUser.name)}" /></label><label>Username<input name="username" minlength="${usernameMin}" maxlength="${usernameMax}" pattern="${usernamePattern}" required value="${escapeHtml(currentUsername)}" /></label><p>New usernames must contain 8–20 letters, numbers, dots or underscores; no particular character mix is required. Spaces and other whitespace are not allowed. Your current username can stay unchanged. ${5 - state.usernameChanges} of five lifetime username changes remain. A former username is held for you for one day. Reclaiming it counts as a username change. ${state.signedInAccountId ? "Username availability is checked when you save." : "Availability is checked against local demo accounts."}</p><label>Bio (optional)<textarea name="bio" rows="4">${escapeHtml(currentUser.bio || '')}</textarea></label><small class="bio-character-count">${[...(currentUser.bio || '')].length}/200 characters</small><label>Links (up to five, one per line)<textarea name="links" rows="3" placeholder="https://example.com">${escapeHtml((currentUser.links || []).join('\n'))}</textarea></label><button type="submit">Save profile</button><button type="button" data-settings-page="photo">Change profile photo</button></form>`);
 }
 function openPrivacySettings() {
     const owner = getAccount(currentUser.handle);
@@ -124,7 +124,20 @@ export function registerAccountSettingsEvents() {
         const form = event.target.closest('.account-photo-form'); if (form && cropImage && event.target.type === 'range') drawCrop(form.querySelector('canvas'), cropImage, form);
     });
     document.addEventListener('change', async event => {
-        if (event.target.matches('[data-private-account]')) { if (setAccountPrivacy(event.target.checked)) saveAccountChanges(); }
+        const privacy = event.target;
+        if (privacy.matches('[data-private-account]') && mayInteract()) {
+            const value = privacy.checked;
+            privacy.disabled = true;
+            try {
+                if (state.signedInAccountId) await saveSupabaseProfile(state.signedInAccountId, { is_private: value });
+                if (setAccountPrivacy(value)) saveAccountChanges();
+            } catch {
+                privacy.checked = currentUser.isPrivate;
+                showShareFeedback('Could not save account privacy. Try again.');
+            } finally {
+                privacy.disabled = false;
+            }
+        }
         if (event.target.matches('[data-group-preference]') && mayInteract()) { state.groupJoinMode = event.target.value; const owner = getAccount(currentUser.handle); if (owner) owner.groupJoinMode = state.groupJoinMode; saveAccountChanges(); }
         const form = event.target.closest('.account-photo-form'); if (!form || event.target.name !== 'photo') return;
         const file = event.target.files?.[0]; if (!file) return;
@@ -134,12 +147,39 @@ export function registerAccountSettingsEvents() {
         image.onerror = () => { URL.revokeObjectURL(url); cropImage = null; showShareFeedback('This browser cannot decode that photo. Try JPG, PNG or WebP.'); };
         image.src = url;
     });
-    document.addEventListener('submit', event => {
+    document.addEventListener('submit', async event => {
         const form = event.target;
         if (form.matches('.account-profile-form')) {
             event.preventDefault();
-            const error = updateOwnProfile({ name: form.elements.displayName.value, username: form.elements.username.value, bio: form.elements.bio.value, links: form.elements.links.value.split('\n').map(link => link.trim()).filter(Boolean) });
-            if (error) { showShareFeedback(error); return; } saveAccountChanges(); closePanel(); showShareFeedback('Profile saved on this device.');
+            const profile = {
+                name: form.elements.displayName.value,
+                username: form.elements.username.value,
+                bio: form.elements.bio.value,
+                links: form.elements.links.value.split('\n').map(link => link.trim()).filter(Boolean)
+            };
+            if (state.signedInAccountId) {
+                profile.username = profile.username.toLowerCase();
+                const validation = mayInteract() ? validateProfile(profile) : 'Profile editing is unavailable.';
+                if (validation) { showShareFeedback(validation); return; }
+                const button = form.querySelector('button[type="submit"]');
+                if (button?.disabled) return;
+                if (button) button.disabled = true;
+                try {
+                    await saveSupabaseProfile(state.signedInAccountId, {
+                        username: profile.username, display_name: profile.name.trim(), bio: profile.bio, links: profile.links
+                    });
+                } catch (error) {
+                    showShareFeedback(error.code === '23505' ? 'This username is already in use.' : 'Could not save your profile. Try again.');
+                    return;
+                } finally {
+                    if (button) button.disabled = false;
+                }
+            }
+            const error = updateOwnProfile(profile);
+            if (error) { showShareFeedback(error); return; }
+            saveAccountChanges();
+            closePanel();
+            showShareFeedback(state.signedInAccountId ? 'Profile saved.' : 'Profile saved on this device.');
         }
         if (form.matches('.account-photo-form')) {
             event.preventDefault(); if (!cropImage || !mayInteract()) { showShareFeedback('Choose a photo before saving.'); return; }

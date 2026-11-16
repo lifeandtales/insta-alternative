@@ -3,7 +3,7 @@ import { showShareFeedback } from '../components/feedback.js';
 import { exploreSearchInput, exploreSearchResults } from '../core/dom.js';
 import { setView } from '../core/navigation.js';
 import { state } from '../core/state.js';
-import { handleExploreSearchInput, renderExplore, renderExploreSearchResults } from './explore.js';
+import { handleExploreSearchInput, refreshExplorePeople, renderExplore } from './explore.js';
 import { persistJoinedCommunities } from '../storage/browser-storage.js';
 import { mayInteract } from '../core/social.js';
 import { openHashtagStories } from './stories.js';
@@ -69,7 +69,7 @@ export function handleExploreClick(event) {
 
 export function registerExploreSearchEvents() {
     exploreSearchInput.addEventListener("input", handleExploreSearchInput);
-    exploreSearchInput.addEventListener("focus", renderExploreSearchResults);
+    exploreSearchInput.addEventListener("focus", refreshExplorePeople);
     document.addEventListener("click", (event) => {
         if (!event.target.closest(".search-wrap") && !event.target.closest("[data-follow-kind]")) {
             exploreSearchResults.hidden = true;

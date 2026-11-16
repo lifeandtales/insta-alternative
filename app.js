@@ -124,7 +124,7 @@ async function loadAccountContent() {
 
 async function enterAccount(user, profile) {
     state.signedInAccountId = user.id;
-    const identity = { handle: '@' + profile.username, name: profile.display_name, bio: profile.bio || '' };
+    const identity = { handle: '@' + profile.username, name: profile.display_name, bio: profile.bio || '', isPrivate: Boolean(profile.is_private), links: profile.links || [] };
     Object.assign(currentUser, identity);
     loadAccountPreferences();
     Object.assign(currentUser, identity);

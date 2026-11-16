@@ -9,7 +9,7 @@ export function profileDetails(form) {
 }
 
 export async function ensureSupabaseProfile(client, user, details = user.user_metadata) {
-    const result = await client.from('profiles').select('id,username,display_name,bio').eq('id', user.id).maybeSingle();
+    const result = await client.from('profiles').select('id,username,display_name,bio,is_private,links').eq('id', user.id).maybeSingle();
     if (result.error) throw result.error;
     if (result.data) return result.data;
     if (!/^[a-z0-9._]{8,20}$/.test(details?.username || '') || !details?.display_name) return null;
@@ -17,9 +17,9 @@ export async function ensureSupabaseProfile(client, user, details = user.user_me
         id: user.id,
         username: details.username,
         display_name: details.display_name,
-    }).select('id,username,display_name,bio').single();
+    }).select('id,username,display_name,bio,is_private,links').single();
     if (created.error?.code === '23505') {
-        const retry = await client.from('profiles').select('id,username,display_name,bio').eq('id', user.id).maybeSingle();
+        const retry = await client.from('profiles').select('id,username,display_name,bio,is_private,links').eq('id', user.id).maybeSingle();
         if (retry.error) throw retry.error;
         return retry.data;
     }
@@ -32,4 +32,11 @@ export async function signOutAccount() {
     const { error } = await client.auth.signOut({ scope: 'local' });
     if (error) throw error;
     window.location.reload();
+}
+
+export async function saveSupabaseProfile(accountId, changes) {
+    const client = await getSupabaseClient();
+    const { error } = await client.from('profiles').update(changes)
+        .eq('id', accountId).select('id').single();
+    if (error) throw error;
 }

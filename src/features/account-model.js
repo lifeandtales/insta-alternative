@@ -5,6 +5,7 @@ import { normalizeHandle } from '../core/utils.js';
 
 export function validateProfile({ name, username, bio, links }, now = Date.now()) {
     if (!name.trim()) return 'Enter a display name.';
+    if ([...name.trim()].length > 100) return 'Display name can contain up to 100 characters.';
     const legacyCurrentUsername = username === currentUser.handle.slice(1) && /^[a-zA-Z0-9._]{1,35}$/.test(username);
     if (!/^[a-zA-Z0-9._]{8,20}$/.test(username) && !legacyCurrentUsername) return 'Use 8–20 characters: letters, numbers, dots or underscores. No spaces or required character mix.';
     if ([...bio].length > 200) return 'Bio can contain up to 200 characters.';
@@ -17,7 +18,7 @@ export function validateProfile({ name, username, bio, links }, now = Date.now()
     const ownerId = getAccount(currentUser.handle)?.id || 'local-owner';
     const changing = handle.toLowerCase() !== currentUser.handle.toLowerCase();
     if (changing && state.usernameChanges >= 5) return 'All five lifetime username changes have been used.';
-    if (state.accountDirectory.some(person => person.handle.toLowerCase() === handle.toLowerCase() && person.id !== 'local-owner')) return 'This username is already in use.';
+    if (state.accountDirectory.some(person => person.handle.toLowerCase() === handle.toLowerCase() && person.id !== ownerId && person.id !== 'local-owner')) return 'This username is already in use.';
     if (changing && state.reservedUsernames.some(item => item.handle.toLowerCase() === handle.toLowerCase() && item.expiresAt > now && (item.ownerId || 'local-owner') !== ownerId)) return 'This former username is reserved for its owner for one day.';
     return '';
 }

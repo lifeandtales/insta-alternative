@@ -1,3 +1,4 @@
+import { loadCloudFollowRequests, reviewCloudFollowRequest } from './cloud-people.js';
 import { getUnreadMessageCount } from './messages.js';
 import { captionMentions } from '../components/caption.js';
 import { openProfileMedia } from './profile.js';
@@ -249,9 +250,27 @@ export function renderNotificationsPage(){
     if (demoContentEnabled) ensureDemoStoryLike();
     updateNotificationBadge();
     const items = availableLocalNotifications();
-    document.querySelector('.notifications-content').innerHTML = items.length
+    const content = document.querySelector('.notifications-content');
+    content.innerHTML = items.length
         ? `<ul class="notification-list">${items.map(renderNotificationItem).join('')}</ul>`
         : '<div class="notification-empty"><strong>You’re all caught up.</strong><p>No notifications are available in this local preview.</p></div>';
+    if (state.signedInAccountId) {
+        const requests = document.createElement('section');
+        requests.setAttribute('aria-label', 'Follow requests');
+        requests.innerHTML = '<p role="status">Checking follow requests…</p>';
+        content.prepend(requests);
+        void loadCloudFollowRequests().then(rows => {
+            if (!requests.isConnected) return;
+            if (!rows.length) { requests.remove(); return; }
+            content.querySelector('.notification-empty')?.remove();
+            requests.innerHTML = `<h3>Follow requests</h3><ul class="notification-list">${rows.map(row =>
+                `<li class="notification-card"><div class="notification-copy"><strong>${escapeHtml(row.requester.display_name)}</strong>
+                <p>@${escapeHtml(row.requester.username)}</p>
+                <button type="button" data-cloud-request="accept" data-requester="${escapeHtml(row.follower_id)}">Accept</button>
+                <button type="button" data-cloud-request="decline" data-requester="${escapeHtml(row.follower_id)}">Decline</button></div></li>`
+            ).join('')}</ul>`;
+        }).catch(() => { requests.textContent = 'Could not load follow requests.'; });
+    }
     document.getElementById('notifications-title').focus();
     let changed=false;
     for(const notice of state.localStoryNotifications || []){
@@ -265,6 +284,20 @@ export function registerNotificationEvents() {
     const page = document.getElementById('notifications-page');
     updateNotificationBadge();
     page.addEventListener('click', event => {
+        const request = event.target.closest('[data-cloud-request]');
+        if (request) {
+            const buttons = request.closest('li').querySelectorAll('button');
+            for (const button of buttons) button.disabled = true;
+            const accept = request.dataset.cloudRequest === 'accept';
+            void reviewCloudFollowRequest(request.dataset.requester, accept).then(changed => {
+                showShareFeedback(changed ? (accept ? 'Follow request accepted.' : 'Follow request declined.') : 'This request is no longer pending.');
+                if (state.currentView === 'notifications') renderNotificationsPage();
+            }).catch(() => {
+                showShareFeedback('Could not update the follow request.');
+                for (const button of buttons) button.disabled = false;
+            });
+            return;
+        }
         const postLink=event.target.closest('[data-post-notice]');
         if(postLink){const type=postLink.dataset.noticeEntityType==='reel'?'reel':'post';const post=(type==='reel'?reels:posts).find(post=>String(post.id)===postLink.dataset.postNotice);if(post&&canViewMedia(post))openProfileMedia(type,post.id,postLink,{singleItem:true});return;}
         const storyLink = event.target.closest('[data-story-notice]');

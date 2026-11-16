@@ -1,3 +1,4 @@
+import { cloudFollowLabel, cloudPerson } from './cloud-people.js';
 import { persistSession, unexpiredDrafts } from '../storage/local-session.js';
 import { setView } from '../core/navigation.js';
 import { showShareFeedback } from '../components/feedback.js';
@@ -129,6 +130,27 @@ export function getProfileUser(handle) {
 }
 
 export function renderProfile() {
+    const person = cloudPerson(state.profileHandle);
+    if (person && state.profileHandle !== currentUser.handle) {
+        const blocked = state.blockedHandles.has(person.handle);
+        const privateProfile = person.isPrivate && person.followStatus !== 'accepted';
+        document.getElementById("profile-view").innerHTML = `
+          <div class="profile-topbar">
+            <button type="button" class="profile-back" data-profile-back aria-label="Back to previous screen">←</button>
+            <h2>${escapeHtml(person.handle)}</h2><span></span>
+          </div>
+          <header class="profile-header">
+            <img class="profile-avatar" src="${escapeHtml(person.avatar)}" alt="" />
+            <div class="profile-details">
+              <div class="profile-name-row"><h3>${escapeHtml(person.name)}</h3>
+              <button class="profile-action" type="button" data-follow-kind="account" data-follow-value="${escapeHtml(person.handle)}"
+                ${blocked ? 'disabled' : ''}>${cloudFollowLabel(person)}</button></div>
+              ${!blocked && person.bio ? `<p>${escapeHtml(person.bio)}</p>` : ''}
+            </div>
+          </header>
+          ${privateProfile ? '<p class="private-profile-note">This account is private.</p>' : ''}`;
+        return;
+    }
     const user = getProfileUser(state.profileHandle);
     const accessible = canViewAccount(state.profileHandle);
     const ownPosts = posts.filter((post) => post.handle === state.profileHandle && canViewMedia(post));
