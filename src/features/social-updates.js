@@ -1,3 +1,4 @@
+import { refreshOpenImageLikers } from './likes.js';
 import { refreshOpenCloudComments } from './comments.js';
 import { state } from '../core/state.js';
 import { refreshConnectedView } from '../core/navigation.js';
@@ -29,7 +30,7 @@ export async function subscribeToSocialUpdates(owner) {
             refreshTimer = setTimeout(() => {
                 if (state.signedInAccountId !== owner || state.currentView !== view) return;
                 if (view === 'explore') refreshVisibleExplorePeople();
-                void refreshConnectedView(view).then(refreshOpenCloudComments).catch(() => {});
+                void refreshConnectedView(view).then(() => Promise.all([refreshOpenCloudComments(), refreshOpenImageLikers()])).catch(() => {});
             }, 180);
         });
     }

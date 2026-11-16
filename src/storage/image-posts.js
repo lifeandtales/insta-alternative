@@ -73,9 +73,14 @@ export async function loadCloudImagePosts(targetId = null) {
     const author = 'author:profiles!image_posts_owner_id_fkey!inner(username,display_name,avatar_path)';
     const rows = '*, ' + author;
     const query = columns => client.from(tableName).select(columns);
-    const load = columns => query(columns).in('owner_id', scope).order('created_at', { ascending: false }).limit(100);
+    const load = (columns, withLikes = false) => {
+        const request = query(columns).in('owner_id', scope).order('created_at', { ascending: false }).limit(100);
+        return withLikes ? request.eq('viewer_like.user_id', ownerId) : request;
+    };
     const scope = targetId ? [targetId] : [ownerId, ...(state.cloudFollowingIds || [])];
-    let result = await load(rows + ', cloud_comments:image_post_comments(count)');
+    const withComments = rows + ', cloud_comments:image_post_comments(count)';
+    let result = await load(withComments + ', cloud_likes:image_post_likes(count), viewer_like:image_post_likes(user_id)', true);
+    if (result.error?.code === 'PGRST200') result = await load(withComments);
     if (result.error?.code === 'PGRST200') result = await load(rows);
     const { data, error } = result;
     if (error) throw error;
@@ -107,7 +112,7 @@ export async function loadCloudImagePosts(targetId = null) {
             coverIndex: row.cover_index, mediaItems, cloudImagePaths: row.items.map(item => item.path),
             cloudOwnerId: row.owner_id, cloudClientId: row.client_id, createdAt: Date.parse(row.created_at), mediaType: 'photo', public: row.is_public,
             mine, reel: false, followed: !mine && Boolean(state.cloudFollowingIds?.has(row.owner_id)),
-            likes: existing?.likes ?? 0, comments: row.cloud_comments?.[0]?.count ?? existing?.comments ?? 0, commentItems: existing?.commentItems ?? [],
+            likes: row.cloud_likes?.[0]?.count ?? 0, liked: Boolean(row.viewer_like?.length), comments: row.cloud_comments?.[0]?.count ?? existing?.comments ?? 0, commentItems: existing?.commentItems ?? [],
         });
     }
     const cloudIds = new Set(cloudPosts.map(post => post.id));

@@ -1,3 +1,4 @@
+import { syncVisibleImageLikes } from '../features/likes.js';
 import { cloudPerson, fetchSocialProfile, loadCloudFollowing } from '../features/cloud-people.js';
 import { loadCloudInbox, loadCloudChat } from '../features/cloud-chat.js';
 import { loadCloudImagePosts } from '../storage/image-posts.js';
@@ -173,7 +174,7 @@ async function refreshViewData(view, owner, handle, activeChat) {
         }
         if (stillVisible() && state.profileHandle === handle) {
             if (!person) document.getElementById('profile-view').textContent = 'This profile is no longer available.';
-            else renderProfile();
+            else { renderProfile(); syncVisibleImageLikes(); }
         }
     } else if (view === 'messages') {
         const chat = conversations.find(item => item.handle === activeChat && item.cloudId);

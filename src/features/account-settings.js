@@ -125,7 +125,12 @@ export function registerAccountSettingsEvents() {
         const activityOpen = event.target.closest('[data-activity-open]');
         if (activityOpen) { const entity = (activityOpen.dataset.type === 'reel' ? reels : posts).find(item => item.id === Number(activityOpen.dataset.activityOpen)); if (entity && canViewMedia(entity)) { closePanel(); openProfileMedia(activityOpen.dataset.type, entity.id, null); } }
         const unlike = event.target.closest('[data-activity-unlike]');
-        if (unlike && mayInteract()) { const entity = (unlike.dataset.type === 'reel' ? reels : posts).find(item => item.id === Number(unlike.dataset.activityUnlike)); if (entity?.liked) setEntityLiked(unlike.dataset.type, entity, false); saveAccountChanges(); openActivity(); }
+        if (unlike && mayInteract()) { const entity = (unlike.dataset.type === 'reel' ? reels : posts).find(item => item.id === Number(unlike.dataset.activityUnlike)); if (entity?.liked) {
+            void Promise.resolve(setEntityLiked(unlike.dataset.type, entity, false)).then(() => {
+                if (!entity.cloudClientId) saveAccountChanges();
+                if (unlike.isConnected) openActivity();
+            });
+        } }
         const commentButton = event.target.closest('[data-activity-delete-comment]');
         if (commentButton && mayInteract()) {
             const entity = (commentButton.dataset.type === 'reel' ? reels : posts).find(item => item.id === Number(commentButton.dataset.entityId));

@@ -1,3 +1,5 @@
+import { showShareFeedback } from '../components/feedback.js';
+import { readImagePostLikers, setImagePostLike } from '../storage/cloud-image-likes.js';
 import { likersBackdrop, likersList } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { escapeHtml, formatCount } from '../core/utils.js';
@@ -30,23 +32,45 @@ export function openLikers(post, trigger) {
     state.activeLikersPostId = post.id;
     const entityType = trigger.dataset.entityType === "reel" ? "reel" : "post";
     document.getElementById("likers-dialog-title").textContent = `People who liked this ${entityType}`;
-    const likers = getSampleLikers(post);
-    likersList.innerHTML = `
-    <p class="likers-total">${post.likes.toLocaleString()} likes</p>
-    <p class="likers-sample-note">Representative demo accounts; complete liker data isn't available.</p>
-    ${likers.length ? likers.map((person) => `
-      <div class="liker-row">
-        <img src="${escapeHtml(person.avatar)}" alt="" />
-        <div><strong>${escapeHtml(person.name)}</strong><span>${escapeHtml(person.handle)}</span></div>
-      </div>
-    `).join("") : '<p class="likers-empty">No sample liker profiles are available for this post.</p>'}
-  `;
     likersBackdrop.hidden = false;
+    if (post.cloudClientId) {
+        likersList.innerHTML = '<p role="status">Loading likes…</p>';
+        void refreshOpenImageLikers().catch(() => {
+            if (state.activeLikersPostId === post.id) likersList.textContent = 'Could not load likes.';
+        });
+    } else {
+        renderLikers(post.likes, getSampleLikers(post), true);
+    }
     document.body.classList.add("likers-open");
     document.querySelector(".likers-close").focus();
 }
 
+function renderLikers(count, people, sample = false) {
+    likersList.innerHTML = `
+    <p class="likers-total">${count.toLocaleString()} likes</p>
+    ${sample ? '<p class="likers-sample-note">Representative demo accounts; complete liker data isn’t available.</p>' : ''}
+    ${people.length ? people.map(person => `
+      <div class="liker-row">
+        <img src="${escapeHtml(person.avatar)}" alt="" />
+        <div><strong>${escapeHtml(person.name)}</strong><span>${escapeHtml(person.handle)}</span></div>
+      </div>`).join('') : '<p class="likers-empty">No likes yet.</p>'}
+    ${!sample && count > people.length ? '<p>Showing the latest 50 likes.</p>' : ''}`;
+}
+
+let likerRequest = 0;
+export async function refreshOpenImageLikers() {
+    const id = state.activeLikersPostId;
+    const post = id == null ? null : findEntity('post', id);
+    if (likersBackdrop.hidden || !post?.cloudClientId) return;
+    const request = ++likerRequest;
+    const result = await readImagePostLikers(post);
+    if (request === likerRequest && state.activeLikersPostId === id && !likersBackdrop.hidden) {
+        renderLikers(result.count, result.people);
+    }
+}
+
 export function closeLikers() {
+    likerRequest++;
     likersBackdrop.hidden = true;
     document.body.classList.remove("likers-open");
     if (state.activeLikersTrigger?.isConnected)
@@ -55,10 +79,34 @@ export function closeLikers() {
     state.activeLikersPostId = null;
 }
 
+const pendingLikes = new Set();
+
 export function setEntityLiked(type, entity, isLiked) {
     if (!mayInteract() || !canViewMedia(entity)) return;
+    if (type === 'post' && entity.cloudClientId) {
+        if (pendingLikes.has(entity.id)) return;
+        pendingLikes.add(entity.id);
+        return setImagePostLike(entity, isLiked).then(({ liked, count }) => {
+            const current = findEntity(type, entity.id);
+            if (!current) return;
+            current.liked = liked;
+            current.likes = count;
+            renderLikeState(type, current);
+            void refreshOpenImageLikers().catch(() => {});
+        }).catch(() => showShareFeedback('Could not save the like. Try again.'))
+            .finally(() => pendingLikes.delete(entity.id));
+    }
+    if (Boolean(entity.liked) === isLiked) return;
     entity.liked = isLiked;
-    entity.likes = Math.max(0, entity.likes + (isLiked ? 1 : -1));
+    entity.likes = Math.max(0, (Number(entity.likes) || 0) + (isLiked ? 1 : -1));
+    renderLikeState(type, entity);
+}
+
+export function syncVisibleImageLikes() {
+    for (const post of posts) if (post.cloudClientId) renderLikeState('post', post);
+}
+
+function renderLikeState(type, entity) {
     document.querySelectorAll(`[data-action="like"][data-entity-type="${type}"][data-entity-id="${entity.id}"]`).forEach((button) => {
         button.classList.toggle("liked", entity.liked);
         button.setAttribute("aria-pressed", String(entity.liked));
@@ -75,7 +123,8 @@ export function setEntityLiked(type, entity, isLiked) {
         button.setAttribute("aria-label", `Show ${entity.likes.toLocaleString()} people who liked this post`);
     });
     if (type === "post" && state.activeLikersPostId === entity.id) {
-        likersList.querySelector(".likers-total").textContent = `${entity.likes.toLocaleString()} likes`;
+        const total = likersList.querySelector(".likers-total");
+        if (total) total.textContent = `${entity.likes.toLocaleString()} likes`;
     }
     document.querySelectorAll(`#explore-grid [data-id="${entity.id}"] [data-like-count], #profile-view [data-id="${entity.id}"] [data-like-count]`).forEach((count) => {
         count.textContent = `♥ ${formatCount(entity.likes)}`;
