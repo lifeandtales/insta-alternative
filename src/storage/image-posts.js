@@ -22,6 +22,8 @@ function imageSettings(item) {
 export async function publishImagePost(post, { retry = false } = {}) {
     const ownerId = state.signedInAccountId;
     const client = await getSupabaseClient();
+    post.cloudOwnerId = ownerId;
+    post.cloudClientId = post.id;
     const bucket = client.storage.from(bucketName);
     if (retry) {
         const result = await client.from(tableName).select('items').eq('owner_id', ownerId).eq('client_id', post.id).maybeSingle();
@@ -69,9 +71,13 @@ export async function loadCloudImagePosts(targetId = null) {
     if (!ownerId) return;
     const client = await getSupabaseClient();
     const author = 'author:profiles!image_posts_owner_id_fkey!inner(username,display_name,avatar_path)';
-    const query = client.from(tableName).select('*, ' + author);
+    const rows = '*, ' + author;
+    const query = columns => client.from(tableName).select(columns);
+    const load = columns => query(columns).in('owner_id', scope).order('created_at', { ascending: false }).limit(100);
     const scope = targetId ? [targetId] : [ownerId, ...(state.cloudFollowingIds || [])];
-    const { data, error } = await query.in('owner_id', scope).order('created_at', { ascending: false }).limit(100);
+    let result = await load(rows + ', cloud_comments:image_post_comments(count)');
+    if (result.error?.code === 'PGRST200') result = await load(rows);
+    const { data, error } = result;
     if (error) throw error;
     const bucket = client.storage.from(bucketName);
     const paths = [...new Set(data.flatMap(row => row.items.map(item => item.path)))];
@@ -99,9 +105,9 @@ export async function loadCloudImagePosts(targetId = null) {
             caption: row.caption, location: row.location, taggedUsers: row.tags, taggedHandles: row.tags,
             media: mediaItems[0].url, cover: mediaItems[row.cover_index]?.url || mediaItems[0].url,
             coverIndex: row.cover_index, mediaItems, cloudImagePaths: row.items.map(item => item.path),
-            cloudOwnerId: row.owner_id, createdAt: Date.parse(row.created_at), mediaType: 'photo', public: row.is_public,
+            cloudOwnerId: row.owner_id, cloudClientId: row.client_id, createdAt: Date.parse(row.created_at), mediaType: 'photo', public: row.is_public,
             mine, reel: false, followed: !mine && Boolean(state.cloudFollowingIds?.has(row.owner_id)),
-            likes: existing?.likes ?? 0, comments: existing?.comments ?? 0, commentItems: existing?.commentItems ?? [],
+            likes: existing?.likes ?? 0, comments: row.cloud_comments?.[0]?.count ?? existing?.comments ?? 0, commentItems: existing?.commentItems ?? [],
         });
     }
     const cloudIds = new Set(cloudPosts.map(post => post.id));

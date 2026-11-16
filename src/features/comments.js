@@ -1,3 +1,5 @@
+import { deleteImageComment, readImageComments, writeImageComment } from '../storage/cloud-image-comments.js';
+import { showShareFeedback } from '../components/feedback.js';
 import { isFollowing, mayInteract, canViewMedia } from '../core/social.js';
 import { commentsBackdrop, commentsDialogList } from '../core/dom.js';
 import { state } from '../core/state.js';
@@ -13,7 +15,7 @@ export function prioritizedComments(post) {
     });
 }
 
-export function renderComment(comment, interactive = false, commentIndex = -1) {
+export function renderComment(comment, interactive = false, commentIndex = -1, canDelete = false) {
     const likeCount = Number(comment.likes) || 0;
     return `
     <article class="post-comment">
@@ -22,6 +24,7 @@ export function renderComment(comment, interactive = false, commentIndex = -1) {
         <p><strong>${escapeHtml(comment.handle)}</strong> ${escapeHtml(comment.text)}</p>
         <span class="comment-age">Just now</span>
       </div>
+      ${canDelete ? `<button type="button" class="comment-like-button" data-delete-cloud-comment="${escapeHtml(comment.id)}" aria-label="Delete comment">×</button>` : ''}
       ${interactive ? `
         <button class="comment-like-button ${comment.liked ? "liked" : ""}" type="button" data-action="like-comment" data-comment-index="${commentIndex}" aria-pressed="${Boolean(comment.liked)}" aria-label="${comment.liked ? "Unlike" : "Like"} comment by ${escapeHtml(comment.handle)}">
           <span aria-hidden="true">${comment.liked ? "♥" : "♡"}</span>
@@ -46,7 +49,7 @@ export function renderCommentSection(post, previewLimit = 2) {
 }
 
 export function renderCommentsDialog(entity) {
-    commentsDialogList.innerHTML = [...(entity.commentItems || [])].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map((comment) => renderComment(comment, true, entity.commentItems.indexOf(comment))).join("");
+    commentsDialogList.innerHTML = [...(entity.commentItems || [])].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map((comment) => renderComment(comment, !comment.cloudAuthorId, entity.commentItems.indexOf(comment), Boolean(comment.cloudAuthorId && (entity.mine || comment.cloudAuthorId === state.signedInAccountId)))).join("");
 }
 
 export function refreshEntityComments(type, entity) {
@@ -74,6 +77,8 @@ export function openComments(type, entity, trigger) {
     document.querySelectorAll('[data-action="comments"]').forEach((button) => button.setAttribute("aria-expanded", "false"));
     trigger.setAttribute("aria-expanded", "true");
     commentsBackdrop.querySelector(".comments-close").focus();
+    if (entity.cloudClientId) void refreshCloudPostComments(entity).catch(() => showShareFeedback('Could not load comments.'));
+
 }
 
 export function closeComments() {
@@ -84,6 +89,49 @@ export function closeComments() {
     if (state.activeCommentsTrigger?.isConnected)
         state.activeCommentsTrigger.focus();
     state.activeCommentsTrigger = null;
+}
+
+const commentLoads = new WeakMap();
+const pendingComments = new WeakMap();
+
+async function refreshCloudPostComments(post) {
+    const revision = (commentLoads.get(post) || 0) + 1;
+    commentLoads.set(post, revision);
+    const result = await readImageComments(post);
+    if (commentLoads.get(post) !== revision) return;
+    const current = findEntity('post', post.id);
+    if (!current) return;
+    current.commentItems = result.items;
+    current.comments = result.count;
+    refreshEntityComments('post', current);
+}
+
+export function refreshOpenCloudComments() {
+    const active = state.activeCommentEntity;
+    const post = active?.type === 'post' ? findEntity('post', active.id) : null;
+    if (post?.cloudClientId) return refreshCloudPostComments(post);
+    return Promise.resolve();
+}
+
+export async function removeCloudComment(post, id) {
+    await deleteImageComment(id);
+    await refreshCloudPostComments(post);
+}
+
+async function submitCloudComment(form, input, post, text) {
+    const prior = pendingComments.get(form);
+    if (prior?.sending) return;
+    const draft = { text, id: prior?.text === text && prior?.postId === post.id ? prior.id : crypto.randomUUID(), postId: post.id, sending: true };
+    pendingComments.set(form, draft);
+    try {
+        await writeImageComment(post, text, draft.id);
+        pendingComments.delete(form);
+        if (input.value.trim() === text) input.value = '';
+        await refreshCloudPostComments(post).catch(() => showShareFeedback('Comment saved. Reopen comments to refresh.'));
+    } catch {
+        draft.sending = false;
+        showShareFeedback('Could not save the comment. Try again.');
+    }
 }
 
 export function handleCommentSubmit(event) {
@@ -99,6 +147,10 @@ export function handleCommentSubmit(event) {
     const text = input.value.trim();
     if (!entity || !text || !mayInteract() || !canViewMedia(entity))
         return;
+    if (entity.cloudClientId) {
+        void submitCloudComment(form, input, entity, text);
+        return;
+    }
     entity.commentItems = entity.commentItems || [];
     entity.commentItems.push({
         user: currentUser.name,

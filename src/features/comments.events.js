@@ -1,3 +1,4 @@
+import { showShareFeedback } from '../components/feedback.js';
 import {
     commentsBackdrop,
     commentsDialogForm,
@@ -8,11 +9,23 @@ import {
 } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { findEntity } from '../data/entities.js';
-import { closeComments, handleCommentSubmit, openComments, renderCommentsDialog } from './comments.js';
+import { closeComments, handleCommentSubmit, openComments, removeCloudComment, renderCommentsDialog } from './comments.js';
 import { closeLikers } from './likes.js';
 import { mayInteract, canViewMedia } from '../core/social.js';
 
 export function handleCommentClick(event) {
+    const remove = event.target.closest('[data-delete-cloud-comment]');
+    if (remove) {
+        const active = state.activeCommentEntity;
+        const post = active?.type === 'post' ? findEntity('post', active.id) : null;
+        if (post?.cloudClientId && !remove.disabled) {
+            remove.disabled = true;
+            void removeCloudComment(post, remove.dataset.deleteCloudComment)
+                .catch(() => showShareFeedback('Could not delete this comment.'))
+                .finally(() => { remove.disabled = false; });
+        }
+        return true;
+    }
     const commentsButton = event.target.closest('[data-action="comments"]');
     if (commentsButton) {
         const type = commentsButton.dataset.entityType;
