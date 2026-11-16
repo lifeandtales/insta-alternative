@@ -210,6 +210,9 @@ function registerMessageReactionGestures(list) {
     list.addEventListener('dragstart', event => {
         if (event.target.closest('[data-reactable-message]')) event.preventDefault();
     });
+    list.addEventListener('selectstart', event => {
+        if (event.target.closest?.('[data-reactable-message]')) event.preventDefault();
+    });
     list.addEventListener('contextmenu', event => {
         if (event.target.closest('[data-reactable-message]') && !event.target.closest('.selecting-messages')) event.preventDefault();
     });

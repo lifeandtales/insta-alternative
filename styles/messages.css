@@ -753,7 +753,14 @@
 .shared-post-content .post-card { max-width: none; margin: 0; border-radius: 0; }
 
 .chat-post-card { touch-action: manipulation; }
-.chat-history > [data-reactable-message] { position: relative; touch-action: pan-y; -webkit-touch-callout: none; translate: var(--chat-reply-offset, 0px) 0; }
+.chat-history > [data-reactable-message] {
+  position: relative;
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  translate: var(--chat-reply-offset, 0px) 0;
+}
 .chat-message-reaction {
   position: absolute;
   inset: auto 7px 5px auto;
