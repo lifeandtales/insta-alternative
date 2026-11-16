@@ -189,6 +189,12 @@ export function renderSearchGroup(title, content) {
 let peopleQuery;
 let peopleSearch;
 
+export function refreshVisibleExplorePeople() {
+    if (!exploreSearchResults.hidden && exploreSearchInput.value.trim() && state.currentView === 'explore') {
+        refreshExplorePeople();
+    }
+}
+
 export function refreshExplorePeople() {
     peopleSearch?.abort();
     peopleQuery = null;

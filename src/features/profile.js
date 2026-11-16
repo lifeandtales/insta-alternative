@@ -108,8 +108,14 @@ export function renderProfileMedia(type, entity) {
 
 export function getProfileUser(handle) {
     const person = getAccount(handle);
+    const connected = cloudPerson(handle);
+    if (connected && handle !== currentUser.handle) return {
+        ...connected, bio: connected.bio || '', followers: connected.followers ?? '—', following: connected.following ?? '—',
+        isFollowing: connected.followStatus === 'accepted', links: []
+    };
     if (handle === currentUser.handle) {
-        return { ...currentUser, followers: person?.followers?.length || 0, following: state.followedAccountHandles.size, isFollowing: false };
+        return { ...currentUser, followers: state.signedInAccountId ? connected?.followers ?? '—' : person?.followers?.length || 0,
+            following: state.signedInAccountId ? connected?.following ?? '—' : state.followedAccountHandles.size, isFollowing: false };
     }
     const post = posts.find((item) => item.handle === handle);
     const reel = reels.find((item) => item.handle === handle);
@@ -131,28 +137,11 @@ export function getProfileUser(handle) {
 
 export function renderProfile() {
     const person = cloudPerson(state.profileHandle);
-    if (person && state.profileHandle !== currentUser.handle) {
-        const blocked = state.blockedHandles.has(person.handle);
-        const privateProfile = person.isPrivate && person.followStatus !== 'accepted';
-        document.getElementById("profile-view").innerHTML = `
-          <div class="profile-topbar">
-            <button type="button" class="profile-back" data-profile-back aria-label="Back to previous screen">←</button>
-            <h2>${escapeHtml(person.handle)}</h2><span></span>
-          </div>
-          <header class="profile-header">
-            <img class="profile-avatar" src="${escapeHtml(person.avatar)}" alt="" />
-            <div class="profile-details">
-              <div class="profile-name-row"><h3>${escapeHtml(person.name)}</h3>
-              <button class="profile-action" type="button" data-follow-kind="account" data-follow-value="${escapeHtml(person.handle)}"
-                ${blocked ? 'disabled' : ''}>${cloudFollowLabel(person)}</button></div>
-              ${!blocked && person.bio ? `<p>${escapeHtml(person.bio)}</p>` : ''}
-            </div>
-          </header>
-          ${privateProfile ? '<p class="private-profile-note">This account is private.</p>' : ''}`;
-        return;
-    }
     const user = getProfileUser(state.profileHandle);
-    const accessible = canViewAccount(state.profileHandle);
+    const accessible = person
+        ? !state.blockedHandles.has(state.profileHandle) && (!person.isPrivate || person.followStatus === 'accepted' || state.profileHandle === currentUser.handle)
+        : canViewAccount(state.profileHandle);
+    const connectionControl = (kind) => `<button type="button" data-profile-connections="${kind}" ${accessible ? '' : 'disabled'}><strong>${user[kind]}</strong><span>${kind}</span></button>`;
     const ownPosts = posts.filter((post) => post.handle === state.profileHandle && canViewMedia(post));
     const ownReels = reels.filter((reel) => reel.handle === state.profileHandle && canViewMedia(reel));
     const taggedPosts = posts.filter((post) => accessible && canViewMedia(post) && (post.taggedUsers || []).some(handle => normalizeHandle(handle) === normalizeHandle(state.profileHandle)));
@@ -181,13 +170,17 @@ export function renderProfile() {
           <div><h3>${escapeHtml(user.name)}</h3></div>
           ${isOwnProfile
         ? '<button class="profile-action" type="button" data-edit-profile>Edit profile</button>'
-        : `<button class="profile-action ${user.isFollowing ? "secondary" : ""}" type="button" data-follow-kind="account" data-follow-value="${escapeHtml(state.profileHandle)}" aria-pressed="${user.isFollowing}" ${state.blockedHandles.has(state.profileHandle) ? 'disabled' : ''}>${state.followRequests.includes(state.profileHandle) ? 'Cancel request' : user.isFollowing ? 'Following' : 'Follow'}</button>`}
+        : person?.followStatus === 'accepted' ? '<span class="profile-action secondary">Following</span>'
+        : `<button class="profile-action ${user.isFollowing ? "secondary" : ""}" type="button" data-follow-kind="account" data-follow-value="${escapeHtml(state.profileHandle)}" aria-pressed="${user.isFollowing}" ${state.blockedHandles.has(state.profileHandle) ? 'disabled' : ''}>${person ? cloudFollowLabel(person) : state.followRequests.includes(state.profileHandle) ? 'Cancel request' : user.isFollowing ? 'Following' : 'Follow'}</button>`}
         </div>
         <div class="profile-stats">
           <span><strong>${ownPosts.length}</strong><span>posts</span></span>
-          <button type="button" data-profile-connections="followers" ${accessible ? "" : "disabled"}><strong>${user.followers}</strong><span>followers</span></button>
-          <button type="button" data-profile-connections="following" ${accessible ? "" : "disabled"}><strong>${user.following}</strong><span>following</span></button>
+          ${connectionControl('followers')}${connectionControl('following')}
         </div>
+        ${!isOwnProfile && person?.followStatus === 'accepted' ? `<div class="profile-cloud-actions">
+          <button class="profile-action secondary" type="button" data-follow-kind="account" data-follow-value="${escapeHtml(person.handle)}">Unfollow</button>
+          ${person.mutual ? `<button class="profile-action" type="button" data-cloud-message="${escapeHtml(person.handle)}">Message</button>` : ''}
+        </div>` : ''}
         <p>${escapeHtml(user.bio)}</p>
         <div class="profile-links">${(user.links || []).map(link => `<button type="button" data-profile-link="${escapeHtml(link)}">${escapeHtml(link)}</button>`).join('')}</div>
         ${isOwnProfile ? `<button class="profile-create-button" type="button" aria-label="Create a post or reel"><span aria-hidden="true">+</span> post</button>` : ""}

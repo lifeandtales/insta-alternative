@@ -1,3 +1,4 @@
+import { loadCloudChat, sendCloudText } from './cloud-chat.js';
 import { TEMPORARY_ATTACHMENT_BYTES, expireChatAttachments } from './chat-attachment-expiry.js';
 import { openChatWallpaper, registerChatWallpaperEvents } from './chat-wallpaper.js';
 import { openGroupPhotoPicker, openGroupPhotoViewer, registerGroupPhotoEvents } from './group-photo.js';
@@ -281,7 +282,7 @@ export function refreshChatAttachmentExpiry() {
 }
 
 function saveMessage(conversation, message, options) {
-    if (!canSendToConversation(conversation)) { showShareFeedback('Messaging is unavailable for this conversation.'); return false; }
+    if (conversation?.cloudId || !canSendToConversation(conversation)) { showShareFeedback('Messaging is unavailable for this action.'); return false; }
     appendChatMessage(conversation, message, options);
     if (message.type === 'attachment' || conversation.chatTimerEnabled) refreshChatAttachmentExpiry();
     persistSession().catch(() => showShareFeedback('The message is visible, but could not be saved on this device.'));
@@ -855,7 +856,14 @@ export function handleMessageClick(event) {
         heldTarget = null;
         cancelRecording(); state.activeConversationHandle = conversationButton.dataset.openConversation;
         pushConversationHistory(state.activeConversationHandle);
-        renderMessages(); document.querySelector('.chat-composer input[name="message"]')?.focus(); return true;
+        renderMessages();
+        const chat = activeConversation();
+        if (chat?.cloudId) {
+            void loadCloudChat(chat).then(() => {
+                if (state.currentView === 'messages' && activeConversation() === chat) renderMessages({ preserveComposer: true });
+            }).catch(() => showShareFeedback('Could not load messages. Pull down to retry.'));
+        } else document.querySelector('.chat-composer input[name="message"]')?.focus();
+        return true;
     }
     if (event.target.closest('[data-chat-back]')) {
         cancelRecording();
@@ -1153,6 +1161,17 @@ export function registerMessageFormEvents() {
         const input = form.elements.message;
         const text = input.value.trim();
         const replyToId = replyTargets.get(form);
+        if (conversation?.cloudId) {
+            const send = form.querySelector('.chat-send-button');
+            if (!text || send.disabled) return;
+            send.disabled = true;
+            void sendCloudText(conversation, text, replyToId).then(() => {
+                if (input.value.trim() === text) input.value = '';
+                if (state.currentView === 'messages' && activeConversation() === conversation) renderMessages({ preserveComposer: true });
+            }).catch(() => showShareFeedback('Could not send this message. Check your connection and follow status.'))
+                .finally(() => { send.disabled = false; });
+            return;
+        }
         if (conversation && text && saveMessage(conversation, { type: 'text', from: 'me', text, ...(replyToId != null ? { replyToId } : {}) }, { preserveComposer: true })) {
             input.value = '';
             replyTargets.delete(form);

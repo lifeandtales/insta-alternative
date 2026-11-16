@@ -1,3 +1,8 @@
+import { cloudPerson, fetchSocialProfile, loadCloudFollowing } from '../features/cloud-people.js';
+import { loadCloudInbox, loadCloudChat } from '../features/cloud-chat.js';
+import { loadCloudImagePosts } from '../storage/image-posts.js';
+import { loadCloudReels } from '../storage/cloud-reels.js';
+import { conversations, currentUser } from '../data/sample-data.js';
 import { renderNotificationsPage, restoreNotificationFocus } from '../features/notifications.js';
 import { renderPostCards } from '../components/post-card.js';
 import { appShell, viewHeading, viewSections } from './dom.js';
@@ -63,10 +68,13 @@ window.addEventListener('popstate', event => {
     if (state.activeConversationHandle !== conversation)
         state.activeConversationHandle = conversation;
     if (state.currentView !== view) setView(view, { fromHistory: true });
-    else if (view === 'messages') renderMessages();
+    else if (view === 'messages') {
+        renderMessages();
+        if (state.signedInAccountId) void refreshConnectedView('messages').catch(() => {});
+    }
 });
 
-export function setView(view, { fromHistory = false } = {}) {
+export function setView(view, { fromHistory = false, refresh = true } = {}) {
     if (syncDeletionLock()) return;
     if (!viewSections[view])
         return;
@@ -124,4 +132,64 @@ export function setView(view, { fromHistory = false } = {}) {
         renderSharedPostPage();
     if (view === "profile")
         renderProfile();
+    if (refresh && state.signedInAccountId && (view === 'profile' || previousView !== view)) {
+        void refreshConnectedView(view).catch(() => {});
+    }
+}
+
+const connectedLoads = new Map();
+
+export function refreshConnectedView(view = state.currentView) {
+    const owner = state.signedInAccountId;
+    if (!owner) return Promise.resolve();
+    const handle = state.profileHandle;
+    const activeChat = state.activeConversationHandle;
+    const key = [owner, view, view === 'profile' ? handle : view === 'messages' ? activeChat : ''].join(':');
+    if (connectedLoads.has(key)) return connectedLoads.get(key);
+    const pending = refreshViewData(view, owner, handle, activeChat)
+        .finally(() => connectedLoads.delete(key));
+    connectedLoads.set(key, pending);
+    return pending;
+}
+
+async function refreshViewData(view, owner, handle, activeChat) {
+    const stillVisible = () => state.currentView === view && state.signedInAccountId === owner;
+    if (view === 'profile') {
+        const target = handle === currentUser.handle ? owner : cloudPerson(handle)?.id;
+        if (!target) return;
+        const person = await fetchSocialProfile(target);
+        if (person) {
+            if (target === owner) {
+                currentUser.avatar = person.avatar;
+                currentUser.name = person.name;
+                currentUser.bio = person.bio;
+                document.querySelectorAll('.profile-nav-button img, .profile-card img, .mini-avatar-wrap img, .desktop-profile-button img')
+                    .forEach(image => { image.src = person.avatar; });
+            }
+            const followed = state.cloudFollowingIds ||= new Set();
+            if (person.followStatus === 'accepted') followed.add(target);
+            else followed.delete(target);
+            await loadCloudImagePosts(target);
+        }
+        if (stillVisible() && state.profileHandle === handle) {
+            if (!person) document.getElementById('profile-view').textContent = 'This profile is no longer available.';
+            else renderProfile();
+        }
+    } else if (view === 'messages') {
+        const chat = conversations.find(item => item.handle === activeChat && item.cloudId);
+        const changed = chat ? await loadCloudChat(chat) : (await loadCloudInbox(), true);
+        if (changed && stillVisible() && state.activeConversationHandle === activeChat && !state.activeGroupProfileHandle) {
+            if (chat || !activeChat) renderMessages({ preserveComposer: Boolean(chat) });
+        }
+    } else if (view === 'reels') {
+        await loadCloudReels();
+        if (stillVisible()) renderReels();
+    } else if (view === 'home' || view === 'explore') {
+        await loadCloudFollowing();
+        await loadCloudImagePosts();
+        if (stillVisible()) {
+            if (view === 'home') renderPostCards(getHomeFeedItems());
+            else renderExplore();
+        }
+    }
 }

@@ -14,7 +14,7 @@ test('Explore ignores stale cloud search results and opens the matching profile 
     app.context.setTimeout = callback => queue.push(callback);
     app.context.window.supabase = { createClient: () => ({
         rpc(name, args) {
-            assert.equal(name, 'search_explore_people');
+            assert.equal(name, 'search_social_people');
             return { abortSignal: signal => new Promise(resolve => {
                 started.push({ query: args.search_text, signal });
                 replies.set(args.search_text, resolve);

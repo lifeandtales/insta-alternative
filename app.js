@@ -1,3 +1,6 @@
+import { subscribeToSocialUpdates } from './src/features/social-updates.js';
+import { readCloudAvatar } from './src/storage/cloud-avatars.js';
+import { loadCloudFollowing } from './src/features/cloud-people.js';
 import { loadCloudImagePosts } from './src/storage/image-posts.js';
 import { registerHomePullToRefresh } from './src/features/home.js';
 import { currentUser, demoContentEnabled } from './src/data/sample-data.js';
@@ -12,7 +15,7 @@ import { loadSession, persistSession } from './src/storage/local-session.js';
 import { state } from './src/core/state.js';
 import { loadSavedItems, loadJoinedCommunities, loadStoryHighlights } from './src/storage/browser-storage.js';
 import { initializeVideoObserver } from './src/media/video.js';
-import { setView } from './src/core/navigation.js';
+import { refreshConnectedView, setView } from './src/core/navigation.js';
 import { showShareFeedback } from './src/components/feedback.js';
 import {
     handleVideoExitClick,
@@ -111,7 +114,7 @@ function renderAccountIdentity() {
 async function loadAccountContent() {
     const [sessionResult] = await Promise.allSettled([loadSession(), loadStoryHighlights()]);
     if (demoContentEnabled && sessionResult.status === 'rejected') return;
-    try { await loadCloudImagePosts(); }
+    try { await loadCloudFollowing(); await loadCloudImagePosts(); }
     catch { showShareFeedback('Could not load your saved image posts. Pull down on Home to retry.'); }
     refreshChatAttachmentExpiry();
     processScheduledPosts();
@@ -128,12 +131,17 @@ async function enterAccount(user, profile) {
     Object.assign(currentUser, identity);
     loadAccountPreferences();
     Object.assign(currentUser, identity);
+    if (profile.avatar_path) {
+        try { currentUser.avatar = await readCloudAvatar(profile.avatar_path) || DEFAULT_AVATAR; }
+        catch { currentUser.avatar = DEFAULT_AVATAR; }
+    }
     state.profileHandle = currentUser.handle;
     const account = state.accountDirectory.find(item => item.id === user.id || item.id === 'local-owner');
     if (account) Object.assign(account, { id: user.id, ...identity, avatar: currentUser.avatar });
     state.viewerAgeBand = user.user_metadata?.age_band === 'adult' ? 'adult' : 'minor';
     renderAccountIdentity();
     await loadAccountContent();
+    void subscribeToSocialUpdates(user.id).catch(() => {});
     for (const form of welcomeForms) form.reset();
     pendingProfileUser = null;
     welcomeScreen.hidden = true;
@@ -304,18 +312,41 @@ if (document.documentElement.classList.contains("mobile-splash-pending")) {
         document.documentElement.classList.remove("mobile-splash-pending");
     }, 1000);
 }
-registerHomePullToRefresh(document.querySelector('.app-shell'), document.getElementById('home-refresh-status'), async () => {
+const refreshShell = document.querySelector('.app-shell');
+registerHomePullToRefresh(refreshShell, document.getElementById('home-refresh-status'), async view => {
     try {
-        const [local] = await Promise.allSettled([loadSession()]);
-        const [cloud] = await Promise.allSettled([loadCloudImagePosts()]);
-        processScheduledPosts();
-        syncIncomingPostMentions();
-        if (state.currentView === 'home') setView('home');
-        if (local.status === 'rejected' || cloud.status === 'rejected') throw new Error('Refresh incomplete');
+        if (view === 'home') {
+            await loadSession();
+            processScheduledPosts();
+            syncIncomingPostMentions();
+        }
+        if (state.signedInAccountId) await refreshConnectedView(view);
+        if (state.currentView === view && (view === 'home' || !state.signedInAccountId)) setView(view, { refresh: false });
     } catch {
-        showShareFeedback('Could not refresh Home. Try again.');
+        showShareFeedback('Could not refresh this screen. Try again.');
+    }
+}, target => {
+    if (target?.closest?.('input, textarea, select, dialog')) return null;
+    switch (state.currentView) {
+        case 'reels': return document.getElementById('reels-feed');
+        case 'messages':
+            if (state.activeGroupProfileHandle) return null;
+            return state.activeConversationHandle
+                ? target?.closest?.('.chat-history') || null
+                : document.querySelector('.conversation-list') || refreshShell;
+        case 'home':
+        case 'explore':
+        case 'profile': return refreshShell;
+        default: return null;
     }
 });
+if (typeof window.setInterval === 'function') {
+    window.setInterval(() => {
+        if (state.signedInAccountId && state.currentView === 'messages' && !document.hidden) {
+            void refreshConnectedView('messages').catch(() => {});
+        }
+    }, 8000);
+}
 setView("home");
 if (demoContentEnabled) void loadAccountContent();
 else void restoreAccount().catch(() => showWelcomeForm('login', 'Sign in to connect to your account.'));

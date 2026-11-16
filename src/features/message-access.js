@@ -13,7 +13,7 @@ export function canSendToConversation(conversation) {
 }
 
 export function canShareToConversation(entity, conversation) {
-    return canSendToConversation(conversation) && canViewMedia(entity) &&
+    return !conversation?.cloudId && canSendToConversation(conversation) && canViewMedia(entity) &&
         conversationMembers(conversation).every(handle => canViewMedia(entity, handle));
 }
 

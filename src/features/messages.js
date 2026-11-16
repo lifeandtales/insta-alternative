@@ -21,6 +21,7 @@ export function conversationAvatar(conversation) {
 }
 
 export function getConversationPreview(conversation) {
+    if (conversation.cloudId) return conversation.lastMessage || 'No messages yet.';
     const lastMessage = visibleConversationMessages(conversation).at(-1);
     if (!lastMessage)
         return conversation.messages?.length ? "Start a conversation" : conversation.lastMessage || "Start a conversation";
@@ -74,6 +75,7 @@ export function markInboxChatRead(chat) {
 }
 
 function inboxMessageTime(conversation) {
+    if (conversation.cloudId) return conversation.lastActivity ?? 0;
     return visibleConversationMessages(conversation).at(-1)?.sentAt
         ?? (conversation.messages?.length ? 0 : conversation.lastActivity ?? 0);
 }
@@ -128,7 +130,7 @@ export function renderMessages({ preserveComposer = false } = {}) {
         </svg>
       </button></header>
       <div class="conversation-list">
-        ${[...conversations].sort((left, right) => Number(right.pinned) - Number(left.pinned) || inboxMessageTime(right) - inboxMessageTime(left)).map((item) => {
+        ${conversations.filter(item => item.cloudId ? item.cloudHasMessages : !conversations.some(other => other.cloudId && other.cloudHasMessages && other.handle === item.handle)).sort((left, right) => Number(right.pinned) - Number(left.pinned) || inboxMessageTime(right) - inboxMessageTime(left)).map((item) => {
           const unreadCount = getUnreadMessageCount(item);
           const timestamp = inboxMessageTime(item);
           const preview = getConversationPreview(item);
@@ -154,8 +156,12 @@ export function renderMessages({ preserveComposer = false } = {}) {
         `;
         }).join("")}
       </div>
-      <p class="messages-local-note">Messages are saved on this device. Delivery and connected calls will be added later.</p>
+      ${state.signedInAccountId ? (conversations.some(item => !item.cloudId || item.cloudHasMessages) ? '' : '<p class="messages-local-note">No messages yet.</p>') : '<p class="messages-local-note">Messages are saved on this device. Delivery and connected calls will be added later.</p>'}
     `;
+        return;
+    }
+    if (conversation.cloudId) {
+        renderConnectedChat(list, conversation, preserveComposer);
         return;
     }
     markInboxChatRead(conversation);
@@ -329,6 +335,45 @@ export function renderMessages({ preserveComposer = false } = {}) {
     </section>
   `;
     const history = list.querySelector(".chat-history");
+    history.scrollTop = history.scrollHeight;
+}
+
+function renderConnectedChat(list, chat, preserveComposer) {
+    const messages = state.blockedHandles.has(chat.handle) ? [] : chat.messages;
+    const byId = new Map(messages.map(message => [message.id, message]));
+    const markup = messages.map(message => `
+      <article class="chat-message chat-text-message ${message.from === 'me' ? 'from-me' : 'from-them'}">
+        ${message.replyToId ? renderReplyQuote(byId.get(message.replyToId), chat) : ''}
+        <p>${escapeHtml(message.text)}</p><time>${escapeHtml(formatConversationTime(message.sentAt))}</time>
+      </article>`).join('') || `<p class="chat-empty">${chat.cloudLoaded ? 'Start with a message.' : 'Loading messages…'}</p>`;
+    let history = list.querySelector('.chat-history');
+    if (preserveComposer && history && Boolean(list.querySelector('.chat-composer')) === Boolean(chat.cloudCanSend)) {
+        const atBottom = history.scrollHeight - history.scrollTop - history.clientHeight < 40;
+        const avatar = list.querySelector('.chat-header-identity img');
+        if (avatar) avatar.src = chat.avatar;
+        const name = list.querySelector('.chat-header-copy strong');
+        if (name) name.textContent = chat.user;
+        history.innerHTML = markup;
+        if (atBottom) history.scrollTop = history.scrollHeight;
+        return;
+    }
+    list.innerHTML = `
+      <section class="chat-window" aria-label="Chat with ${escapeHtml(chat.user)}">
+        <header class="chat-header">
+          <button class="chat-back-button" type="button" data-chat-back aria-label="Back to messages">‹</button>
+          <button type="button" class="chat-header-identity" data-chat-profile data-profile-handle="${escapeHtml(chat.handle)}">
+            <img src="${escapeHtml(chat.avatar)}" alt="" /><span class="chat-header-copy">
+              <strong>${escapeHtml(chat.user)}</strong><small>${escapeHtml(chat.handle)}</small>
+            </span>
+          </button>
+        </header>
+        <div class="chat-history" aria-live="polite">${markup}</div>
+        ${chat.cloudCanSend ? `<form class="chat-composer">
+          <input name="message" type="text" maxlength="1000" placeholder="Message..." aria-label="Message" autocomplete="off" enterkeyhint="send" />
+          <button class="chat-send-button" type="submit">Send</button>
+        </form>` : chat.cloudLoaded ? '<p class="chat-empty">Both accounts must follow each other to send messages.</p>' : ''}
+      </section>`;
+    history = list.querySelector('.chat-history');
     history.scrollTop = history.scrollHeight;
 }
 

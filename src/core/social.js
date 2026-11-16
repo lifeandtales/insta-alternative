@@ -91,6 +91,7 @@ export function canViewMedia(item, viewerHandle = currentUser.handle) {
         if (item.sensitive || item.audience === 'adult' || getAccount(item.handle)?.contentAudience === 'adult') return false;
     }
     if (item.handle === viewerHandle) return true;
+    if (item.cloudOwnerId && viewerHandle === currentUser.handle) return true;
     if (item.public === false && !isFollowing(item.handle, viewerHandle)) return false;
     return true;
 }

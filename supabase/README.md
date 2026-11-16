@@ -73,3 +73,14 @@ the project and bucket support uploads that large. Policies stop access on
 expiry. Removing expired objects from Storage requires a scheduled server
 cleanup. UI integration for the new tables, notification delivery, and
 moderation workflows are separate from this migration.
+
+## Connected Social
+
+Apply `20261116000200_connected_social.sql` after the combined app backend and
+Explore People migrations. Then use two accounts to verify mutual following,
+follower lists, Home image posts, profile photos and direct text messages.
+Public image posts are visible to signed-in viewers. Private image posts and
+avatars are restricted to their owner and accepted followers. Direct text
+sending requires mutual following. A chat appears in the recipient's inbox
+after the first message. Reels reads published public video rows from
+`media_content`; older device-only media and chats are not uploaded.

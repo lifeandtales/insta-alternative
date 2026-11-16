@@ -207,7 +207,7 @@
 
 .notification-list .notification-others { margin-top: 4px; font-size: .75rem; font-weight: 600; color: var(--primary); }
 
-.app-shell.view-home { overscroll-behavior-y: contain; }
+.app-shell:is(.view-home, .view-reels, .view-explore, .view-profile, .view-messages) { overscroll-behavior-y: contain; }
 .home-refresh-status {
   position: fixed;
   z-index: 25;
@@ -222,5 +222,4 @@
   font-size: .8rem;
   pointer-events: none;
 }
-.app-shell:not(.view-home) .home-refresh-status,
 .home-refresh-status[hidden] { display: none; }

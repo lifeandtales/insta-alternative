@@ -1,3 +1,4 @@
+import { cloudAvatarUrls } from '../storage/cloud-avatars.js';
 import { state } from '../core/state.js';
 import { DEFAULT_AVATAR } from '../core/social.js';
 import { getSupabaseClient } from '../storage/supabase.js';
@@ -28,16 +29,12 @@ export async function searchCloudPeople(term, signal) {
     if (!accountId) return [];
     const client = await getSupabaseClient();
     if (signal.aborted) return [];
-    const { data, error } = await client.rpc('search_explore_people', { search_text: term }).abortSignal(signal);
-    if (error) throw error;
+    let result = await client.rpc('search_social_people', { search_text: term }).abortSignal(signal);
+    if (result.error?.code === 'PGRST202') result = await client.rpc('search_explore_people', { search_text: term }).abortSignal(signal);
+    if (result.error) throw result.error;
+    const urls = await avatarLookup(client, result.data);
     if (signal.aborted || accountId !== state.signedInAccountId) return [];
-    return data.map(row => {
-        const handle = '@' + row.username;
-        const person = { id: row.id, handle, name: row.display_name, avatar: DEFAULT_AVATAR,
-            bio: row.bio, isPrivate: row.is_private, followStatus: row.follow_status };
-        directory().set(handle, person);
-        return person;
-    });
+    return result.data.map(row => rememberCloudPerson(row, urls));
 }
 
 export async function toggleCloudFollow(person) {
@@ -73,4 +70,52 @@ export async function reviewCloudFollowRequest(followerId, accept) {
         .eq('followed_id', state.signedInAccountId).eq('status', 'requested').select('follower_id');
     if (error) throw error;
     return data.length > 0;
+}
+
+export function avatarLookup(client, rows) {
+    return cloudAvatarUrls(client, rows.map(row => row.avatar_path));
+}
+
+export function rememberCloudPerson(row, urls) {
+    const handle = '@' + row.username;
+    const people = directory();
+    const person = people.get(handle) || { id: row.id, handle, avatar: DEFAULT_AVATAR };
+    person.id = row.id;
+    person.name = row.display_name;
+    if (urls && 'avatar_path' in row) person.avatar = urls.get(row.avatar_path) || DEFAULT_AVATAR;
+    if ('bio' in row) person.bio = row.bio;
+    if ('is_private' in row) person.isPrivate = row.is_private;
+    if ('follow_status' in row) person.followStatus = row.follow_status;
+    if ('mutual' in row) person.mutual = row.mutual;
+    people.set(handle, person);
+    return person;
+}
+
+export async function fetchSocialProfile(id) {
+    const client = await getSupabaseClient();
+    const { data, error } = await client.rpc('social_profile', { target: id });
+    if (error) throw error;
+    if (!data) return null;
+    const person = rememberCloudPerson(data, await avatarLookup(client, [data]));
+    person.followers = data.followers;
+    person.following = data.following;
+    return person;
+}
+
+export async function fetchSocialConnections(id, direction, offset) {
+    const client = await getSupabaseClient();
+    const { data, error } = await client.rpc('social_connections', { target: id, direction, page_offset: offset });
+    if (error) throw error;
+    const urls = await avatarLookup(client, data);
+    return data.map(row => rememberCloudPerson(row, urls));
+}
+
+export async function loadCloudFollowing() {
+    const owner = state.signedInAccountId;
+    if (!owner) return;
+    const client = await getSupabaseClient();
+    const { data, error } = await client.from('account_follows').select('followed_id')
+        .eq('follower_id', owner).eq('status', 'accepted');
+    if (error) throw error;
+    if (state.signedInAccountId === owner) state.cloudFollowingIds = new Set(data.map(row => row.followed_id));
 }

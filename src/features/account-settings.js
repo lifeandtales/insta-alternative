@@ -1,3 +1,4 @@
+import { readCloudAvatar, saveCloudAvatar } from '../storage/cloud-avatars.js';
 import { saveSupabaseProfile, signOutAccount } from './account-auth.js';
 import { state } from '../core/state.js';
 import { currentUser, posts, reels } from '../data/sample-data.js';
@@ -25,6 +26,16 @@ function saveAccountChanges() {
     if (state.currentView === 'profile') renderProfile();
     if (!stored) showShareFeedback('Account changes could not be saved on this device.');
 }
+async function saveProfilePhoto(image, preview) {
+    if (state.signedInAccountId) {
+        const path = await saveCloudAvatar(state.signedInAccountId, image);
+        const url = path ? await readCloudAvatar(path).catch(() => '') : '';
+        updateOwnAvatar(url || preview);
+    } else updateOwnAvatar(preview);
+    saveAccountChanges();
+    closePanel();
+}
+
 export function openAccountSettings() {
     if (syncDeletionLock()) return;
     const pending = state.verificationStatus !== 'approved';
@@ -95,7 +106,14 @@ export function registerAccountSettingsEvents() {
         const request = event.target.closest('[data-follow-request]');
         if (request && respondToFollowRequest(request.dataset.handle, request.dataset.followRequest === 'accept')) { saveAccountChanges(); openPrivacySettings(); }
         const remove = event.target.closest('[data-remove-follower]'); if (remove && removeFollower(remove.dataset.removeFollower)) { saveAccountChanges(); openPrivacySettings(); }
-        if (event.target.closest('[data-remove-avatar]') && mayInteract()) { updateOwnAvatar(); saveAccountChanges(); closePanel(); showShareFeedback('Profile photo removed.'); }
+        const removeAvatar = event.target.closest('[data-remove-avatar]');
+        if (removeAvatar && mayInteract() && !removeAvatar.disabled) {
+            removeAvatar.disabled = true;
+            void saveProfilePhoto(null)
+                .then(() => showShareFeedback('Profile photo removed.'))
+                .catch(() => showShareFeedback('Could not remove the profile photo.'))
+                .finally(() => { removeAvatar.disabled = false; });
+        }
         const external = event.target.closest('[data-profile-link]');
         if (external) {
             const url = external.dataset.profileLink;
@@ -184,7 +202,19 @@ export function registerAccountSettingsEvents() {
         if (form.matches('.account-photo-form')) {
             event.preventDefault(); if (!cropImage || !mayInteract()) { showShareFeedback('Choose a photo before saving.'); return; }
             const canvas = document.createElement('canvas'); canvas.width = 720; canvas.height = 720; drawCrop(canvas, cropImage, form);
-            updateOwnAvatar(canvas.toDataURL('image/jpeg', .85)); saveAccountChanges(); closePanel(); cropImage = null;
+            const controls = form.querySelectorAll('button');
+            for (const control of controls) control.disabled = true;
+            try {
+                const preview = canvas.toDataURL('image/jpeg', .85);
+                const image = state.signedInAccountId ? await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .85)) : null;
+                if (state.signedInAccountId && !image) throw new Error('Could not prepare photo.');
+                await saveProfilePhoto(image, preview);
+                cropImage = null;
+            } catch {
+                showShareFeedback('Could not save the profile photo. Try again.');
+            } finally {
+                for (const control of controls) control.disabled = false;
+            }
         }
         if (form.matches('.audience-request-form')) {
             event.preventDefault(); if (!mayInteract()) return;

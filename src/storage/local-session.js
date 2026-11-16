@@ -34,7 +34,7 @@ export function unexpiredDrafts(items, now = Date.now()) {
     return items.filter(item => Number.isFinite(item.savedAt) && now - item.savedAt < WEEK);
 }
 export function persistSession() {
-    const snapshot = { posts, reels, conversations, deletedChatMentionIds: [...state.deletedChatMentionIds], scheduledPosts: state.scheduledPosts || [], drafts: unexpiredDrafts(state.draftItems), reports: state.localReports || [], notificationPreviews: (state.localStoryNotifications||[]).filter(notice=>notice.storyPreview).map(({storyId,postId,recipient,storyPreview})=>({storyId,postId,recipient,storyPreview})) };
+    const snapshot = { posts: posts.filter(item => !item.cloudOwnerId || item.mine), reels: reels.filter(item => !item.cloudOwnerId), conversations: conversations.filter(item => !item.cloudId), deletedChatMentionIds: [...state.deletedChatMentionIds], scheduledPosts: state.scheduledPosts || [], drafts: unexpiredDrafts(state.draftItems), reports: state.localReports || [], notificationPreviews: (state.localStoryNotifications||[]).filter(notice=>notice.storyPreview).map(({storyId,postId,recipient,storyPreview})=>({storyId,postId,recipient,storyPreview})) };
     // Pack before the editor releases any object URLs; serialize database writes in order.
     const packed = pack(snapshot);
     writeQueue = writeQueue.catch(() => {}).then(async () => storeInstaData(KEY, await packed));
@@ -54,7 +54,10 @@ export async function loadSession() {
     const restored = unpack(saved);
     const demoContentRemoved = removeDemoContent(restored);
     for (const [target, key] of [[posts, 'posts'], [reels, 'reels'], [conversations, 'conversations']]) {
-        if (Array.isArray(restored[key])) target.splice(0, target.length, ...restored[key]);
+        if (Array.isArray(restored[key])) {
+            const cloud = target.filter(item => (item.cloudOwnerId && !item.mine) || item.cloudId);
+            target.splice(0, target.length, ...cloud, ...restored[key]);
+        }
     }
     // Older prototype builds derived these sample view counts from likes. Keep the
     // seeded analytics independent so Explore ranking never uses likes indirectly.

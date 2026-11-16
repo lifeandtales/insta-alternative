@@ -1,3 +1,6 @@
+import { cloudPerson, fetchSocialConnections } from './cloud-people.js';
+import { loadCloudChat, openCloudChat } from './cloud-chat.js';
+import { renderMessages } from './messages.js';
 import { deleteCloudImagePost, updateCloudImagePost } from '../storage/image-posts.js';
 import { openProfileScanner, registerProfileScannerEvents } from './profile-scanner.js';
 import qrcode from '../vendor/qrcode.js';
@@ -13,7 +16,7 @@ import {
     mediaEditBackdrop,
     profilePostViewer,
 } from '../core/dom.js';
-import { setView } from '../core/navigation.js';
+import { pushConversationHistory, setView } from '../core/navigation.js';
 import { state } from '../core/state.js';
 import { findEntity } from '../data/entities.js';
 import { currentUser } from '../data/sample-data.js';
@@ -32,6 +35,29 @@ import {
 
 const profileReturnStack = [];
 export function handleProfileSectionClick(event) {
+    const message = event.target.closest('[data-cloud-message]');
+    if (message) {
+        const person = cloudPerson(message.dataset.cloudMessage);
+        if (!message.disabled && person?.mutual && mayInteract()) {
+            message.disabled = true;
+            void openCloudChat(person).then(chat => {
+                if (state.currentView !== 'profile' || state.profileHandle !== person.handle) return;
+                state.activeConversationHandle = chat.handle;
+                setView('messages', { refresh: false });
+                pushConversationHistory(chat.handle);
+                return loadCloudChat(chat).then(() => {
+                    if (state.currentView === 'messages' && state.activeConversationHandle === chat.handle) renderMessages();
+                });
+            }).catch(() => showShareFeedback('Could not open the chat. Check that you still follow each other.'))
+                .finally(() => { message.disabled = false; });
+        }
+        return true;
+    }
+    if (event.target.closest('[data-cloud-connections-more]')) {
+        const dialog = document.querySelector('.profile-connections-dialog');
+        if (!cloudConnectionPage?.loading) void loadConnectionPage(dialog, cloudConnectionPage);
+        return true;
+    }
     if (event.target.closest('[data-own-profile-qr]')) {
         showHomePanel('Profile QR code', '<div class="profile-options-list"><button type="button" data-show-own-qr>My QR code</button><button type="button" data-scan-profile-qr>Scan QR code</button></div>'); return true;
     }
@@ -228,7 +254,42 @@ export function getProfileConnections(handle, kind, query = '') {
         .sort((a, b) => Number(isFollowing(b.handle)) - Number(isFollowing(a.handle)));
 }
 
+let cloudConnectionPage;
+
+async function loadConnectionPage(dialog, page) {
+    if (!page || page.loading) return;
+    page.loading = true;
+    renderProfileConnectionResults();
+    try {
+        const people = await fetchSocialConnections(page.id, page.kind, page.people.length);
+        if (cloudConnectionPage !== page) return;
+        page.people.push(...people.slice(0, 50));
+        page.more = people.length > 50;
+        page.error = false;
+    } catch {
+        page.error = true;
+    } finally {
+        page.loading = false;
+        if (cloudConnectionPage === page && dialog.open) renderProfileConnectionResults();
+    }
+}
+
 export function openProfileConnections(kind) {
+    const handle = state.profileHandle;
+    const connected = cloudPerson(handle);
+    const id = handle === currentUser.handle ? state.signedInAccountId : connected?.id;
+    if (id) {
+        const dialog = document.querySelector('.profile-connections-dialog');
+        document.getElementById('profile-connections-title').textContent = kind === 'followers' ? 'Followers' : 'Following';
+        dialog.dataset.handle = handle;
+        dialog.dataset.kind = kind;
+        dialog.querySelector('.profile-connections-search').value = '';
+        cloudConnectionPage = { id, handle, kind, people: [], loading: false, more: false };
+        if (!dialog.open) dialog.showModal();
+        void loadConnectionPage(dialog, cloudConnectionPage);
+        return true;
+    }
+    cloudConnectionPage = null;
     const people = getProfileConnections(state.profileHandle, kind);
     if (!people) return false;
     const dialog = document.querySelector('.profile-connections-dialog');
@@ -246,12 +307,21 @@ export function openProfileConnections(kind) {
 export function renderProfileConnectionResults() {
     const dialog = document.querySelector('.profile-connections-dialog');
     const query = dialog.querySelector('.profile-connections-search').value;
-    const people = getProfileConnections(dialog.dataset.handle, dialog.dataset.kind, query) || [];
+    const page = cloudConnectionPage?.handle === dialog.dataset.handle && cloudConnectionPage.kind === dialog.dataset.kind ? cloudConnectionPage : null;
+    const term = query.trim().toLocaleLowerCase();
+    const people = page ? page.people.filter(person => `${person.name} ${person.handle}`.toLocaleLowerCase().includes(term))
+        : getProfileConnections(dialog.dataset.handle, dialog.dataset.kind, query) || [];
     dialog.querySelector('.profile-connections-list').innerHTML = people.length ? people.map(person => `
       <button type="button" class="profile-connection" data-profile-handle="${escapeHtml(person.handle)}">
         <img src="${escapeHtml(visibleAvatar(person.handle, person.avatar))}" alt="" />
         <span><strong>${escapeHtml(person.name || person.handle)}</strong><small>${escapeHtml(person.handle)}</small></span>
-      </button>`).join('') : `<p>${query.trim() ? 'No matching accounts.' : `No ${dialog.dataset.kind} yet.`}</p>`;
+      </button>`).join('') : (page?.loading || page?.error ? '' : `<p>${term ? 'No matching accounts.' : `No ${dialog.dataset.kind} yet.`}</p>`);
+    if (page) {
+        const results = dialog.querySelector('.profile-connections-list');
+        if (page.loading) results.insertAdjacentHTML('beforeend', '<p role="status">Loading…</p>');
+        else if (page.error || page.more) results.insertAdjacentHTML('beforeend',
+            `<button type="button" data-cloud-connections-more>${page.error ? 'Retry' : 'Load more'}</button>`);
+    }
 }
 
 export function profileUrl(handle) {

@@ -1,3 +1,4 @@
+import { refreshConnectedView } from '../core/navigation.js';
 import { cloudPerson, toggleCloudFollow } from './cloud-people.js';
 import { renderExploreSearchResults } from './explore.js';
 import { renderProfile } from './profile.js';
@@ -14,7 +15,11 @@ async function followCloudPerson(person, button) {
     button.disabled = true;
     try {
         showShareFeedback(await toggleCloudFollow(person));
-        if (state.currentView === 'profile' && state.profileHandle === person.handle) renderProfile();
+        if (state.currentView === 'profile' && state.profileHandle === person.handle) {
+            if (!person.followStatus) person.mutual = false;
+            renderProfile();
+            void refreshConnectedView('profile').catch(() => {});
+        }
         if (state.currentView === 'explore') renderExploreSearchResults();
     } catch {
         showShareFeedback('Could not update the follow request. Try again.');

@@ -1,3 +1,5 @@
+import { avatarLookup, rememberCloudPerson } from '../features/cloud-people.js';
+import { remoteMediaId } from './remote-media-id.js';
 import { state } from '../core/state.js';
 import { currentUser, posts } from '../data/sample-data.js';
 import { mediaEdits } from '../features/post-media.js';
@@ -62,36 +64,50 @@ export async function publishImagePost(post, { retry = false } = {}) {
     }
 }
 
-export async function loadCloudImagePosts() {
+export async function loadCloudImagePosts(targetId = null) {
     const ownerId = state.signedInAccountId;
     if (!ownerId) return;
     const client = await getSupabaseClient();
-    const { data, error } = await client.from(tableName).select('*').eq('owner_id', ownerId).order('client_id');
+    const author = 'author:profiles!image_posts_owner_id_fkey!inner(username,display_name,avatar_path)';
+    const query = client.from(tableName).select('*, ' + author);
+    const scope = targetId ? [targetId] : [ownerId, ...(state.cloudFollowingIds || [])];
+    const { data, error } = await query.in('owner_id', scope).order('created_at', { ascending: false }).limit(100);
     if (error) throw error;
     const bucket = client.storage.from(bucketName);
+    const paths = [...new Set(data.flatMap(row => row.items.map(item => item.path)))];
+    const signed = paths.length ? await bucket.createSignedUrls(paths, 3600) : { data: [] };
+    if (signed.error) throw signed.error;
+    const urls = new Map(signed.data.map(item => [item.path, item.signedUrl]));
+    if (state.signedInAccountId !== ownerId) return;
+    const avatars = await avatarLookup(client, data.map(row => row.author));
+    if (state.signedInAccountId !== ownerId) return;
     const cloudPosts = [];
     for (const row of data) {
-        const paths = row.items.map(item => item.path);
-        const signed = await bucket.createSignedUrls(paths, 3600);
-        if (signed.error) throw signed.error;
-        if (signed.data.some(item => !item.signedUrl)) throw new Error('A saved image is unavailable.');
-        const mediaItems = row.items.map((item, index) => ({
-            ...imageSettings(item.settings || {}), url: signed.data[index].signedUrl,
+        const mine = row.owner_id === ownerId;
+        const author = rememberCloudPerson({ ...row.author, id: row.owner_id }, avatars);
+        const id = mine ? row.client_id : remoteMediaId(row.owner_id + ':' + row.client_id);
+        const mediaItems = row.items.map(item => ({
+            ...imageSettings(item.settings || {}), url: urls.get(item.path),
         }));
-        const existing = posts.find(post => post.id === row.client_id && post.cloudImagePaths);
+        if (mediaItems.some(item => !item.url)) continue;
+        const existing = posts.find(post => post.id === id && post.cloudImagePaths);
         cloudPosts.push({
             ...existing,
-            id: row.client_id, handle: currentUser.handle, user: currentUser.name, avatar: currentUser.avatar,
+            id, handle: mine ? currentUser.handle : author.handle,
+            user: mine ? currentUser.name : author.name,
+            avatar: mine ? currentUser.avatar : author.avatar,
             caption: row.caption, location: row.location, taggedUsers: row.tags, taggedHandles: row.tags,
             media: mediaItems[0].url, cover: mediaItems[row.cover_index]?.url || mediaItems[0].url,
-            coverIndex: row.cover_index, mediaItems, cloudImagePaths: paths,
-            createdAt: Date.parse(row.created_at), mediaType: 'photo', public: row.is_public,
-            mine: true, reel: false, followed: true,
+            coverIndex: row.cover_index, mediaItems, cloudImagePaths: row.items.map(item => item.path),
+            cloudOwnerId: row.owner_id, createdAt: Date.parse(row.created_at), mediaType: 'photo', public: row.is_public,
+            mine, reel: false, followed: !mine && Boolean(state.cloudFollowingIds?.has(row.owner_id)),
             likes: existing?.likes ?? 0, comments: existing?.comments ?? 0, commentItems: existing?.commentItems ?? [],
         });
     }
     const cloudIds = new Set(cloudPosts.map(post => post.id));
-    posts.splice(0, posts.length, ...posts.filter(post => !post.cloudImagePaths && !cloudIds.has(post.id)), ...cloudPosts);
+    const remaining = posts.filter(post => !cloudIds.has(post.id) &&
+        (!post.cloudImagePaths || (targetId && (post.cloudOwnerId || ownerId) !== targetId)));
+    posts.splice(0, posts.length, ...remaining, ...cloudPosts);
 }
 
 export async function updateCloudImagePost(post, fields) {

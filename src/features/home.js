@@ -8,7 +8,7 @@ export function getHomeFeedItems() {
     const visible = [...posts, ...reels].filter(item => canViewMedia(item) &&
         !state.hiddenPostKeys.has(mediaKey(item.reel ? 'reel' : 'post', item.id)) &&
         !state.mutedPostHandles.has(item.handle));
-    const hasFollowing = [...state.followedAccountHandles].some(handle => handle !== currentUser.handle) ||
+    const hasFollowing = Boolean(state.cloudFollowingIds?.size) || [...state.followedAccountHandles].some(handle => handle !== currentUser.handle) ||
         [...posts, ...reels].some(item => item.followed && item.handle !== currentUser.handle);
     if (!hasFollowing) {
         const curated = visible.filter(item => item.handle === currentUser.handle ||
@@ -16,10 +16,10 @@ export function getHomeFeedItems() {
                 /nature|mountain|seaside|weekend|quiet|trail/i.test(item.caption)));
         return newestFirst(curated);
     }
-    return newestFirst(visible.filter(item => item.handle === currentUser.handle || isFollowing(item.handle)));
+    return newestFirst(visible.filter(item => item.handle === currentUser.handle || (item.cloudOwnerId ? state.cloudFollowingIds?.has(item.cloudOwnerId) : isFollowing(item.handle))));
 }
 
-export function registerHomePullToRefresh(shell, indicator, refresh) {
+export function registerHomePullToRefresh(shell, indicator, refresh, refreshTarget = () => state.currentView === 'home' ? shell : null) {
     const threshold = 72;
     let start;
     let distance = 0;
@@ -31,13 +31,14 @@ export function registerHomePullToRefresh(shell, indicator, refresh) {
     };
     shell.addEventListener('touchstart', event => {
         reset();
-        if (refreshing || state.currentView !== 'home' || shell.scrollTop > 0 || event.touches.length !== 1) return;
+        const target = refreshTarget(event.target);
+        if (refreshing || !target || target.scrollTop > 0 || shell.scrollTop > 0 || event.touches.length !== 1) return;
         const touch = event.touches[0];
-        start = { x: touch.clientX, y: touch.clientY };
+        start = { x: touch.clientX, y: touch.clientY, target, view: state.currentView };
     }, { passive: true });
     shell.addEventListener('touchmove', event => {
         if (!start) return;
-        if (event.touches.length !== 1 || state.currentView !== 'home' || shell.scrollTop > 0) { reset(); return; }
+        if (event.touches.length !== 1 || state.currentView !== start.view || start.target.scrollTop > 0 || shell.scrollTop > 0) { reset(); return; }
         const touch = event.touches[0];
         distance = touch.clientY - start.y;
         if (distance < -8 || Math.abs(touch.clientX - start.x) > Math.max(12, distance)) { reset(); return; }
@@ -48,14 +49,15 @@ export function registerHomePullToRefresh(shell, indicator, refresh) {
     }, { passive: false });
     shell.addEventListener('touchcancel', reset);
     shell.addEventListener('touchend', async () => {
-        const shouldRefresh = start && distance >= threshold && state.currentView === 'home';
+        const view = start?.view;
+        const shouldRefresh = start && distance >= threshold && state.currentView === view;
         reset();
         if (!shouldRefresh || refreshing) return;
         refreshing = true;
         indicator.hidden = false;
         indicator.textContent = 'Refreshing…';
         try {
-            await refresh();
+            await refresh(view);
         } finally {
             refreshing = false;
             reset();
