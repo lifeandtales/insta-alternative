@@ -112,7 +112,7 @@ function renderGroupProfile(group) {
       </section>`;
 }
 
-export function renderMessages({ preserveComposer = false } = {}) {
+export function renderMessages({ preserveComposer = false, preserveHistoryAnchor = false, scrollToLatest = false } = {}) {
     const list = document.getElementById("messages-list");
     const group = conversations.find(item => item.handle === state.activeGroupProfileHandle);
     if (isJoinedGroup(group)) {
@@ -156,12 +156,13 @@ export function renderMessages({ preserveComposer = false } = {}) {
         `;
         }).join("")}
       </div>
+      ${state.signedInAccountId ? '<div class="messages-compose-footer"><button class="messages-compose-button" type="button" data-new-direct-message aria-label="New message" title="New message">＋</button></div>' : ''}
       ${state.signedInAccountId ? (conversations.some(item => !item.cloudId || item.cloudHasMessages) ? '' : '<p class="messages-local-note">No messages yet.</p>') : '<p class="messages-local-note">Messages are saved on this device. Delivery and connected calls will be added later.</p>'}
     `;
         return;
     }
     if (conversation.cloudId) {
-        renderConnectedChat(list, conversation, preserveComposer);
+        renderConnectedChat(list, conversation, { preserveComposer, preserveHistoryAnchor, scrollToLatest });
         return;
     }
     markInboxChatRead(conversation);
@@ -338,23 +339,31 @@ export function renderMessages({ preserveComposer = false } = {}) {
     history.scrollTop = history.scrollHeight;
 }
 
-function renderConnectedChat(list, chat, preserveComposer) {
+function renderConnectedChat(list, chat, { preserveComposer, preserveHistoryAnchor, scrollToLatest }) {
     const messages = state.blockedHandles.has(chat.handle) ? [] : chat.messages;
     const byId = new Map(messages.map(message => [message.id, message]));
-    const markup = messages.map(message => `
-      <article class="chat-message chat-text-message ${message.from === 'me' ? 'from-me' : 'from-them'}">
+    const bubbles = messages.map(message => `
+      <article data-reactable-message="${escapeHtml(String(message.id))}" class="chat-message chat-text-message ${message.from === 'me' ? 'from-me' : 'from-them'}">
         ${message.replyToId ? renderReplyQuote(byId.get(message.replyToId), chat) : ''}
         <p>${escapeHtml(message.text)}</p><time>${escapeHtml(formatConversationTime(message.sentAt))}</time>
+        <span class="chat-message-reaction" role="status"${message.reactions?.length ? '' : ' hidden'}>${escapeHtml((message.reactions || []).map(reaction => reaction.emoji).join(' '))}</span>
       </article>`).join('') || `<p class="chat-empty">${chat.cloudLoaded ? 'Start with a message.' : 'Loading messages…'}</p>`;
+    const markup = (chat.cloudHasOlder && messages.length
+        ? '<button type="button" class="chat-load-older" data-load-older-chat>Load older messages</button>'
+        : '') + bubbles;
     let history = list.querySelector('.chat-history');
     if (preserveComposer && history && Boolean(list.querySelector('.chat-composer')) === Boolean(chat.cloudCanSend)) {
-        const atBottom = history.scrollHeight - history.scrollTop - history.clientHeight < 40;
+        const previousHeight = history.scrollHeight;
+        const previousTop = history.scrollTop;
+        const atBottom = previousHeight - previousTop - history.clientHeight < 40;
         const avatar = list.querySelector('.chat-header-identity img');
         if (avatar) avatar.src = chat.avatar;
         const name = list.querySelector('.chat-header-copy strong');
         if (name) name.textContent = chat.user;
         history.innerHTML = markup;
-        if (atBottom) history.scrollTop = history.scrollHeight;
+        if (preserveHistoryAnchor) history.scrollTop = previousTop + history.scrollHeight - previousHeight;
+        else if (atBottom || scrollToLatest) history.scrollTop = history.scrollHeight;
+        else history.scrollTop = previousTop;
         return;
     }
     list.innerHTML = `
@@ -371,7 +380,7 @@ function renderConnectedChat(list, chat, preserveComposer) {
         ${chat.cloudCanSend ? `<form class="chat-composer">
           <input name="message" type="text" maxlength="1000" placeholder="Message..." aria-label="Message" autocomplete="off" enterkeyhint="send" />
           <button class="chat-send-button" type="submit">Send</button>
-        </form>` : chat.cloudLoaded ? '<p class="chat-empty">Both accounts must follow each other to send messages.</p>' : ''}
+        </form>` : chat.cloudLoaded ? '<p class="chat-empty">Messaging requires an accepted follow between these accounts.</p>' : ''}
       </section>`;
     history = list.querySelector('.chat-history');
     history.scrollTop = history.scrollHeight;

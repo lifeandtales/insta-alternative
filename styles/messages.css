@@ -254,6 +254,11 @@
     linear-gradient(145deg, #ffd7df, #f9aebd 62%, #e794ac);
 }
 
+/* Auto margin takes up free space only until messages fill the scroll area. */
+.chat-history > * { flex-shrink: 0; }
+.chat-history > :first-child { margin-top: auto; }
+.chat-load-older { align-self: center; margin-bottom: 6px; }
+
 .chat-message {
   max-width: 82%;
   display: flex;
@@ -851,3 +856,16 @@
   font-size: .78rem;
 }
 .chat-reaction-tray button[data-delete-one-message] { color: #a52240; }
+
+
+.messages-compose-footer { display: flex; justify-content: flex-end; padding: 8px; }
+.messages-compose-button {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  font-size: 1.55rem;
+  line-height: 1;
+}
+.message-recipient-results { max-height: min(52vh, 24rem); overflow-y: auto; }

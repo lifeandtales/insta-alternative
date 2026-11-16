@@ -1,4 +1,5 @@
-import { loadCloudChat, sendCloudText } from './cloud-chat.js';
+import { findMessageRecipients, hideCloudMessage, loadCloudChat, loadOlderCloudMessages, openCloudChat, sendCloudText,
+    setCloudChatPreference, setCloudMessageReaction } from './cloud-chat.js';
 import { TEMPORARY_ATTACHMENT_BYTES, expireChatAttachments } from './chat-attachment-expiry.js';
 import { openChatWallpaper, registerChatWallpaperEvents } from './chat-wallpaper.js';
 import { openGroupPhotoPicker, openGroupPhotoViewer, registerGroupPhotoEvents } from './group-photo.js';
@@ -6,7 +7,7 @@ import { persistPreferences } from '../storage/preferences.js';
 import { canViewMedia, canViewStory, getAccount, mayInteract } from '../core/social.js';
 import { openProfileMedia } from './profile.js';
 import { showShareFeedback } from '../components/feedback.js';
-import { openSharedPostPage, pushConversationHistory, pushGroupProfileHistory, returnToConversationList } from '../core/navigation.js';
+import { refreshConnectedView, openSharedPostPage, pushConversationHistory, pushGroupProfileHistory, returnToConversationList } from '../core/navigation.js';
 import { state } from '../core/state.js';
 import { escapeHtml } from '../core/utils.js';
 import { findEntity } from '../data/entities.js';
@@ -83,7 +84,8 @@ function canForwardMessage(message) {
 }
 
 function openForwardMessage(message) {
-    const targets = conversations.filter(canSendToConversation);
+    const source = activeConversation();
+    const targets = conversations.filter(chat => canSendToConversation(chat) && Boolean(chat.cloudId) === Boolean(source?.cloudId));
     if (!canForwardMessage(message) || !targets.length) return;
     showHomePanel('Forward message', `<form class="chat-forward-form" data-message-id="${escapeHtml(String(message.id))}">
       <label>Choose chat<select name="recipient" required><option value="">Select a conversation</option>
@@ -95,6 +97,18 @@ function openForwardMessage(message) {
 function setMessageReaction(bubble, reaction) {
     const message = findMessageForBubble(bubble);
     if (!message) return;
+    const chat = activeConversation();
+    if (chat?.cloudId) {
+        const mine = message.reactions?.find(row => row.user_id === state.signedInAccountId);
+        void setCloudMessageReaction(message, mine?.emoji === reaction ? null : reaction).then(result => {
+            const current = chat.messages.find(item => item.id === message.id);
+            if (!current) return;
+            current.reactions = (current.reactions || []).filter(row => row.user_id !== result.user_id);
+            if (result.emoji) current.reactions.push(result);
+            if (state.currentView === 'messages' && activeConversation() === chat) renderMessages({ preserveComposer: true });
+        }).catch(() => showShareFeedback('Could not save this reaction.'));
+        return;
+    }
     message.reactionsBy = { ...message.reactionsBy, [currentUser.handle]: reaction };
     const badge = bubble.querySelector('.chat-message-reaction');
     badge.textContent = reaction;
@@ -158,7 +172,7 @@ function registerMessageReactionGestures(list) {
               ${canCopy ? '<button type="button" data-copy-message>Copy</button>' : ''}
               ${message?.type === 'voice' && message.media ? '<button type="button" data-copy-voice>Copy audio</button>' : ''}
               ${canDownload ? '<button type="button" data-download-gallery>Download</button>' : ''}
-              ${canForwardMessage(message) ? '<button type="button" data-forward-message>Forward</button>' : ''}
+              ${canForwardMessage(message) && (!activeConversation()?.cloudId || message.type === 'text') ? '<button type="button" data-forward-message>Forward</button>' : ''}
               ${message ? '<button type="button" data-delete-one-message>Delete</button>' : ''}
             </div>`);
             const tray = list.querySelector('.chat-reaction-tray');
@@ -216,7 +230,12 @@ function registerMessageReactionGestures(list) {
         } else if (event.target.closest('[data-delete-one-message]')) {
             const message = findMessageForBubble(openBubble);
             closeTray();
-            if (message && hideConversationMessages(activeConversation(), [message.id])) {
+            const chat = activeConversation();
+            if (message && chat?.cloudId) {
+                void hideCloudMessage(chat, message).then(() => {
+                    if (state.currentView === 'messages' && activeConversation() === chat) renderMessages({ preserveComposer: true });
+                }).catch(() => showShareFeedback('Could not delete this message for you.'));
+            } else if (message && hideConversationMessages(chat, [message.id])) {
                 renderMessages({ preserveComposer: true });
                 persistSession().catch(() => showShareFeedback('This device could not save the chat deletion.'));
             }
@@ -509,7 +528,7 @@ function registerInboxChatOptions(list) {
 
 function confirmInboxChatDeletion(chat) {
     const name = escapeHtml(chat.user);
-    const prompt = chat.isGroup
+    const prompt = chat.isGroup || chat.cloudId
         ? `Hide the chat history for ${name} from your view? Other members can still see the conversation.`
         : `Delete your conversation with ${name} from this device?`;
     showHomePanel('Delete chat?', `<p>${prompt}</p>
@@ -520,6 +539,13 @@ function confirmInboxChatDeletion(chat) {
 }
 
 function deleteInboxChat(chat) {
+    if (chat.cloudId) {
+        void setCloudChatPreference(chat, 'clear').then(() => {
+            closeHomePanel();
+            if (state.currentView === 'messages' && !state.activeConversationHandle) renderMessages();
+        }).catch(() => showShareFeedback('Could not clear this chat.'));
+        return;
+    }
     const index = conversations.indexOf(chat);
     if (index < 0) return;
     if (chat.isGroup) {
@@ -695,7 +721,91 @@ async function pickChatContact(conversation) {
     }
 }
 
+let recipientPicker;
+const recipientPageSize = 30;
+
+async function loadRecipientPage(picker, reset = false) {
+    const { form } = picker;
+    const term = form.elements.recipientSearch.value.trim();
+    const list = form.querySelector('.message-recipient-results');
+    const request = ++picker.request;
+    if (reset) picker.people = [];
+    list.setAttribute('aria-busy', 'true');
+    if (!picker.people.length) list.textContent = 'Loading people…';
+    try {
+        const rows = await findMessageRecipients(term, picker.people.length);
+        if (recipientPicker !== picker || request !== picker.request || !form.isConnected) return;
+        picker.people.push(...rows.slice(0, recipientPageSize));
+        const results = picker.people.map(person => `
+          <button type="button" class="profile-connection" data-message-recipient="${escapeHtml(person.id)}">
+            <img src="${escapeHtml(person.avatar)}" alt="" />
+            <span><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.handle)} · ${person.isFollowing ? 'Following' : 'Follows you'}</small></span>
+          </button>`).join('');
+        list.innerHTML = (results || '<p>No matching followers or following accounts.</p>') +
+            (rows.length > recipientPageSize ? '<button type="button" data-recipients-more>Load more</button>' : '');
+    } catch {
+        if (recipientPicker === picker && request === picker.request) list.textContent = 'Could not load people. Search again to retry.';
+    } finally {
+        if (request === picker.request) list.removeAttribute('aria-busy');
+    }
+}
+
+function openMessageRecipientPicker() {
+    showHomePanel('New message', `
+      <form class="message-recipient-picker">
+        <label>Find a person <input type="search" name="recipientSearch" maxlength="100" placeholder="Name or username"></label>
+        <button type="submit">Search</button>
+        <div class="message-recipient-results" aria-live="polite"></div>
+      </form>`);
+    const form = document.querySelector('.message-recipient-picker');
+    const picker = { form, people: [], request: 0 };
+    recipientPicker = picker;
+    form.addEventListener('submit', event => {
+        event.preventDefault();
+        void loadRecipientPage(picker, true);
+    });
+    void loadRecipientPage(picker);
+}
+
+async function startPickedConversation(person, button) {
+    button.disabled = true;
+    try {
+        const chat = await openCloudChat(person, { fromInbox: true });
+        if (state.currentView !== 'messages' || state.activeConversationHandle || !button.isConnected ||
+            button.closest('.home-controls-backdrop')?.hidden) return;
+        closeHomePanel();
+        state.activeConversationHandle = chat.handle;
+        pushConversationHistory(chat.handle);
+        chat.cloudLastReadAt = null;
+        renderMessages();
+        await refreshConnectedView('messages');
+        if (state.currentView === 'messages' && state.activeConversationHandle === chat.handle) {
+            document.querySelector('.chat-composer input[name="message"]')?.focus();
+        }
+    } catch {
+        showShareFeedback('Could not open a chat with this account.');
+    } finally {
+        button.disabled = false;
+    }
+}
+
 export function handleMessageClick(event) {
+    if (event.target.closest('[data-new-direct-message]')) {
+        if (state.signedInAccountId && mayInteract()) openMessageRecipientPicker();
+        return true;
+    }
+    const recipient = event.target.closest('[data-message-recipient]');
+    if (recipient) {
+        const person = recipientPicker?.people.find(item => item.id === recipient.dataset.messageRecipient);
+        if (person && !recipient.disabled) void startPickedConversation(person, recipient);
+        return true;
+    }
+    const moreRecipients = event.target.closest('[data-recipients-more]');
+    if (moreRecipients && recipientPicker) {
+        moreRecipients.disabled = true;
+        void loadRecipientPage(recipientPicker);
+        return true;
+    }
     const cancelReply = event.target.closest('[data-cancel-chat-reply]');
     if (cancelReply) {
         const form = cancelReply.form;
@@ -797,6 +907,21 @@ export function handleMessageClick(event) {
         if (!chat || state.currentView !== 'messages' ||
             (state.activeConversationHandle && inboxAction.dataset.inboxChatAction !== 'cancel-delete' &&
                 inboxAction.dataset.inboxChatAction !== 'confirm-leave')) return true;
+        const actionName = inboxAction.dataset.inboxChatAction;
+        if (chat.cloudId && ['pin', 'mute', 'read'].includes(actionName)) {
+            const action = actionName === 'read' ? 'unread' : actionName;
+            const enabled = action === 'unread' ? !chat.unread : action === 'pin' ? !chat.pinned : !chat.muted;
+            if (inboxAction.disabled) return true;
+            inboxAction.disabled = true;
+            void setCloudChatPreference(chat, action, enabled).then(() => {
+                if (state.currentView === 'messages' && !state.activeConversationHandle) {
+                    closeHomePanel();
+                    renderMessages();
+                }
+            }).catch(() => showShareFeedback('Could not save chat preferences.'))
+                .finally(() => { inboxAction.disabled = false; });
+            return true;
+        }
         switch (inboxAction.dataset.inboxChatAction) {
             case 'group-profile': openGroupProfile(chat); return true;
             case 'leave-group': confirmLeaveGroup(chat); return true;
@@ -859,10 +984,26 @@ export function handleMessageClick(event) {
         renderMessages();
         const chat = activeConversation();
         if (chat?.cloudId) {
+            chat.cloudLastReadAt = null;
             void loadCloudChat(chat).then(() => {
                 if (state.currentView === 'messages' && activeConversation() === chat) renderMessages({ preserveComposer: true });
             }).catch(() => showShareFeedback('Could not load messages. Pull down to retry.'));
         } else document.querySelector('.chat-composer input[name="message"]')?.focus();
+        return true;
+    }
+    const older = event.target.closest('[data-load-older-chat]');
+    if (older) {
+        const chat = activeConversation();
+        if (chat?.cloudId && !chat.cloudLoadingOlder) {
+            chat.cloudLoadingOlder = true;
+            older.disabled = true;
+            void loadOlderCloudMessages(chat).then(() => {
+                if (state.currentView === 'messages' && activeConversation() === chat) {
+                    renderMessages({ preserveComposer: true, preserveHistoryAnchor: true });
+                }
+            }).catch(() => showShareFeedback('Could not load older messages. Try again.'))
+                .finally(() => { chat.cloudLoadingOlder = false; older.disabled = false; });
+        }
         return true;
     }
     if (event.target.closest('[data-chat-back]')) {
@@ -1080,6 +1221,21 @@ async function forwardChatMessage(form) {
     const submit = form.querySelector('button[type="submit"]');
     if (submit.disabled) return;
     submit.disabled = true;
+    if (source.cloudId || target.cloudId) {
+        try {
+            if (source.cloudId && target.cloudId && original.type === 'text') {
+                await sendCloudText(target, original.text);
+                closeHomePanel();
+                if (activeConversation() === target) renderMessages({ preserveComposer: true, scrollToLatest: true });
+                showShareFeedback('Message forwarded.');
+            }
+        } catch {
+            showShareFeedback('Could not forward the message.');
+        } finally {
+            submit.disabled = false;
+        }
+        return;
+    }
     const { id, sentAt, from, reactionsBy, likedBy, replyToId, expiresAt, ...message } = original;
     let copiedMedia;
     try {
@@ -1166,8 +1322,12 @@ export function registerMessageFormEvents() {
             if (!text || send.disabled) return;
             send.disabled = true;
             void sendCloudText(conversation, text, replyToId).then(() => {
-                if (input.value.trim() === text) input.value = '';
-                if (state.currentView === 'messages' && activeConversation() === conversation) renderMessages({ preserveComposer: true });
+                if (input.value.trim() === text) {
+                    input.value = '';
+                    replyTargets.delete(form);
+                    form.querySelector('.chat-reply-draft')?.remove();
+                }
+                if (state.currentView === 'messages' && activeConversation() === conversation) renderMessages({ preserveComposer: true, scrollToLatest: true });
             }).catch(() => showShareFeedback('Could not send this message. Check your connection and follow status.'))
                 .finally(() => { send.disabled = false; });
             return;

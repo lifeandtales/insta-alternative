@@ -16,12 +16,12 @@ export async function subscribeToSocialUpdates(owner) {
     if (channel) await client.removeChannel(channel);
     liveOwner = owner;
     const next = client.channel('connected-social-' + owner);
-    for (const table of ['profiles', 'account_follows', 'messages', 'image_posts', 'media_content', 'image_post_comments']) {
+    for (const table of ['profiles', 'account_follows', 'messages', 'image_posts', 'media_content', 'image_post_comments', 'conversation_preferences', 'message_reactions']) {
         for (const event of ['INSERT', 'UPDATE']) next.on('postgres_changes', { event, schema: 'public', table }, () => {
             if (owner !== state.signedInAccountId || document.hidden) return;
             const view = state.currentView;
             const relevant = table === 'profiles' || table === 'account_follows'
-                || (table === 'messages' && view === 'messages')
+                || (['messages', 'conversation_preferences', 'message_reactions'].includes(table) && view === 'messages')
                 || (table === 'image_posts' && ['home', 'profile', 'explore'].includes(view))
                 || (table === 'image_post_comments' && ['home', 'profile', 'explore'].includes(view))
                 || (table === 'media_content' && view === 'reels');
