@@ -180,7 +180,7 @@ function registerMessageReactionGestures(list) {
         });
 
     list.addEventListener('pointerdown', event => {
-        if (event.target.closest('.chat-reaction-tray, [data-message-options]')) return;
+        if (event.target.closest('.chat-reaction-tray')) return;
         closeTray();
         cancelHold();
         suppressedBubble = null;
@@ -284,16 +284,8 @@ function registerMessageReactionGestures(list) {
         }
     });
     list.addEventListener('click', event => {
-        const options = event.target.closest('[data-message-options]');
         const reaction = event.target.closest('[data-message-reaction]');
-        if (options) {
-            const bubble = options.closest('[data-reactable-message]');
-            if (openBubble === bubble) closeTray();
-            else {
-                showTray(bubble);
-                list.querySelector('[data-message-reaction]')?.focus({ preventScroll: true });
-            }
-        } else if (event.target.closest('[data-reply-to-message]')) {
+        if (event.target.closest('[data-reply-to-message]')) {
             startChatReply(openBubble);
             closeTray();
         } else if (event.target.closest('[data-copy-message]')) {

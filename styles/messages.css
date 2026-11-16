@@ -895,25 +895,3 @@
   line-height: 1;
 }
 .message-recipient-results { max-height: min(52vh, 24rem); overflow-y: auto; }
-
-.chat-message-options {
-  position: absolute;
-  inset: 50% auto auto calc(100% + 4px);
-  translate: 0 -50%;
-  width: 29px;
-  height: 29px;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  color: var(--text);
-  background: #fff;
-  line-height: 1;
-  opacity: 0;
-  pointer-events: none;
-}
-.from-me > .chat-message-options { inset: 50% calc(100% + 4px) auto auto; }
-@media (any-hover: hover) and (any-pointer: fine) {
-  .chat-message-options { opacity: 1; pointer-events: auto; }
-}
-.chat-message-options:focus-visible { opacity: 1; pointer-events: auto; }
-.selecting-messages .chat-message-options { display: none; }
