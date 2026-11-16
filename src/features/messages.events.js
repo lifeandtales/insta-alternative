@@ -141,6 +141,35 @@ function registerMessageReactionGestures(list) {
         hold?.bubble.style.removeProperty('--chat-reply-offset');
         hold = null;
     };
+    const showTray = bubble => {
+        if (!bubble.isConnected || bubble.closest('.selecting-messages') || state.currentView !== 'messages') return;
+        closeTray();
+        suppressedBubble = openBubble = bubble;
+        clearTimeout(pendingPostTap?.timer);
+        pendingPostTap = null;
+        const message = findMessageForBubble(bubble);
+        const canCopy = message?.type === 'text';
+        const canDownload = isGalleryAttachment(message) && message.media?.startsWith('blob:')
+            && (!Number.isFinite(message.expiresAt) || message.expiresAt > Date.now());
+        bubble.closest('.chat-window').insertAdjacentHTML('beforeend', `<div class="chat-reaction-tray" role="group" aria-label="React to message">
+          ${MESSAGE_REACTIONS.map(([emoji, label]) => `<button type="button" data-message-reaction="${emoji}" aria-label="${label}">${emoji}</button>`).join('')}
+          ${message && bubble.closest('.chat-window').querySelector('.chat-composer') ? '<button type="button" data-reply-to-message>Reply</button>' : ''}
+          ${canCopy ? '<button type="button" data-copy-message>Copy</button>' : ''}
+          ${message?.type === 'voice' && message.media ? '<button type="button" data-copy-voice>Copy audio</button>' : ''}
+          ${canDownload ? '<button type="button" data-download-gallery>Download</button>' : ''}
+          ${canForwardMessage(message) && (!activeConversation()?.cloudId || message.type === 'text') ? '<button type="button" data-forward-message>Forward</button>' : ''}
+          ${message ? '<button type="button" data-delete-one-message>Delete</button>' : ''}
+        </div>`);
+        const tray = list.querySelector('.chat-reaction-tray');
+        const bounds = bubble.getBoundingClientRect();
+        const frame = list.getBoundingClientRect();
+        tray.style.left = `${Math.max(frame.left + 4, Math.min(bounds.left, frame.right - tray.offsetWidth - 4))}px`;
+        const top = Math.max(4, frame.top);
+        const bottom = Math.min(window.innerHeight, frame.bottom);
+        const above = bounds.top - tray.offsetHeight - 6;
+        const preferred = above >= top ? above : bounds.bottom + 6;
+        tray.style.top = `${Math.max(top, Math.min(preferred, bottom - tray.offsetHeight - 4))}px`;
+    };
     list.addEventListener('pointerdown', event => {
         if (event.target.closest('.chat-reaction-tray')) return;
         closeTray();
@@ -157,33 +186,10 @@ function registerMessageReactionGestures(list) {
         if (!bubble) return;
         hold = { bubble, x: event.clientX, y: event.clientY, pointerId: event.pointerId };
         if (!pressedBubble) return;
-        hold.timer = window.setTimeout(() => {
-            if (!bubble.isConnected || bubble.closest('.selecting-messages') || state.currentView !== 'messages') return;
-            suppressedBubble = openBubble = bubble;
-            clearTimeout(pendingPostTap?.timer);
-            pendingPostTap = null;
-            const message = findMessageForBubble(bubble);
-            const canCopy = message?.type === 'text';
-            const canDownload = isGalleryAttachment(message) && message.media?.startsWith('blob:')
-                && (!Number.isFinite(message.expiresAt) || message.expiresAt > Date.now());
-            bubble.closest('.chat-window').insertAdjacentHTML('beforeend', `<div class="chat-reaction-tray" role="group" aria-label="React to message">
-              ${MESSAGE_REACTIONS.map(([emoji, label]) => `<button type="button" data-message-reaction="${emoji}" aria-label="${label}">${emoji}</button>`).join('')}
-              ${message && bubble.closest('.chat-window').querySelector('.chat-composer') ? '<button type="button" data-reply-to-message>Reply</button>' : ''}
-              ${canCopy ? '<button type="button" data-copy-message>Copy</button>' : ''}
-              ${message?.type === 'voice' && message.media ? '<button type="button" data-copy-voice>Copy audio</button>' : ''}
-              ${canDownload ? '<button type="button" data-download-gallery>Download</button>' : ''}
-              ${canForwardMessage(message) && (!activeConversation()?.cloudId || message.type === 'text') ? '<button type="button" data-forward-message>Forward</button>' : ''}
-              ${message ? '<button type="button" data-delete-one-message>Delete</button>' : ''}
-            </div>`);
-            const tray = list.querySelector('.chat-reaction-tray');
-            const bounds = bubble.getBoundingClientRect();
-            const frame = list.getBoundingClientRect();
-            tray.style.left = `${Math.max(frame.left + 4, Math.min(bounds.left, frame.right - tray.offsetWidth - 4))}px`;
-            tray.style.top = `${bounds.top - tray.offsetHeight - 6 >= frame.top ? bounds.top - tray.offsetHeight - 6 : bounds.bottom + 6}px`;
-        }, MESSAGE_HOLD_MS);
+        hold.timer = window.setTimeout(() => showTray(bubble), MESSAGE_HOLD_MS);
     });
     list.addEventListener('pointermove', event => {
-        if (hold?.pointerId !== event.pointerId) return;
+        if (hold?.pointerId !== event.pointerId || openBubble === hold.bubble) return;
         const x = event.clientX - hold.x;
         const y = Math.abs(event.clientY - hold.y);
         if (Math.hypot(x, y) <= 10) return;
@@ -198,7 +204,7 @@ function registerMessageReactionGestures(list) {
         if (hold?.pointerId !== event.pointerId) return;
         const { bubble, x, y } = hold;
         const distance = event.clientX - x;
-        if (distance >= 48 && distance > Math.abs(event.clientY - y)) {
+        if (openBubble !== bubble && distance >= 48 && distance > Math.abs(event.clientY - y)) {
             if (startChatReply(bubble)) {
                 suppressedBubble = bubble;
                 closeTray();
@@ -214,7 +220,13 @@ function registerMessageReactionGestures(list) {
         if (event.target.closest?.('[data-reactable-message]')) event.preventDefault();
     });
     list.addEventListener('contextmenu', event => {
-        if (event.target.closest('[data-reactable-message]') && !event.target.closest('.selecting-messages')) event.preventDefault();
+        const bubble = event.target.closest('[data-reactable-message]');
+        if (!bubble || event.target.closest('.selecting-messages, audio, video[controls]')) return;
+        event.preventDefault();
+        if (event.pointerType === 'mouse' || event.button === 2) {
+            cancelHold();
+            showTray(bubble);
+        }
     });
     list.addEventListener('click', event => {
         const reaction = event.target.closest('[data-message-reaction]');

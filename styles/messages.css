@@ -289,7 +289,7 @@
   margin: 0;
   overflow-wrap: anywhere;
   line-height: 1.4;
-  font-size: 0.9rem;
+  font-size: 1.08rem;
 }
 
 .chat-message time,
@@ -761,9 +761,22 @@
   user-select: none;
   translate: var(--chat-reply-offset, 0px) 0;
 }
+/* Android WebView also needs selection disabled on the text and timestamp themselves. */
+.chat-history :is([data-reactable-message], .chat-message) :is(p, time, strong, span, small) {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.chat-history > [data-reactable-message]:has(> .chat-message-reaction:not([hidden])) {
+  margin-bottom: 20px;
+}
 .chat-message-reaction {
   position: absolute;
-  inset: auto 7px 5px auto;
+  inset: calc(100% - 2px) 5px auto auto;
+  width: max-content;
+  max-width: min(100%, 15rem);
+  overflow-wrap: anywhere;
+  z-index: 1;
   padding: 3px 6px;
   border: 1px solid var(--line);
   border-radius: 999px;
