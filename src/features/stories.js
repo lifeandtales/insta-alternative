@@ -6,6 +6,7 @@ import { escapeHtml, toDateTimeLocalValue } from '../core/utils.js';
 import { currentUser, posts } from '../data/sample-data.js';
 import { updateSoundButton } from '../media/video.js';
 import { persistActiveStories } from '../storage/browser-storage.js';
+import { deleteCloudStory, loadCloudStories, publishCloudStory } from '../storage/cloud-stories.js';
 import { persistPreferences } from '../storage/preferences.js';
 import { applyStoryComposition, storyVideoRange } from './story-composition.js';
 import { syncStoryOptionButtons, openStoryExitDialog, closeStoryExitDialog } from './story-options.js';
@@ -15,6 +16,8 @@ import { getPublicHashtagStories } from '../core/hashtags.js';
 let storyCreatorTrigger;
 let storyHistoryEntryOpen = false;
 let hashtagViewerClosed = null;
+let publishingCloudStory = false;
+const removingCloudStories = new Set();
 
 window.addEventListener('popstate', () => {
     if (!storyHistoryEntryOpen) return;
@@ -37,7 +40,8 @@ export function getStoryGroups({ includeMuted = false, includeHandle = null } = 
         if (!canViewStory(story) || (muted && !includeMuted)) return;
         if (story.expiresAt <= Date.now())
             return;
-        if (!story.mine && story.handle !== currentUser.handle && story.handle !== includeHandle && !isFollowing(story.handle))
+        if (!story.mine && story.handle !== currentUser.handle && story.handle !== includeHandle &&
+            !(story.cloudOwnerId ? state.cloudFollowingIds?.has(story.cloudOwnerId) : isFollowing(story.handle)))
             return;
         const group = groupedStories.get(story.handle) || { handle: story.handle, user: story.user, avatar: story.avatar, stories: [], muted };
         group.stories.push(story);
@@ -80,25 +84,25 @@ export function renderStories() {
     const otherStories = groups.filter((group) => group.handle !== currentUser.handle && !group.muted);
     const mutedStories = groups.filter((group) => group.handle !== currentUser.handle && group.muted);
     list.innerHTML = `
-    <div class="story-own-group"><button class="story-item story-own" type="button" data-story-owner="${currentUser.handle}">
+    <div class="story-own-group"><button class="story-item story-own" type="button" data-story-owner="${escapeHtml(currentUser.handle)}">
       <span class="story-ring ${ownStories ? `has-story ${ownStoriesSeen ? "seen-story" : ""}` : ""}">
-        <img src="${currentUser.avatar}" alt="" />
+        <img src="${escapeHtml(currentUser.avatar)}" alt="" />
         ${ownStories ? "" : '<span class="story-add-badge" aria-hidden="true">+</span>'}
       </span>
-      <span>${ownStories ? "Your story" : state.scheduledStories.size ? "Scheduled story" : "Add story"}</span>
+      <span>${ownStories ? "Your story" : state.scheduledStories.size || state.hasScheduledCloudStory ? "Scheduled story" : "Add story"}</span>
     </button>${ownStories ? '<button class="story-add-control" type="button" aria-label="Add story"><span aria-hidden="true">+</span></button>' : ''}</div>
     ${otherStories.map((group) => {
       const allSeen = group.stories.every((story) => state.seenStoryIds.has(story.id));
       return `
-      <button class="story-item" type="button" aria-description="Hold for mute options; Shift+F10 on a keyboard" data-story-owner="${group.handle}">
-        <span class="story-ring has-story ${allSeen ? "seen-story" : ""}"><img src="${group.avatar}" alt="" /></span>
+      <button class="story-item" type="button" aria-description="Hold for mute options; Shift+F10 on a keyboard" data-story-owner="${escapeHtml(group.handle)}">
+        <span class="story-ring has-story ${allSeen ? "seen-story" : ""}"><img src="${escapeHtml(group.avatar)}" alt="" /></span>
         <span>${escapeHtml(group.user)}</span>
       </button>
     `;
     }).join("")}
     ${mutedStories.length ? `<div class="story-muted-section" aria-label="Muted stories"><span class="story-muted-label">Muted stories</span>${mutedStories.map((group) => `
       <button class="story-item story-muted-item" type="button" aria-description="Hold for unmute options; Shift+F10 on a keyboard" data-story-owner="${escapeHtml(group.handle)}" data-story-muted="true" aria-label="${escapeHtml(group.user)}, muted stories">
-        <span class="story-ring has-story story-muted-ring"><img src="${group.avatar}" alt="" /></span>
+        <span class="story-ring has-story story-muted-ring"><img src="${escapeHtml(group.avatar)}" alt="" /></span>
         <span>${escapeHtml(group.user)}</span>
       </button>`).join("")}</div>` : ''}
   `;
@@ -181,11 +185,36 @@ export function renderStoryPostPicker() {
   `).join("");
 }
 
+async function saveConnectedStory(story, scheduledAt) {
+    if (publishingCloudStory) return false;
+    publishingCloudStory = true;
+    const button = document.querySelector('.story-publish-selected');
+    button.disabled = true;
+    showShareFeedback(scheduledAt ? 'Scheduling Story…' : 'Uploading Story…');
+    try {
+        if (!await publishCloudStory(story, scheduledAt)) return false;
+        if (scheduledAt) state.hasScheduledCloudStory = true;
+        state.pendingStoryMedia = null;
+        closeStoryCreator();
+        document.getElementById('story-schedule-time').value = '';
+        showShareFeedback(scheduledAt ? 'Story scheduled.' : 'Added to your story.');
+        await loadCloudStories().then(renderStories).catch(() => showShareFeedback('Story saved. Reopen Home to refresh your Stories.'));
+        return true;
+    } catch (error) {
+        showShareFeedback(error instanceof Error ? error.message : 'Could not upload this Story. Try again.');
+        return false;
+    } finally {
+        button.disabled = false;
+        publishingCloudStory = false;
+    }
+}
+
 export function scheduleOrPublishStory(story) {
     if (!mayInteract()) return false;
     story = { ...story, audience: document.getElementById('story-audience').value, closeFriendHandles: [...state.closeFriendHandles] };
     const scheduleInput = document.getElementById("story-schedule-time");
     if (!scheduleInput.value) {
+        if (state.signedInAccountId) return saveConnectedStory(story);
         state.pendingStoryMedia = null;
         addStory(story);
         return true;
@@ -195,6 +224,7 @@ export function scheduleOrPublishStory(story) {
         showShareFeedback("Choose a future time to schedule your story.");
         return false;
     }
+    if (state.signedInAccountId) return saveConnectedStory(story, scheduledAt);
     const id = story.id || `scheduled-story-${Date.now()}`;
     const scheduledStory = { ...story, id, handle: currentUser.handle, user: currentUser.name, avatar: currentUser.avatar, mine: true };
     const publishWhenReady = () => {
@@ -246,7 +276,7 @@ export async function addStory(story) {
     document.getElementById("story-schedule-time").value = "";
     try {
         await persistActiveStories();
-        showShareFeedback("Added to your story.");
+        showShareFeedback(state.signedInAccountId ? "Story saved on this device." : "Added to your story.");
     }
     catch (error) {
         console.error("Could not save story", error);
@@ -273,19 +303,37 @@ export function removeOwnStory() {
     const removedIndex = state.activeStoryIndex;
     const story = state.activeStorySequence[removedIndex];
     if (!story || story.handle !== currentUser.handle || story.fromHighlight) return false;
+    if (story.cloudContentId) {
+        if (removingCloudStories.has(story.id)) return false;
+        const owner = state.signedInAccountId;
+        removingCloudStories.add(story.id);
+        void deleteCloudStory(story).then(() => {
+            if (owner === state.signedInAccountId) removeStoryFromView(story);
+        }).catch(() => showShareFeedback('Could not remove this Story. Try again.'))
+            .finally(() => removingCloudStories.delete(story.id));
+        return true;
+    }
+    return removeStoryFromView(story);
+}
+
+function removeStoryFromView(story) {
+    const removedIndex = state.activeStoryIndex;
     clearTimeout(state.storyExpiryTimers.get(story.id));
     state.storyExpiryTimers.delete(story.id);
     state.stories = state.stories.filter(item => item.id !== story.id);
     state.seenStoryIds.delete(story.id);
     persistPreferences();
+    const removingFromViewer = state.activeStorySequence.some(item => item.id === story.id);
     const remainingStories = state.activeStorySequence.filter(item => item.id !== story.id);
     state.activeStoryGroups.forEach(group => {
         group.stories = group.stories.filter(item => item.id !== story.id);
     });
     state.activeStorySequence = remainingStories;
     renderStories();
-    if (remainingStories.length) showStoryAtIndex(Math.min(removedIndex, remainingStories.length - 1));
-    else closeStoryViewer();
+    if (removingFromViewer && !document.querySelector('.story-viewer-backdrop').hidden) {
+        if (remainingStories.length) showStoryAtIndex(Math.min(removedIndex, remainingStories.length - 1));
+        else closeStoryViewer();
+    }
     const retainedMedia = new Set([
         ...state.stories.map(item => item.media),
         ...state.storyHighlights.flatMap(highlight => highlight.stories.map(item => item.media)),

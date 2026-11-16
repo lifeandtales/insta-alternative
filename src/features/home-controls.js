@@ -1,3 +1,4 @@
+import { loadCloudStoryAudience, setCloudStoryFriend } from '../storage/cloud-stories.js';
 import { getSupabaseClient } from '../storage/supabase.js';
 import { state } from '../core/state.js';
 import { currentUser } from '../data/sample-data.js';
@@ -28,15 +29,31 @@ export function showHomePanel(title, markup, { minimal = false, anchor = null } 
     (minimal ? panel.querySelector('.home-panel-content button') : panel.querySelector('.home-panel-close')).focus();
 }
 export function openHomeSettings() {
-    const owner = getAccount(currentUser.handle);
-    const eligible = new Set([...state.followedAccountHandles, ...(owner?.followers || [])]);
+    const owner = state.signedInAccountId;
+    const localAccount = getAccount(currentUser.handle);
+    const eligible = new Set([...state.followedAccountHandles, ...(localAccount?.followers || [])]);
+    const localChoices = [...eligible].filter(handle => handle !== currentUser.handle).map(handle => ({
+        handle, name: getAccount(handle)?.name || handle, selected: state.closeFriendHandles.has(handle),
+    }));
+    const choices = people => people.map(person => `<label><input type="checkbox" data-close-friend="${escapeHtml(person.handle)}"
+        ${person.id ? `data-cloud-close-friend="${escapeHtml(person.id)}"` : ''}
+        ${person.selected ? 'checked' : ''} /> ${escapeHtml(person.name)} <small>${escapeHtml(person.handle)}</small></label>`).join('')
+        || '<p>Follow people or gain followers to build your list.</p>';
     showHomePanel('Story and feed settings', `
       <p>Close Friends can include people you follow and people who follow you.</p>
-      <fieldset><legend>Close Friends</legend>${[...eligible].filter(handle => handle !== currentUser.handle).map(handle => `<label><input type="checkbox" data-close-friend="${escapeHtml(handle)}" ${state.closeFriendHandles.has(handle) ? 'checked' : ''} /> ${escapeHtml(getAccount(handle)?.name || handle)} <small>${escapeHtml(handle)}</small></label>`).join('') || '<p>Follow people or gain followers to build your list.</p>'}</fieldset>
+      <fieldset><legend>Close Friends</legend><div class="close-friend-choices">${owner ? 'Loading…' : choices(localChoices)}</div></fieldset>
       <h3>Muted posts</h3>${renderMuted(state.mutedPostHandles, 'posts')}
       <h3>Muted stories</h3>${renderMuted(state.mutedStoryHandles, 'stories')}
       <button type="button" data-restore-hidden>Restore hidden posts (${state.hiddenPostKeys.size})</button>
-      <p>These preferences are saved on this device.</p>`);
+      <p>Mute and hidden-post settings are saved on this device.</p>`);
+    if (owner) {
+        const list = document.querySelector('.close-friend-choices');
+        void loadCloudStoryAudience().then(people => {
+            if (list.isConnected && state.signedInAccountId === owner) list.innerHTML = choices(people);
+        }).catch(() => {
+            if (list.isConnected) list.textContent = 'Could not load your Close Friends. Reopen settings to try again.';
+        });
+    }
 }
 function renderMuted(handles, type) {
     return [...handles].map(handle => `<p>${escapeHtml(handle)} <button type="button" data-unmute="${type}" data-handle="${escapeHtml(handle)}">Unmute</button></p>`).join('') || '<p>None</p>';
@@ -54,7 +71,17 @@ export function registerHomeControlEvents() {
     document.addEventListener('change', event => {
         const handle = event.target.dataset.closeFriend;
         if (!handle || !mayInteract()) return;
-        if (event.target.checked) state.closeFriendHandles.add(handle); else state.closeFriendHandles.delete(handle);
+        const input = event.target;
+        if (input.dataset.cloudCloseFriend) {
+            const selected = input.checked;
+            input.disabled = true;
+            void setCloudStoryFriend(input.dataset.cloudCloseFriend, selected).catch(() => {
+                input.checked = !selected;
+                showShareFeedback('Could not save your Close Friends list.');
+            }).finally(() => { input.disabled = false; });
+            return;
+        }
+        if (input.checked) state.closeFriendHandles.add(handle); else state.closeFriendHandles.delete(handle);
         const owner = getAccount(currentUser.handle);
         if (owner) owner.closeFriendHandles = [...state.closeFriendHandles];
         persistPreferences();

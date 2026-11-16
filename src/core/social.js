@@ -102,6 +102,7 @@ export function mediaNeedsWarning(item) {
 
 export function canViewStory(story, viewerHandle = currentUser.handle, visited = new Set()) {
     if (!canViewMedia(story, viewerHandle)) return false;
+    if (story.cloudContentId && viewerHandle === currentUser.handle) return true;
     if (story.repostedFromHandle && !canViewAccount(story.repostedFromHandle, viewerHandle)) return false;
     if (story.repostedStoryId) {
         if (visited.has(story.id)) return false;

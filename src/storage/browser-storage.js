@@ -107,6 +107,11 @@ export async function serializeStoryMedia(story) {
         }
         return value;
     }
+    if (story.mine && story.cloudContentId && story.media?.startsWith('https:')) {
+        const response = await fetch(story.media);
+        if (!response.ok) throw new Error('Could not read Story media for browser storage.');
+        story = { ...story, media: await response.blob() };
+    }
     return pack(story);
 }
 
@@ -160,7 +165,7 @@ export async function loadStoryHighlights() {
             const activeStories = storedStories.filter((story) => story.handle === currentUser.handle && story.expiresAt > now);
             expiredStoriesFound = activeStories.length !== storedStories.length;
             const uniqueStories = new Map(activeStories.map(story => [story.id, story]));
-            state.stories = state.stories.filter(story => story.handle !== currentUser.handle);
+            state.stories = state.stories.filter(story => story.cloudContentId || story.handle !== currentUser.handle);
             state.stories.push(...[...uniqueStories.values()].map(restoreStoryMedia));
         }
     }
@@ -187,7 +192,7 @@ export async function persistStoryHighlights() {
 }
 
 export async function persistActiveStories() {
-    const activeStories = state.stories.filter((story) => story.handle === currentUser.handle && story.expiresAt > Date.now());
+    const activeStories = state.stories.filter(story => !story.cloudContentId && story.handle === currentUser.handle && story.expiresAt > Date.now());
     const stored = await Promise.all(activeStories.map(serializeStoryMedia));
     await storeInstaData("active-stories", stored);
 }

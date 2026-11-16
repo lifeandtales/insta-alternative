@@ -61,6 +61,7 @@ export const state = {
     storyAdvanceTimer: 0,
     storyTouchStart: null,
     scheduledStories: new Map(),
+    hasScheduledCloudStory: false,
     storySettings: { allowReplies: true, saveToArchive: true },
     storyUploadSelection: null,
     storyUploadInputFallback: null,

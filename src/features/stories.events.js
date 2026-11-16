@@ -68,6 +68,7 @@ export function openStoryRepostEditor(activeStory) {
             ? null
             : getRepostMediaFrameSize(activeStoryMedia, .58),
         repostedStoryId: activeStory.id,
+        cloudSourceStoryId: activeStory.cloudContentId || null,
         repostedFromHandle: activeStory.handle,
         repostedFromUser: activeStory.user,
         repostedFromAvatar: activeStory.avatar,
@@ -375,10 +376,15 @@ export function handleStoryClick(event) {
     }
     if (event.target.closest('.story-publish-selected')) {
         if (!state.pendingStoryMedia) return true;
-        if (!scheduleOrPublishStory({ ...state.pendingStoryMedia, caption: document.getElementById('story-caption').value })) return true;
-        state.draftItems = state.draftItems.filter(item => item.id !== state.activeStoryDraftId);
-        state.pendingStoryMedia = null;
-        persistSession().catch(() => {});
+        const draftId = state.activeStoryDraftId;
+        const finishPublish = published => {
+            if (!published) return;
+            state.draftItems = state.draftItems.filter(item => item.id !== draftId);
+            persistSession().catch(() => {});
+        };
+        const result = scheduleOrPublishStory({ ...state.pendingStoryMedia, caption: document.getElementById('story-caption').value });
+        if (typeof result?.then === 'function') void result.then(finishPublish);
+        else finishPublish(result);
         return true;
     }
     if (event.target.closest('.story-discard')) {

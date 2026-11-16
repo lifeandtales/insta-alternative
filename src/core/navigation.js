@@ -5,6 +5,7 @@ import { cloudPerson, fetchSocialProfile, loadCloudFollowing } from '../features
 import { loadCloudInbox, loadCloudChat } from '../features/cloud-chat.js';
 import { loadCloudImagePosts } from '../storage/image-posts.js';
 import { loadCloudReels } from '../storage/cloud-reels.js';
+import { loadCloudStories } from '../storage/cloud-stories.js';
 import { conversations, currentUser } from '../data/sample-data.js';
 import { renderNotificationsPage, restoreNotificationFocus } from '../features/notifications.js';
 import { renderPostCards } from '../components/post-card.js';
@@ -194,10 +195,13 @@ async function refreshViewData(view, owner, handle, activeChat) {
         if (stillVisible()) renderReels();
     } else if (view === 'home' || view === 'explore') {
         await loadCloudFollowing();
-        await Promise.all([loadCloudImagePosts(), loadCloudSavedKeys()]);
+        await Promise.all([loadCloudImagePosts(), loadCloudSavedKeys(),
+            view === 'home' ? loadCloudStories().catch(() => {}) : undefined]);
         if (stillVisible()) {
-            if (view === 'home') renderPostCards(getHomeFeedItems());
-            else renderExplore();
+            if (view === 'home') {
+                renderPostCards(getHomeFeedItems());
+                renderStories();
+            } else renderExplore();
         }
     }
 }
