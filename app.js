@@ -1,3 +1,4 @@
+import { loadCloudSavedKeys, subscribeToSavedChanges } from './src/storage/cloud-saved-items.js';
 import { subscribeToSocialUpdates } from './src/features/social-updates.js';
 import { readCloudAvatar } from './src/storage/cloud-avatars.js';
 import { loadCloudFollowing } from './src/features/cloud-people.js';
@@ -50,7 +51,7 @@ import {
 import { handleExploreClick, registerExploreSearchEvents } from './src/features/explore.events.js';
 import { handlePostOptionsClick } from './src/features/media-options.events.js';
 import { handleLikeClick, handleLikersClick, registerMediaLikeEvents } from './src/features/likes.events.js';
-import { handleSaveClick } from './src/features/saved.events.js';
+import { handleSaveClick, refreshSavedState } from './src/features/saved.events.js';
 import {
     handleCommentClick,
     registerCommentEvents,
@@ -114,7 +115,7 @@ function renderAccountIdentity() {
 async function loadAccountContent() {
     const [sessionResult] = await Promise.allSettled([loadSession(), loadStoryHighlights()]);
     if (demoContentEnabled && sessionResult.status === 'rejected') return;
-    try { await loadCloudFollowing(); await loadCloudImagePosts(); }
+    try { await loadCloudFollowing(); await Promise.all([loadCloudImagePosts(), loadCloudSavedKeys()]); }
     catch { showShareFeedback('Could not load your saved image posts. Pull down on Home to retry.'); }
     refreshChatAttachmentExpiry();
     processScheduledPosts();
@@ -142,6 +143,7 @@ async function enterAccount(user, profile) {
     renderAccountIdentity();
     await loadAccountContent();
     void subscribeToSocialUpdates(user.id).catch(() => {});
+    void subscribeToSavedChanges(user.id, refreshSavedState).catch(() => {});
     for (const form of welcomeForms) form.reset();
     pendingProfileUser = null;
     welcomeScreen.hidden = true;
@@ -339,6 +341,9 @@ registerHomePullToRefresh(refreshShell, document.getElementById('home-refresh-st
         case 'profile': return refreshShell;
         default: return null;
     }
+});
+document.addEventListener('visibilitychange', () => {
+    if (state.signedInAccountId && !document.hidden) void refreshSavedState().catch(() => {});
 });
 if (typeof window.setInterval === 'function') {
     window.setInterval(() => {

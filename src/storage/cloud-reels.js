@@ -13,14 +13,21 @@ export async function loadCloudReels() {
         .eq('kind', 'reel').eq('audience', 'public').lte('publish_at', new Date().toISOString())
         .order('publish_at', { ascending: false }).limit(50);
     if (error) throw error;
+    const fresh = await hydrateCloudReels(client, data, accountId);
+    if (state.signedInAccountId !== accountId) return;
+    reels.splice(0, reels.length, ...reels.filter(reel => !reel.cloudOwnerId), ...fresh);
+}
+
+
+export async function hydrateCloudReels(client, data, accountId) {
     const videos = data.map(row => ({ row, video: row.assets.find(asset => asset.mime_type?.startsWith('video/')) })).filter(item => item.video);
     const paths = videos.map(item => item.video.object_path);
     const signed = paths.length ? await client.storage.from('app-media').createSignedUrls(paths, 3600) : { data: [] };
     if (signed.error) throw signed.error;
-    if (state.signedInAccountId !== accountId) return;
+    if (state.signedInAccountId !== accountId) return [];
     const urls = new Map(signed.data.map(item => [item.path, item.signedUrl]));
     const avatars = await avatarLookup(client, data.map(row => row.author));
-    if (state.signedInAccountId !== accountId) return;
+    if (state.signedInAccountId !== accountId) return [];
     const fresh = videos.flatMap(({ row, video }) => {
         const url = urls.get(video.object_path);
         if (!url) return [];
@@ -28,12 +35,12 @@ export async function loadCloudReels() {
         const previous = reels.find(reel => reel.id === id);
         const author = rememberCloudPerson({ ...row.author, id: row.owner_id }, avatars);
         return [{
-            ...previous, id, cloudOwnerId: row.owner_id, handle: author.handle,
+            ...previous, id, cloudContentId: row.id, cloudOwnerId: row.owner_id, handle: author.handle,
             user: author.name, avatar: author.avatar, caption: row.caption,
             createdAt: Date.parse(row.publish_at), video: url, poster: '', public: true, reel: true,
             mediaType: 'video', videoUrl: url, sensitive: row.metadata?.sensitive === true,
             likes: previous?.likes || 0, comments: previous?.comments || 0, commentItems: previous?.commentItems || [],
         }];
     });
-    reels.splice(0, reels.length, ...reels.filter(reel => !reel.cloudOwnerId), ...fresh);
+    return fresh;
 }

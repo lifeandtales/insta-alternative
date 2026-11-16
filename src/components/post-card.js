@@ -8,10 +8,10 @@ import { isFollowing, mediaNeedsWarning } from '../core/social.js';
 import { currentUser } from '../data/sample-data.js';
 import { renderCommentSection } from '../features/comments.js';
 import { observePostVideos } from '../media/video.js';
-import { getSavedItemKey } from '../storage/browser-storage.js';
+import { isMediaSaved } from '../storage/cloud-saved-items.js';
 
 export function renderSaveButton(type, entity) {
-    const saved = state.savedItems.has(getSavedItemKey(type, entity.id));
+    const saved = isMediaSaved(type, entity);
     return `<button class="save-btn ${saved ? "saved" : ""}" type="button" data-action="toggle-save" data-entity-type="${type}" data-entity-id="${entity.id}" aria-label="${saved ? "Remove from" : "Save to"} your collection" aria-pressed="${saved}" title="${saved ? "Remove from saved" : "Save"}">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.75h12v17l-6-4-6 4z" /></svg>
   </button>`;

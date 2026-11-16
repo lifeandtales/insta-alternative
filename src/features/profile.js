@@ -1,3 +1,4 @@
+import { cloudSavedEntities, cloudSavedKey, isMediaSaved } from '../storage/cloud-saved-items.js';
 import { cloudFollowLabel, cloudPerson } from './cloud-people.js';
 import { persistSession, unexpiredDrafts } from '../storage/local-session.js';
 import { setView } from '../core/navigation.js';
@@ -27,15 +28,25 @@ export function renderSavedTile(type, entity) {
   `;
 }
 
+export function getSavedCollection() {
+    if (state.profileHandle !== currentUser.handle) return [];
+    const results = [];
+    for (const [type, items] of [['post', posts], ['reel', reels]]) {
+        const unique = new Map([...cloudSavedEntities(type), ...items].map(item => [item.id, item]));
+        for (const entity of unique.values()) {
+            if (isMediaSaved(type, entity) && canViewMedia(entity)) results.push({ type, entity });
+        }
+    }
+    const savedAt = entity => state.cloudSavedDates?.get(cloudSavedKey(entity)) ?? entity.createdAt ?? 0;
+    return results.sort((left, right) => savedAt(right.entity) - savedAt(left.entity));
+}
+
 export function getProfileMediaCollection() {
     if (state.activeMediaViewerItems)
         return state.activeMediaViewerItems;
     const ownPosts = posts.filter((post) => post.handle === state.profileHandle && canViewMedia(post));
     const ownReels = reels.filter((reel) => reel.handle === state.profileHandle && canViewMedia(reel));
-    const savedCollection = [
-        ...posts.filter((post) => state.profileHandle === currentUser.handle && state.savedItems.has(getSavedItemKey("post", post.id))).map((entity) => ({ type: "post", entity })),
-        ...reels.filter((reel) => state.profileHandle === currentUser.handle && state.savedItems.has(getSavedItemKey("reel", reel.id))).map((entity) => ({ type: "reel", entity }))
-    ];
+    const savedCollection = getSavedCollection();
     const taggedCollection = [
         ...posts.filter((post) => (post.taggedUsers || []).some(handle => normalizeHandle(handle) === normalizeHandle(state.profileHandle))).map((entity) => ({ type: "post", entity })),
         ...reels.filter((reel) => (reel.taggedUsers || []).some(handle => normalizeHandle(handle) === normalizeHandle(state.profileHandle))).map((entity) => ({ type: "reel", entity }))
@@ -149,12 +160,7 @@ export function renderProfile() {
     const isOwnProfile = state.profileHandle === currentUser.handle;
     if(state.activeProfileSection==='drafts')state.activeProfileSection='posts';
     const canViewHighlights = accessible;
-    const savedCollection = isOwnProfile
-        ? [
-            ...posts.filter((post) => canViewMedia(post) && state.savedItems.has(getSavedItemKey("post", post.id))).map((entity) => ({ type: "post", entity })),
-            ...reels.filter((reel) => canViewMedia(reel) && state.savedItems.has(getSavedItemKey("reel", reel.id))).map((entity) => ({ type: "reel", entity }))
-        ]
-        : [];
+    const savedCollection = getSavedCollection();
     document.getElementById("profile-view").innerHTML = `
     <div class="profile-topbar">
       ${isOwnProfile ? '<span aria-hidden="true"></span>' : '<button type="button" class="profile-back" data-profile-back aria-label="Back to previous screen">←</button>'}

@@ -84,14 +84,23 @@ export async function loadCloudImagePosts(targetId = null) {
     if (result.error?.code === 'PGRST200') result = await load(rows);
     const { data, error } = result;
     if (error) throw error;
+    const cloudPosts = await hydrateCloudImagePosts(client, data, ownerId);
+    if (state.signedInAccountId !== ownerId) return;
+    const cloudIds = new Set(cloudPosts.map(post => post.id));
+    const remaining = posts.filter(post => !cloudIds.has(post.id) &&
+        (!post.cloudImagePaths || (targetId && (post.cloudOwnerId || ownerId) !== targetId)));
+    posts.splice(0, posts.length, ...remaining, ...cloudPosts);
+}
+
+export async function hydrateCloudImagePosts(client, data, ownerId) {
     const bucket = client.storage.from(bucketName);
     const paths = [...new Set(data.flatMap(row => row.items.map(item => item.path)))];
     const signed = paths.length ? await bucket.createSignedUrls(paths, 3600) : { data: [] };
     if (signed.error) throw signed.error;
     const urls = new Map(signed.data.map(item => [item.path, item.signedUrl]));
-    if (state.signedInAccountId !== ownerId) return;
+    if (state.signedInAccountId !== ownerId) return [];
     const avatars = await avatarLookup(client, data.map(row => row.author));
-    if (state.signedInAccountId !== ownerId) return;
+    if (state.signedInAccountId !== ownerId) return [];
     const cloudPosts = [];
     for (const row of data) {
         const mine = row.owner_id === ownerId;
@@ -115,10 +124,7 @@ export async function loadCloudImagePosts(targetId = null) {
             likes: row.cloud_likes?.[0]?.count ?? 0, liked: Boolean(row.viewer_like?.length), comments: row.cloud_comments?.[0]?.count ?? existing?.comments ?? 0, commentItems: existing?.commentItems ?? [],
         });
     }
-    const cloudIds = new Set(cloudPosts.map(post => post.id));
-    const remaining = posts.filter(post => !cloudIds.has(post.id) &&
-        (!post.cloudImagePaths || (targetId && (post.cloudOwnerId || ownerId) !== targetId)));
-    posts.splice(0, posts.length, ...remaining, ...cloudPosts);
+    return cloudPosts;
 }
 
 export async function updateCloudImagePost(post, fields) {

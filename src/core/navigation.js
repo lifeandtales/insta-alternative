@@ -1,3 +1,5 @@
+import { loadCloudSavedCollection, loadCloudSavedKeys } from '../storage/cloud-saved-items.js';
+import { syncVisibleSaveButtons } from '../features/saved.events.js';
 import { syncVisibleImageLikes } from '../features/likes.js';
 import { cloudPerson, fetchSocialProfile, loadCloudFollowing } from '../features/cloud-people.js';
 import { loadCloudInbox, loadCloudChat } from '../features/cloud-chat.js';
@@ -170,11 +172,15 @@ async function refreshViewData(view, owner, handle, activeChat) {
             const followed = state.cloudFollowingIds ||= new Set();
             if (person.followStatus === 'accepted') followed.add(target);
             else followed.delete(target);
-            await loadCloudImagePosts(target);
+            const loads = [loadCloudImagePosts(target)];
+            if (target === owner) {
+                loads.push(loadCloudSavedKeys(), loadCloudSavedCollection());
+            }
+            await Promise.all(loads);
         }
         if (stillVisible() && state.profileHandle === handle) {
             if (!person) document.getElementById('profile-view').textContent = 'This profile is no longer available.';
-            else { renderProfile(); syncVisibleImageLikes(); }
+            else { renderProfile(); syncVisibleImageLikes(); syncVisibleSaveButtons(); }
         }
     } else if (view === 'messages') {
         const chat = conversations.find(item => item.handle === activeChat && item.cloudId);
@@ -183,11 +189,11 @@ async function refreshViewData(view, owner, handle, activeChat) {
             if (chat || !activeChat) renderMessages({ preserveComposer: Boolean(chat) });
         }
     } else if (view === 'reels') {
-        await loadCloudReels();
+        await Promise.all([loadCloudReels(), loadCloudSavedKeys()]);
         if (stillVisible()) renderReels();
     } else if (view === 'home' || view === 'explore') {
         await loadCloudFollowing();
-        await loadCloudImagePosts();
+        await Promise.all([loadCloudImagePosts(), loadCloudSavedKeys()]);
         if (stillVisible()) {
             if (view === 'home') renderPostCards(getHomeFeedItems());
             else renderExplore();
