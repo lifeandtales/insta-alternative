@@ -5,6 +5,7 @@ import { escapeHtml } from '../core/utils.js';
 import { currentUser } from '../data/sample-data.js';
 import { renderProfile } from './profile.js';
 import { closeStoryViewer, showStoryAtIndex, startStoryProgress } from './stories.js';
+import { deleteCloudHighlight, setCloudHighlightArchived } from '../storage/cloud-highlights.js';
 import { persistStoryHighlights } from '../storage/browser-storage.js';
 
 export function renderProfileHighlights(handle = currentUser.handle, isOwnProfile = handle === currentUser.handle) {
@@ -52,9 +53,13 @@ export function renderProfileHighlights(handle = currentUser.handle, isOwnProfil
   `;
 }
 
+export function ownHighlightableStories() {
+    return [...state.stories.filter(story => story.handle === currentUser.handle), ...state.cloudArchivedStories];
+}
+
 export function renderHighlightPicker(selectedIds = new Set(), additionalStories = []) {
     const storyMap = new Map();
-    [...state.stories.filter((story) => story.handle === currentUser.handle), ...additionalStories].forEach((story) => {
+    [...ownHighlightableStories(), ...additionalStories].forEach((story) => {
         storyMap.set(String(story.id), story);
     });
     const ownStories = [...storyMap.values()];
@@ -80,14 +85,14 @@ export function openHighlightPicker(story = null) {
     state.editingStoryHighlightId = null;
     if (story && story.handle !== currentUser.handle)
         return;
-    if (!story && !state.stories.some((item) => item.handle === currentUser.handle)) {
+    if (!story && !ownHighlightableStories().length) {
         showShareFeedback("Add a story first, then you can save it to a highlight.");
         return;
     }
     const existing = document.getElementById('highlight-existing');
     existing.hidden = !story;
     existing.innerHTML = '<option value="">Create new highlight</option>' + state.storyHighlights.filter(item => item.handle === currentUser.handle && !item.archived).map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title)}</option>`).join('');
-    document.getElementById('highlight-audience').value = story?.audience || 'all';
+    document.getElementById('highlight-audience').value = story?.audience === 'close-friends' ? 'close-friends' : 'all';
     document.getElementById('highlight-cover').value = '';
     const picker = document.querySelector(".highlight-story-picker");
     const title = document.getElementById("highlight-title");
@@ -186,7 +191,8 @@ export async function archiveStoryHighlight(id) {
     document.querySelector(".story-viewer-stage video")?.pause();
     highlight.archived = !previousArchived;
     try {
-        await persistStoryHighlights();
+        if (highlight.cloudHighlightId) await setCloudHighlightArchived(highlight);
+        else await persistStoryHighlights();
     }
     catch (error) {
         highlight.archived = previousArchived;
@@ -199,7 +205,7 @@ export async function archiveStoryHighlight(id) {
         }
         startStoryProgress(state.activeStoryIndex);
         console.error("Could not update archived highlight", error);
-        showShareFeedback("This highlight couldn't be updated in browser storage.");
+        showShareFeedback("This highlight couldn't be updated.");
         return;
     }
     state.showArchivedHighlights = highlight.archived || state.showArchivedHighlights;
@@ -248,12 +254,13 @@ export async function deleteStoryHighlight() {
     const index = state.storyHighlights.indexOf(highlight);
     state.storyHighlights.splice(index, 1);
     try {
-        await persistStoryHighlights();
+        if (highlight.cloudHighlightId) await deleteCloudHighlight(highlight);
+        else await persistStoryHighlights();
     }
     catch (error) {
         state.storyHighlights.splice(index, 0, highlight);
         console.error("Could not delete story highlight", error);
-        showShareFeedback("This highlight couldn't be deleted from browser storage.");
+        showShareFeedback("This highlight couldn't be deleted.");
         closeHighlightDeleteConfirmation();
         return;
     }

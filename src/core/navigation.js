@@ -5,6 +5,7 @@ import { cloudPerson, fetchSocialProfile, loadCloudFollowing } from '../features
 import { loadCloudInbox, loadCloudChat } from '../features/cloud-chat.js';
 import { loadCloudImagePosts } from '../storage/image-posts.js';
 import { loadCloudReels } from '../storage/cloud-reels.js';
+import { loadCloudHighlights, loadCloudStoryArchive } from '../storage/cloud-highlights.js';
 import { loadCloudStories } from '../storage/cloud-stories.js';
 import { conversations, currentUser } from '../data/sample-data.js';
 import { renderNotificationsPage, restoreNotificationFocus } from '../features/notifications.js';
@@ -173,9 +174,9 @@ async function refreshViewData(view, owner, handle, activeChat) {
             const followed = state.cloudFollowingIds ||= new Set();
             if (person.followStatus === 'accepted') followed.add(target);
             else followed.delete(target);
-            const loads = [loadCloudImagePosts(target)];
+            const loads = [loadCloudImagePosts(target), loadCloudHighlights(target, person.handle).catch(() => {})];
             if (target === owner) {
-                loads.push(loadCloudSavedKeys(), loadCloudSavedCollection());
+                loads.push(loadCloudSavedKeys(), loadCloudSavedCollection(), loadCloudStoryArchive().catch(() => {}));
             }
             await Promise.all(loads);
         }

@@ -153,10 +153,10 @@ export async function loadStoryHighlights() {
         if (storedHighlights !== undefined) {
             if (!Array.isArray(storedHighlights))
                 throw new Error("Saved highlight data has an invalid format.");
-            state.storyHighlights = storedHighlights.map((highlight) => ({
+            state.storyHighlights = [...state.storyHighlights.filter(highlight => highlight.cloudHighlightId), ...storedHighlights.map((highlight) => ({
                 ...highlight,
                 stories: highlight.stories.map(restoreStoryMedia)
-            }));
+            }))];
         }
         if (storedStories !== undefined) {
             if (!Array.isArray(storedStories))
@@ -184,7 +184,7 @@ export async function loadStoryHighlights() {
 }
 
 export async function persistStoryHighlights() {
-    const stored = await Promise.all(state.storyHighlights.map(async (highlight) => ({
+    const stored = await Promise.all(state.storyHighlights.filter(highlight => !highlight.cloudHighlightId).map(async (highlight) => ({
         ...highlight,
         stories: await Promise.all(highlight.stories.map(serializeStoryMedia))
     })));

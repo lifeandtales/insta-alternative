@@ -6,7 +6,7 @@ import { escapeHtml, toDateTimeLocalValue } from '../core/utils.js';
 import { currentUser, posts } from '../data/sample-data.js';
 import { updateSoundButton } from '../media/video.js';
 import { persistActiveStories } from '../storage/browser-storage.js';
-import { deleteCloudStory, loadCloudStories, publishCloudStory } from '../storage/cloud-stories.js';
+import { cloudStoryAllowsReplies, deleteCloudStory, loadCloudStories, loadCloudStorySettings, loadCloudStoryLiked, loadCloudStoryViewCount, publishCloudStory, recordCloudStoryEngagement } from '../storage/cloud-stories.js';
 import { persistPreferences } from '../storage/preferences.js';
 import { applyStoryComposition, storyVideoRange } from './story-composition.js';
 import { syncStoryOptionButtons, openStoryExitDialog, closeStoryExitDialog } from './story-options.js';
@@ -17,6 +17,7 @@ let storyCreatorTrigger;
 let storyHistoryEntryOpen = false;
 let hashtagViewerClosed = null;
 let publishingCloudStory = false;
+let storyViewCountTimer;
 const removingCloudStories = new Set();
 
 window.addEventListener('popstate', () => {
@@ -285,10 +286,25 @@ export async function addStory(story) {
 }
 
 export function openStorySettings() {
-    document.querySelector(".story-settings-backdrop").hidden = false;
-    document.getElementById("story-allow-replies").checked = state.storySettings.allowReplies;
-    document.getElementById("story-save-archive").checked = state.storySettings.saveToArchive;
-    document.querySelector(".story-settings-close").focus();
+    const panel = document.querySelector('.story-settings-backdrop');
+    const save = panel.querySelector('.story-settings-save');
+    panel.hidden = false;
+    const display = () => {
+        document.getElementById('story-allow-replies').checked = state.storySettings.allowReplies;
+        document.getElementById('story-save-archive').checked = state.storySettings.saveToArchive;
+    };
+    display();
+    panel.querySelector('.story-settings-close').focus();
+    const owner = state.signedInAccountId;
+    if (!owner) return;
+    save.disabled = true;
+    void loadCloudStorySettings().then(settings => {
+        if (state.signedInAccountId !== owner || panel.hidden) return;
+        state.storySettings = settings;
+        display();
+    }).catch(() => showShareFeedback('Could not load your Story settings.')).finally(() => {
+        save.disabled = false;
+    });
 }
 
 export function closeStorySettings() {
@@ -438,6 +454,50 @@ export function openHashtagStories(tag, onClose = null) {
     return true;
 }
 
+export function renderStoryLikeButton(story) {
+    const button = document.querySelector('.story-like-button');
+    button.setAttribute('aria-pressed', String(Boolean(story.liked)));
+    button.firstChild.textContent = story.liked ? '♥ ' : '♡ ';
+}
+
+function renderStoryViewCount(button, count) {
+    const label = `${count} ${count === 1 ? 'view' : 'views'}`;
+    button.textContent = label;
+    button.setAttribute('aria-label', label);
+}
+
+function syncStoryEngagement(story, mine, viewersButton, likeButton) {
+    window.clearInterval?.(storyViewCountTimer);
+    likeButton.disabled = false;
+    if (!story.cloudContentId || story.fromHighlight) return;
+    const owner = state.signedInAccountId;
+    const stillViewing = () => owner === state.signedInAccountId &&
+        state.activeStorySequence[state.activeStoryIndex] === story;
+    if (mine) {
+        const refresh = async () => {
+            if (document.hidden || !stillViewing()) return;
+            try {
+                const count = await loadCloudStoryViewCount(story);
+                if (!stillViewing()) return;
+                story.cloudViewCount = count;
+                renderStoryViewCount(viewersButton, count);
+            } catch { /* A later refresh can retry. */ }
+        };
+        void refresh();
+        storyViewCountTimer = window.setInterval?.(refresh, 5000);
+        return;
+    }
+    likeButton.disabled = true;
+    void recordCloudStoryEngagement(story, 'view').catch(() => {});
+    void loadCloudStoryLiked(story).then(liked => {
+        if (!stillViewing()) return;
+        story.liked = liked;
+        renderStoryLikeButton(story);
+    }).catch(() => {}).finally(() => {
+        if (stillViewing()) likeButton.disabled = false;
+    });
+}
+
 export function showStoryAtIndex(index) {
     if (state.deletionRequestedAt) { closeStoryViewer(); return; }
     if (state.activeStoryHashtag) {
@@ -476,20 +536,27 @@ export function showStoryAtIndex(index) {
         }
     }
     const replyForm = document.querySelector('.story-reply-form');
-    replyForm.hidden = isOwner || !state.storySettings.allowReplies;
+    replyForm.hidden = isOwner || Boolean(story.cloudContentId) || !state.storySettings.allowReplies;
     replyForm.reset();
+    if (!isOwner && story.cloudContentId && !story.fromHighlight) {
+        const owner = state.signedInAccountId;
+        void cloudStoryAllowsReplies(story).then(allowed => {
+            if (owner === state.signedInAccountId && state.activeStorySequence[state.activeStoryIndex] === story) {
+                replyForm.hidden = !allowed;
+            }
+        }).catch(() => {});
+    }
     document.querySelector('.story-direct-highlight').hidden = !isOwner;
     const viewersButton = document.querySelector('.story-viewers-button');
     viewersButton.hidden = !isOwner;
     const viewers = Array.isArray(story.viewers) ? story.viewers : [];
-    viewersButton.textContent = `${viewers.length} ${viewers.length === 1 ? 'view' : 'views'}`;
-    viewersButton.setAttribute('aria-label', `${viewers.length} ${viewers.length === 1 ? 'view' : 'views'}`);
+    renderStoryViewCount(viewersButton, story.cloudViewCount ?? viewers.length);
     const likeButton = document.querySelector('.story-like-button');
     likeButton.hidden = isOwner;
     story.likes = story.likes || [];
-    story.liked = story.likes.some(person => person.handle === currentUser.handle);
-    likeButton.setAttribute('aria-pressed', String(Boolean(story.liked)));
-    likeButton.firstChild.textContent = story.liked ? '♥ ' : '♡ ';
+    if (!story.cloudContentId || story.fromHighlight) story.liked = story.likes.some(person => person.handle === currentUser.handle);
+    renderStoryLikeButton(story);
+    syncStoryEngagement(story, isOwner, viewersButton, likeButton);
     const reactionButton = document.querySelector('.story-reaction-trigger');
     reactionButton.hidden = isOwner;
     story.reactions = story.reactions || [];
@@ -633,6 +700,7 @@ export function startStoryProgress(index) {
 }
 
 export function closeStoryViewer({ fromHistory = false } = {}) {
+    window.clearInterval?.(storyViewCountTimer);
     const wasHashtagViewer = Boolean(state.activeStoryHashtag);
     const returnToPreviousPage = storyHistoryEntryOpen && !fromHistory;
     storyHistoryEntryOpen = false;

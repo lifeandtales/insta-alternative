@@ -3,6 +3,7 @@ import { handleStoryDraftManagement } from './story-drafts.js';
 import { closeHomePanel, showHomePanel } from './home-controls.js';
 import { escapeHtml } from '../core/utils.js';
 import { persistSession, unexpiredDrafts } from '../storage/local-session.js';
+import { loadCloudStoryViewers, recordCloudStoryEngagement, saveCloudStorySettings, sendCloudStoryReply } from '../storage/cloud-stories.js';
 import { persistPreferences } from '../storage/preferences.js';
 import { conversations } from '../data/sample-data.js';
 import { mayInteract, canViewMedia, canViewStory, getAccount } from '../core/social.js';
@@ -38,6 +39,7 @@ import {
     openStoryGroup,
     openStorySettings,
     removeOwnStory,
+    renderStoryLikeButton,
     scheduleOrPublishStory,
     showStoryAtIndex,
     showStoryOptions,
@@ -81,6 +83,44 @@ export function openStoryRepostEditor(activeStory) {
     renderSelectedStory();
     document.querySelector('.story-create-back').focus();
     return true;
+}
+
+function renderStoryViewerRow(person, liked) {
+    const name = escapeHtml(person.name || person.handle || 'Viewer');
+    const avatar = person.avatar ? `<img src="${escapeHtml(person.avatar)}" alt="" />` : '';
+    const viewedAt = Number.isFinite(person.viewedAt) && person.viewedAt > 0 ? new Date(person.viewedAt) : null;
+    const time = viewedAt ? `<time datetime="${viewedAt.toISOString()}">${escapeHtml(viewedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</time>` : '';
+    return `<li class="story-viewer-row">${avatar}<span>${name}</span>${liked ? '<span class="story-viewer-liked" aria-label="Liked your story">♥</span>' : ''}${time}</li>`;
+}
+
+function showConnectedStoryViewers(story) {
+    showHomePanel('Story viewers', '<ul class="story-viewers-list"><li>Loading viewers…</li></ul><button type="button" class="story-load-viewers" hidden>Load more</button>');
+    const list = document.querySelector('.story-viewers-list');
+    const more = document.querySelector('.story-load-viewers');
+    const owner = state.signedInAccountId;
+    let offset = 0;
+    const load = async () => {
+        more.disabled = true;
+        try {
+            const viewers = await loadCloudStoryViewers(story, offset);
+            if (!list.isConnected || owner !== state.signedInAccountId) return;
+            const rows = viewers.slice(0,50).map(viewer => renderStoryViewerRow(viewer, viewer.liked)).join('');
+            if (offset) list.insertAdjacentHTML('beforeend', rows);
+            else list.innerHTML = rows || '<li>No viewers yet.</li>';
+            offset += Math.min(viewers.length,50);
+            more.hidden = viewers.length <= 50;
+            more.textContent = 'Load more';
+        } catch {
+            if (!list.isConnected || owner !== state.signedInAccountId) return;
+            if (!offset) list.innerHTML = '<li>Could not load viewers.</li>';
+            more.hidden = false;
+            more.textContent = 'Try again';
+        } finally {
+            more.disabled = false;
+        }
+    };
+    more.addEventListener('click', () => void load());
+    void load();
 }
 
 export function handleStoryMenuClick(event) {
@@ -429,10 +469,22 @@ export function handleStoryClick(event) {
     }
     if (event.target.closest(".story-settings-save")) {
         if (!mayInteract()) return true;
-        state.storySettings.allowReplies = document.getElementById("story-allow-replies").checked;
-        state.storySettings.saveToArchive = document.getElementById("story-save-archive").checked;
-        closeStorySettings();
-        showShareFeedback("Story settings saved.");
+        const settings = {
+            allowReplies: document.getElementById('story-allow-replies').checked,
+            saveToArchive: document.getElementById('story-save-archive').checked,
+        };
+        const finish = () => {
+            state.storySettings = settings;
+            closeStorySettings();
+            showShareFeedback('Story settings saved.');
+        };
+        if (state.signedInAccountId) {
+            const button = event.target.closest('.story-settings-save');
+            button.disabled = true;
+            void saveCloudStorySettings(settings).then(finish)
+                .catch(() => showShareFeedback('Story settings could not be saved.'))
+                .finally(() => { button.disabled = false; });
+        } else finish();
         return true;
     }
     if (event.target.closest(".story-viewer-close") || event.target === document.querySelector(".story-viewer-backdrop")) {
@@ -448,6 +500,20 @@ export function handleStoryClick(event) {
     if (event.target.closest('.story-like-button')) {
         if (!mayInteract()) { showShareFeedback('Approval is required to like a story.'); return true; }
         const story = state.activeStorySequence[state.activeStoryIndex];
+        if (story?.cloudContentId && !story.fromHighlight) {
+            const button = event.target.closest('.story-like-button');
+            const owner = state.signedInAccountId;
+            const liked = !story.liked;
+            button.disabled = true;
+            void recordCloudStoryEngagement(story, 'like', liked).then(() => {
+                if (state.signedInAccountId !== owner) return;
+                story.liked = liked;
+                if (state.activeStorySequence[state.activeStoryIndex] === story) renderStoryLikeButton(story);
+            }).catch(() => showShareFeedback('Could not update this Story like.')).finally(() => {
+                if (state.activeStorySequence[state.activeStoryIndex] === story) button.disabled = false;
+            });
+            return true;
+        }
         story.likes = story.likes || [];
         const liked = story.likes.some(person => person.handle === currentUser.handle);
         story.likes = liked ? story.likes.filter(person => person.handle !== currentUser.handle) : [...story.likes, {handle:currentUser.handle,name:currentUser.name,avatar:currentUser.avatar}];
@@ -461,18 +527,17 @@ export function handleStoryClick(event) {
         const story = state.activeStorySequence[state.activeStoryIndex];
         if (story.handle === currentUser.handle) {
             pauseStory();
+            if (story.cloudContentId && !story.fromHighlight) {
+                showConnectedStoryViewers(story);
+                return true;
+            }
             const likes = Array.isArray(story.likes) ? story.likes : [];
             const viewers = [...(Array.isArray(story.viewers) ? story.viewers : [])].sort((a, b) => {
                 const aLiked = likes.some(person => person.handle === a.handle);
                 const bLiked = likes.some(person => person.handle === b.handle);
                 return Number(bLiked) - Number(aLiked) || (b.viewedAt || 0) - (a.viewedAt || 0);
             });
-            const list = viewers.map(person => {
-                const liked = likes.some(like => like.handle === person.handle);
-                const name = escapeHtml(person.name || person.handle || 'Viewer');
-                const avatar = person.avatar ? `<img src="${escapeHtml(person.avatar)}" alt="" />` : '';
-                return `<li class="story-viewer-row">${avatar}<span>${name}</span>${liked ? '<span class="story-viewer-liked" aria-label="Liked your story">♥</span>' : ''}</li>`;
-            }).join('');
+            const list = viewers.map(person => renderStoryViewerRow(person, likes.some(like => like.handle === person.handle))).join('');
             showHomePanel(`${viewers.length} ${viewers.length === 1 ? 'view' : 'views'}`, `<ul class="story-viewers-list">${list || '<li>No viewers yet.</li>'}</ul>`);
         }
         return true;
@@ -539,6 +604,20 @@ export function registerStoryGestureEvents() {
         const text = input.value.trim();
         if (!story || !text || story.handle === currentUser.handle) return;
         if (!mayInteract()) { showShareFeedback('Approval is required to send messages.'); return; }
+        if (story.cloudContentId && !story.fromHighlight) {
+            if (input.disabled) return;
+            input.disabled = true;
+            void sendCloudStoryReply(story, text).then(() => {
+                if (state.activeStorySequence[state.activeStoryIndex] === story) {
+                    input.value = '';
+                    input.blur();
+                    resumeStory();
+                }
+                showShareFeedback('Story reply sent.');
+            }).catch(() => showShareFeedback('Could not send this Story reply.'))
+                .finally(() => { input.disabled = false; });
+            return;
+        }
         let chat = conversations.find(item => item.handle === story.handle);
         if (!chat) {
             chat = { handle: story.handle, user: story.user, avatar: story.avatar, messages: [] };

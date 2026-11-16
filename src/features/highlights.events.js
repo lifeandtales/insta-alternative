@@ -7,8 +7,10 @@ import {
     deleteStoryHighlight,
     openHighlightPicker,
     openStoryHighlight,
+    ownHighlightableStories,
 } from './highlights.js';
 import { renderProfile } from './profile.js';
+import { reorderCloudHighlights, saveCloudHighlight } from '../storage/cloud-highlights.js';
 import { persistStoryHighlights } from '../storage/browser-storage.js';
 import { mayInteract } from '../core/social.js';
 
@@ -22,7 +24,13 @@ export function handleHighlightClick(event) {
         if (other) {
             const left = state.storyHighlights.indexOf(own[index]), right = state.storyHighlights.indexOf(other);
             [state.storyHighlights[left], state.storyHighlights[right]] = [state.storyHighlights[right], state.storyHighlights[left]];
-            persistStoryHighlights().then(renderProfile).catch(() => showShareFeedback('Highlight order could not be saved.'));
+            const ordered = state.storyHighlights.filter(item => item.handle === currentUser.handle);
+            const save = own[index].cloudHighlightId && other.cloudHighlightId
+                ? reorderCloudHighlights(ordered) : persistStoryHighlights();
+            void save.then(renderProfile).catch(() => {
+                [state.storyHighlights[left], state.storyHighlights[right]] = [state.storyHighlights[right], state.storyHighlights[left]];
+                showShareFeedback('Highlight order could not be saved.');
+            });
         }
         return true;
     }
@@ -65,8 +73,8 @@ export function registerHighlightEvents() {
         const editingHighlight = targetId ? state.storyHighlights.find((item) => item.id === targetId && item.handle === currentUser.handle)
             : null;
         const availableStories = editingHighlight
-            ? [...state.stories.filter((story) => story.handle === currentUser.handle), ...editingHighlight.stories]
-            : state.stories.filter((story) => story.handle === currentUser.handle);
+            ? [...ownHighlightableStories(), ...editingHighlight.stories]
+            : ownHighlightableStories();
         const selectedStories = state.highlightStoryToAdd ? [...(editingHighlight?.stories || []).filter(item => item.id !== state.highlightStoryToAdd.id), state.highlightStoryToAdd]
             : [...new Map(availableStories
                     .filter((story) => selectedIds.has(String(story.id)))
@@ -91,6 +99,24 @@ export function registerHighlightEvents() {
             stories: selectedStories.map((story) => ({ ...story }))
         };
         const coverFile = document.getElementById('highlight-cover').files?.[0];
+        const connected = Boolean(state.signedInAccountId && (highlight.cloudHighlightId || highlight.stories.every(story => story.cloudContentId)));
+        const submitButton = document.querySelector(".highlight-create-submit");
+        if (connected) {
+            submitButton.disabled = true;
+            try {
+                await saveCloudHighlight(highlight, coverFile);
+                if (editingHighlight) Object.assign(editingHighlight, highlight);
+                else state.storyHighlights.push(highlight);
+                closeHighlightPicker();
+                renderProfile();
+                showShareFeedback(editingHighlight ? "Your highlight was updated." : "Your story highlight was created.");
+            } catch (error) {
+                showShareFeedback(error instanceof Error ? error.message : "This highlight couldn't be saved.");
+            } finally {
+                submitButton.disabled = false;
+            }
+            return;
+        }
         if (coverFile) {
             try { highlight.cover = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(coverFile); }); }
             catch { showShareFeedback('The cover photo could not be read.'); return; }
@@ -101,7 +127,6 @@ export function registerHighlightEvents() {
         else {
             state.storyHighlights.push(highlight);
         }
-        const submitButton = document.querySelector(".highlight-create-submit");
         submitButton.disabled = true;
         try {
             await persistStoryHighlights();

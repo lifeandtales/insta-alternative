@@ -160,6 +160,20 @@ export async function loadCloudStories() {
     const { data, error } = result;
     if (error) throw error;
     if (owner !== state.signedInAccountId || revision !== feedRevision) return;
+    const previous = new Map(state.stories.filter(story => story.cloudContentId).map(story => [story.id, story]));
+    const fresh = await hydrateCloudStories(client, data.slice().reverse(), owner, previous);
+    if (owner !== state.signedInAccountId || revision !== feedRevision) return;
+    for (const story of fresh) previous.delete(story.id);
+    for (const id of previous.keys()) {
+        clearTimeout(state.storyExpiryTimers.get(id));
+        state.storyExpiryTimers.delete(id);
+    }
+    state.stories = [...state.stories.filter(story => !story.cloudContentId), ...fresh];
+    state.hasScheduledCloudStory = data.some(row => row.owner_id === owner && Date.parse(row.publish_at) > Date.now());
+}
+
+export async function hydrateCloudStories(client, data, owner, previous = new Map()) {
+    if (owner !== state.signedInAccountId) return [];
     if (owner !== cacheOwner) {
         signedMedia.clear();
         cacheOwner = owner;
@@ -174,7 +188,7 @@ export async function loadCloudStories() {
         track('app-media', row.source_details?.audio_path);
     }
     for (const [key, entry] of signedMedia) {
-        if (!assets.has(key) || entry.expiresAt <= now) signedMedia.delete(key);
+        if (entry.expiresAt <= now) signedMedia.delete(key);
     }
     const [signed, avatars] = await Promise.all([
         Promise.all(['app-media', 'post-images'].map(async bucket => {
@@ -186,12 +200,11 @@ export async function loadCloudStories() {
         })),
         avatarLookup(client, [...data, ...data.map(row => row.source_details).filter(Boolean)]),
     ]);
-    if (owner !== state.signedInAccountId || revision !== feedRevision) return;
+    if (owner !== state.signedInAccountId) return [];
     for (const item of signed.flat()) {
         if (item.signedUrl) signedMedia.set(item.bucket + ':' + item.path, { url: item.signedUrl, expiresAt: now + 240000 });
     }
-    const previous = new Map(state.stories.filter(story => story.cloudContentId).map(story => [story.id, story]));
-    const fresh = data.slice().reverse().flatMap(row => {
+    return data.flatMap(row => {
         const assetUrl = (bucket, path) => signedMedia.get(bucket + ':' + path)?.url;
         const media = assetUrl(row.media_bucket || 'app-media', row.object_path);
         if (!media) return [];
@@ -222,13 +235,6 @@ export async function loadCloudStories() {
             createdAt: Date.parse(row.publish_at), expiresAt: Date.parse(row.expires_at),
         }];
     });
-    for (const story of fresh) previous.delete(story.id);
-    for (const id of previous.keys()) {
-        clearTimeout(state.storyExpiryTimers.get(id));
-        state.storyExpiryTimers.delete(id);
-    }
-    state.stories = [...state.stories.filter(story => !story.cloudContentId), ...fresh];
-    state.hasScheduledCloudStory = data.some(row => row.owner_id === owner && Date.parse(row.publish_at) > now);
 }
 
 export async function deleteCloudStory(story) {
@@ -267,5 +273,73 @@ export async function setCloudStoryFriend(id, selected) {
     const { error } = await (selected
         ? table.upsert({ owner_id: owner, friend_id: id }, { ignoreDuplicates: true })
         : table.delete().eq('owner_id', owner).eq('friend_id', id));
+    if (error) throw error;
+}
+
+export async function recordCloudStoryEngagement(story, action, enabled = true) {
+    const client = await getSupabaseClient();
+    const { error } = await client.rpc('record_story_engagement', {
+        target: story.cloudContentId, action, enabled,
+    });
+    if (error) throw error;
+}
+
+export async function loadCloudStoryLiked(story) {
+    const owner = state.signedInAccountId;
+    const client = await getSupabaseClient();
+    const { data, error } = await client.from('media_interactions').select('kind')
+        .eq('content_id', story.cloudContentId).eq('user_id', owner).eq('kind', 'like').maybeSingle();
+    if (error) throw error;
+    return Boolean(data);
+}
+
+export async function loadCloudStoryViewCount(story) {
+    const client = await getSupabaseClient();
+    const { data, error } = await client.rpc('story_viewer_count', { target: story.cloudContentId });
+    if (error) throw error;
+    return Number(data);
+}
+
+export async function loadCloudStoryViewers(story, offset) {
+    const client = await getSupabaseClient();
+    const { data, error } = await client.rpc('story_viewers', { target: story.cloudContentId, page_offset: offset });
+    if (error) throw error;
+    const avatars = await avatarLookup(client, data);
+    return data.map(row => ({
+        ...rememberCloudPerson(row, avatars), liked: row.liked, viewedAt: Date.parse(row.viewed_at),
+    }));
+}
+
+export async function loadCloudStorySettings() {
+    const owner = state.signedInAccountId;
+    const client = await getSupabaseClient();
+    const { data, error } = await client.from('account_preferences').select('settings').eq('user_id', owner).maybeSingle();
+    if (error) throw error;
+    return {
+        allowReplies: data?.settings?.story?.allowReplies !== false,
+        saveToArchive: data?.settings?.story?.saveToArchive !== false,
+    };
+}
+
+export async function saveCloudStorySettings(settings) {
+    const client = await getSupabaseClient();
+    const { error } = await client.rpc('set_story_settings', {
+        allow_replies: settings.allowReplies, save_to_archive: settings.saveToArchive,
+    });
+    if (error) throw error;
+}
+
+export async function cloudStoryAllowsReplies(story) {
+    const client = await getSupabaseClient();
+    const { data, error } = await client.rpc('story_allows_replies', { target: story.cloudContentId });
+    if (error) throw error;
+    return data === true;
+}
+
+export async function sendCloudStoryReply(story, text) {
+    const client = await getSupabaseClient();
+    const { error } = await client.rpc('send_connected_story_reply', {
+        target: story.cloudContentId, reply_text: text,
+    });
     if (error) throw error;
 }
