@@ -12,7 +12,7 @@ import { appShell, viewHeading, viewSections } from './dom.js';
 import { state } from './state.js';
 import { renderExplore } from '../features/explore.js';
 import { getHomeFeedItems } from '../features/home.js';
-import { renderMessages } from '../features/messages.js';
+import { refreshReadReceiptLabel, renderMessages } from '../features/messages.js';
 import { renderProfile } from '../features/profile.js';
 import { renderReels } from '../features/reels.js';
 import { renderStories } from '../features/stories.js';
@@ -185,8 +185,9 @@ async function refreshViewData(view, owner, handle, activeChat) {
     } else if (view === 'messages') {
         const chat = conversations.find(item => item.handle === activeChat && item.cloudId);
         const changed = chat ? await loadCloudChat(chat) : (await loadCloudInbox(), true);
-        if (changed && stillVisible() && state.activeConversationHandle === activeChat && !state.activeGroupProfileHandle) {
-            if (chat || !activeChat) renderMessages({ preserveComposer: Boolean(chat) });
+        if (stillVisible() && state.activeConversationHandle === activeChat && !state.activeGroupProfileHandle) {
+            if (changed && (chat || !activeChat)) renderMessages({ preserveComposer: Boolean(chat) });
+            else if (chat) refreshReadReceiptLabel(chat);
         }
     } else if (view === 'reels') {
         await Promise.all([loadCloudReels(), loadCloudSavedKeys()]);

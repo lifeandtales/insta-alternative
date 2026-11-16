@@ -96,7 +96,11 @@ export async function loadCloudChat(chat) {
         client.from('conversations').select('retention_hours').eq('id', chat.cloudId).maybeSingle(),
         client.from('conversation_preferences').select('pinned,muted,calls_muted').eq('conversation_id', chat.cloudId).eq('user_id', owner).maybeSingle(),
         client.from('conversation_preferences').select('wallpaper_version').eq('conversation_id', chat.cloudId).eq('user_id', owner).maybeSingle(),
-        client.rpc('direct_chat_read_receipt', { target: chat.cloudId })
+        client.rpc('direct_chat_read_receipt_details', { target: chat.cloudId }).then(async result => {
+            if (result.error?.code !== 'PGRST202') return result;
+            const legacy = await client.rpc('direct_chat_read_receipt', { target: chat.cloudId });
+            return { data: { seen_at: legacy.data }, error: legacy.error };
+        })
     ]);
     if (history.error) throw history.error;
     if (profile.error) throw profile.error;
@@ -124,8 +128,13 @@ export async function loadCloudChat(chat) {
             chat.wallpaperVersion = data.wallpaper_version;
         }
     }
-    const receiptChanged = !receipt.error && chat.peerSeenAt !== receipt.data;
-    if (!receipt.error) chat.peerSeenAt = receipt.data;
+    const seenAt = receipt.data?.seen_at ?? null;
+    const readAt = receipt.data?.read_at ?? null;
+    const receiptChanged = !receipt.error && (chat.peerSeenAt !== seenAt || chat.peerReadAt !== readAt);
+    if (!receipt.error) {
+        chat.peerSeenAt = seenAt;
+        chat.peerReadAt = readAt;
+    }
     const previous = chat.messages;
     const canSend = Boolean(permissions.error ? profile.data?.mutual : permissions.data) && !state.blockedHandles.has(chat.handle);
     const page = history.data.slice(0, historyPageSize);

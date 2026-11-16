@@ -354,6 +354,23 @@ function renderConversationMessage(message, conversation, messagesById) {
     `;
 }
 
+function readReceiptLabel(readAt) {
+    const seconds = (Date.now() - Date.parse(readAt)) / 1000;
+    if (!Number.isFinite(seconds)) return 'Seen';
+    if (seconds < 60) return 'Seen just now';
+    if (seconds < 3600) return `Seen ${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `Seen ${Math.floor(seconds / 3600)}h ago`;
+    return `Seen ${Math.floor(seconds / 86400)}d ago`;
+}
+
+export function refreshReadReceiptLabel(chat) {
+    const receipt = document.querySelector('.chat-read-receipt');
+    if (receipt) {
+        const label = readReceiptLabel(chat.peerReadAt);
+        if (receipt.textContent !== label) receipt.textContent = label;
+    }
+}
+
 function renderConnectedChat(list, chat, { preserveComposer, preserveHistoryAnchor, scrollToLatest }) {
     const messages = state.blockedHandles.has(chat.handle) ? [] : chat.messages;
     const byId = new Map(messages.map(message => [message.id, message]));
@@ -363,7 +380,8 @@ function renderConnectedChat(list, chat, { preserveComposer, preserveHistoryAnch
     const bubbles = messages.map(message => {
         const markup = renderConversationMessage(message, chat, byId);
         const badges = (message.reactions || []).map(reaction => reaction.emoji).join(' ');
-        const receipt = seenMessage === message ? '<span class="chat-read-receipt">Seen</span>' : '';
+        const receipt = seenMessage === message
+            ? `<span class="chat-read-receipt">${readReceiptLabel(chat.peerReadAt)}</span>` : '';
         return markup.replace('<article ', `<article data-reactable-message="${escapeHtml(String(message.id))}" `)
             .replace('</article>', `<span class="chat-message-reaction" role="status"${badges ? '' : ' hidden'}>${escapeHtml(badges)}</span>${receipt}</article>`);
     }).join('') || `<p class="chat-empty">${chat.cloudLoaded ? 'Start with a message.' : 'Loading messages…'}</p>`;
