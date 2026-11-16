@@ -112,6 +112,8 @@ function renderGroupProfile(group) {
       </section>`;
 }
 
+const messageOptionsControl = '<button type="button" class="chat-message-options" data-message-options aria-label="Message options" aria-haspopup="true">⋯</button>';
+
 export function renderMessages({ preserveComposer = false, preserveHistoryAnchor = false, scrollToLatest = false } = {}) {
     const list = document.getElementById("messages-list");
     const group = conversations.find(item => item.handle === state.activeGroupProfileHandle);
@@ -276,7 +278,7 @@ export function renderMessages({ preserveComposer = false, preserveHistoryAnchor
         if (message.id == null) return markup;
         const reaction = message.reactionsBy?.[currentUser.handle] ?? (message.likedBy?.includes(currentUser.handle) ? '❤️' : '');
         return markup.replace('<article ', `<article data-reactable-message="${escapeHtml(String(message.id))}" `)
-            .replace('</article>', `<span class="chat-message-reaction" role="status"${reaction ? '' : ' hidden'}>${escapeHtml(reaction)}</span></article>`);
+            .replace('</article>', `<span class="chat-message-reaction" role="status"${reaction ? '' : ' hidden'}>${escapeHtml(reaction)}</span>${messageOptionsControl}</article>`);
     }).join("");
     if (preserveComposer) {
         const history = list.querySelector('.chat-history');
@@ -347,6 +349,7 @@ function renderConnectedChat(list, chat, { preserveComposer, preserveHistoryAnch
         ${message.replyToId ? renderReplyQuote(byId.get(message.replyToId), chat) : ''}
         <p>${escapeHtml(message.text)}</p><time>${escapeHtml(formatConversationTime(message.sentAt))}</time>
         <span class="chat-message-reaction" role="status"${message.reactions?.length ? '' : ' hidden'}>${escapeHtml((message.reactions || []).map(reaction => reaction.emoji).join(' '))}</span>
+        ${messageOptionsControl}
       </article>`).join('') || `<p class="chat-empty">${chat.cloudLoaded ? 'Start with a message.' : 'Loading messages…'}</p>`;
     const markup = (chat.cloudHasOlder && messages.length
         ? '<button type="button" class="chat-load-older" data-load-older-chat>Load older messages</button>'

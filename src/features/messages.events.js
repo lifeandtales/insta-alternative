@@ -134,7 +134,7 @@ function startChatReply(bubble) {
 }
 
 function registerMessageReactionGestures(list) {
-    let hold, suppressedBubble, openBubble;
+    let hold, touchSwipe, suppressedBubble, openBubble;
     const closeTray = () => { list.querySelector('.chat-reaction-tray')?.remove(); openBubble = null; };
     const cancelHold = () => {
         clearTimeout(hold?.timer);
@@ -170,19 +170,22 @@ function registerMessageReactionGestures(list) {
         const preferred = above >= top ? above : bounds.bottom + 6;
         tray.style.top = `${Math.max(top, Math.min(preferred, bottom - tray.offsetHeight - 4))}px`;
     };
+    const messageAtPoint = (history, target, y) => target.closest('[data-reactable-message]') ||
+        [...history.children].find(row => {
+            if (!row.hasAttribute('data-reactable-message')) return false;
+            const bounds = row.getBoundingClientRect();
+            return y >= bounds.top && y < bounds.bottom;
+        });
+
     list.addEventListener('pointerdown', event => {
-        if (event.target.closest('.chat-reaction-tray')) return;
+        if (event.target.closest('.chat-reaction-tray, [data-message-options]')) return;
         closeTray();
         cancelHold();
         suppressedBubble = null;
         const history = event.target.closest('.chat-history');
         if (!history || history.classList.contains('selecting-messages') || event.target.closest('input, audio, video[controls]') || !event.isPrimary || event.button !== 0) return;
         const pressedBubble = event.target.closest('[data-reactable-message]');
-        const bubble = pressedBubble || [...history.children].find(row => {
-            if (!row.hasAttribute('data-reactable-message')) return false;
-            const { top, bottom } = row.getBoundingClientRect();
-            return event.clientY >= top && event.clientY < bottom;
-        });
+        const bubble = messageAtPoint(history, event.target, event.clientY);
         if (!bubble) return;
         hold = { bubble, x: event.clientX, y: event.clientY, pointerId: event.pointerId };
         if (!pressedBubble) return;
@@ -190,6 +193,7 @@ function registerMessageReactionGestures(list) {
     });
     list.addEventListener('pointermove', event => {
         if (hold?.pointerId !== event.pointerId || openBubble === hold.bubble) return;
+        if (event.pointerType === 'touch') return;
         const x = event.clientX - hold.x;
         const y = Math.abs(event.clientY - hold.y);
         if (Math.hypot(x, y) <= 10) return;
@@ -204,7 +208,7 @@ function registerMessageReactionGestures(list) {
         if (hold?.pointerId !== event.pointerId) return;
         const { bubble, x, y } = hold;
         const distance = event.clientX - x;
-        if (openBubble !== bubble && distance >= 48 && distance > Math.abs(event.clientY - y)) {
+        if (event.pointerType !== 'touch' && openBubble !== bubble && distance >= 48 && distance > Math.abs(event.clientY - y)) {
             if (startChatReply(bubble)) {
                 suppressedBubble = bubble;
                 closeTray();
@@ -213,6 +217,55 @@ function registerMessageReactionGestures(list) {
         cancelHold();
     });
     for (const type of ['pointercancel', 'pointerleave']) list.addEventListener(type, cancelHold);
+    const cancelTouchSwipe = () => {
+        touchSwipe?.bubble.style.removeProperty('--chat-reply-offset');
+        touchSwipe = null;
+    };
+    list.addEventListener('touchstart', event => {
+        cancelTouchSwipe();
+        const history = event.target.closest('.chat-history');
+        if (event.touches.length !== 1 || !history || history.classList.contains('selecting-messages') ||
+            event.target.closest('input, audio, video[controls], button:not([data-open-gallery-attachment])')) return;
+        if (!history.closest('.chat-window').querySelector('.chat-composer')) return;
+        const point = event.touches[0];
+        const bubble = messageAtPoint(history, event.target, point.clientY);
+        if (bubble) touchSwipe = { bubble, x: point.clientX, y: point.clientY, id: point.identifier, horizontal: false };
+    }, { passive: true });
+    list.addEventListener('touchmove', event => {
+        if (!touchSwipe) return;
+        const { bubble, x, y, id } = touchSwipe;
+        if (event.touches.length !== 1 || !bubble.isConnected || openBubble === bubble) {
+            cancelTouchSwipe();
+            return;
+        }
+        const point = event.touches[0];
+        if (point.identifier !== id) return;
+        const across = point.clientX - x;
+        const vertical = Math.abs(point.clientY - y);
+        if (!touchSwipe.horizontal && vertical > 14 && vertical > Math.abs(across)) {
+            cancelHold();
+            cancelTouchSwipe();
+            return;
+        }
+        if (!touchSwipe.horizontal && (across < 12 || across <= vertical)) return;
+        touchSwipe.horizontal = true;
+        cancelHold();
+        if (event.cancelable) event.preventDefault();
+        bubble.style.setProperty('--chat-reply-offset', `${Math.max(0, Math.min(across, 40))}px`);
+    }, { passive: false });
+    list.addEventListener('touchend', event => {
+        if (!touchSwipe) return;
+        const { bubble, x, y, id, horizontal } = touchSwipe;
+        const point = [...event.changedTouches].find(item => item.identifier === id);
+        if (!point) return;
+        const across = point.clientX - x;
+        if (horizontal && across >= 40 && across > Math.abs(point.clientY - y) && startChatReply(bubble)) {
+            suppressedBubble = bubble;
+            closeTray();
+        }
+        cancelTouchSwipe();
+    });
+    list.addEventListener('touchcancel', cancelTouchSwipe);
     list.addEventListener('dragstart', event => {
         if (event.target.closest('[data-reactable-message]')) event.preventDefault();
     });
@@ -229,8 +282,16 @@ function registerMessageReactionGestures(list) {
         }
     });
     list.addEventListener('click', event => {
+        const options = event.target.closest('[data-message-options]');
         const reaction = event.target.closest('[data-message-reaction]');
-        if (event.target.closest('[data-reply-to-message]')) {
+        if (options) {
+            const bubble = options.closest('[data-reactable-message]');
+            if (openBubble === bubble) closeTray();
+            else {
+                showTray(bubble);
+                list.querySelector('[data-message-reaction]')?.focus({ preventScroll: true });
+            }
+        } else if (event.target.closest('[data-reply-to-message]')) {
             startChatReply(openBubble);
             closeTray();
         } else if (event.target.closest('[data-copy-message]')) {
