@@ -28,13 +28,42 @@ function render(call, status) {
 }
 
 function closeCall(call) {
-    call.peer?.close();
-    for (const track of call.stream?.getTracks() || []) track.stop();
+    releasePeer(call);
     if (current !== call) return;
     current = null;
+    dialog().close();
+}
+
+function releasePeer(call) {
+    const peer = call.peer;
+    const stream = call.stream;
+    call.peer = null;
+    call.stream = null;
+    peer?.close();
+    for (const track of stream?.getTracks() || []) track.stop();
+    if (current !== call) return;
     const panel = dialog();
     for (const media of panel.querySelectorAll('video, audio')) media.srcObject = null;
-    panel.close();
+    panel.querySelector('[data-call-play]').hidden = true;
+}
+
+function acceptError(error, stage, kind) {
+    const devices = kind === 'video' ? 'microphone and camera' : 'microphone';
+    if (stage === 'devices') {
+        if (error?.name === 'NotAllowedError' || error?.name === 'SecurityError') {
+            return `Allow access to the ${devices}, then tap Accept again.`;
+        }
+        if (error?.name === 'NotFoundError' || error?.name === 'OverconstrainedError') {
+            return `No available ${devices}. Check your device settings and try again.`;
+        }
+        if (error?.name === 'NotReadableError' || error?.name === 'AbortError') {
+            return `The ${devices} could not start. Close other apps using them and try again.`;
+        }
+        return `The app could not open your ${devices}. Check permissions and try again.`;
+    }
+    if (stage === 'remote') return 'This device could not read the incoming call offer. Ask the caller to call again using the latest build.';
+    if (stage === 'local') return 'This device could not prepare a call answer. Try accepting again.';
+    return 'The server could not save your answer. Check your connection and try again.';
 }
 
 async function respond(id, action, answer) {
@@ -94,7 +123,7 @@ async function setupPeer(call) {
     panel.querySelector('[data-call-mic]').textContent = 'Mute microphone';
     panel.querySelector('[data-call-camera]').textContent = 'Turn camera off';
     peer.addEventListener('track', event => {
-        if (current !== call) return;
+        if (current !== call || call.peer !== peer) return;
         const remote = panel.querySelector(call.kind === 'video' ? '[data-call-remote]' : '[data-call-audio]');
         remote.srcObject = event.streams[0] || new MediaStream([event.track]);
         remote.play().catch(() => {
@@ -104,7 +133,7 @@ async function setupPeer(call) {
         });
     });
     peer.addEventListener('connectionstatechange', () => {
-        if (current !== call) return;
+        if (current !== call || call.peer !== peer) return;
         if (peer.connectionState === 'connected') {
             call.connectBy = null;
             render(call, 'Connected');
@@ -149,23 +178,43 @@ export async function startInAppCall(chat, kind) {
 
 async function accept(call) {
     if (call.accepting || call.accepted) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection !== 'function') {
+        render(call, 'Calling is unavailable in this browser. Open the app or a supported HTTPS browser.');
+        return;
+    }
+    if (Date.now() >= call.expiresAt) {
+        await finish(call, 'decline', 'This call expired. Ask the caller to call again.');
+        return;
+    }
     call.accepting = true;
-    render(call, 'Connecting…');
+    render(call, 'Opening microphone…');
+    let stage = 'devices';
     try {
         const peer = await setupPeer(call);
         if (!peer) return;
+        stage = 'remote';
+        render(call, 'Reading incoming call…');
         await peer.setRemoteDescription({ type: 'offer', sdp: call.offer });
+        stage = 'local';
+        render(call, 'Preparing answer…');
         await peer.setLocalDescription(await peer.createAnswer());
         await awaitIce(peer);
         if (current !== call) return;
-        if (!await respond(call.id, 'accept', peer.localDescription.sdp)) throw new Error('Call expired');
+        stage = 'server';
+        render(call, 'Sending answer…');
+        if (!await respond(call.id, 'accept', peer.localDescription.sdp)) {
+            await finish(call, 'decline', 'The call expired, was ended, or is no longer available. Ask the caller to call again.');
+            return;
+        }
         if (current !== call) { await respond(call.id, 'end').catch(() => {}); return; }
         call.accepted = true;
         call.connectBy = Date.now() + 22000;
         render(call, peer.connectionState === 'connected' ? 'Connected' : 'Connecting…');
     } catch (error) {
-        if (current === call) await finish(call, 'decline', error?.name === 'NotAllowedError'
-            ? 'Allow microphone or camera access to answer.' : 'The call could not be answered.');
+        if (current !== call) return;
+        releasePeer(call);
+        call.accepting = false;
+        render(call, acceptError(error, stage, call.kind));
     }
 }
 
@@ -203,7 +252,7 @@ export async function refreshInAppCalls() {
         const mute = await client.from('conversation_preferences').select('calls_muted')
             .eq('user_id', owner).eq('conversation_id', data.conversation_id).maybeSingle();
         if (mute.data?.calls_muted || current || state.signedInAccountId !== owner) return;
-        current = { id: data.id, incoming: true, kind: data.kind, offer: data.offer, owner, name: data.caller?.display_name || 'Incoming caller' };
+        current = { id: data.id, incoming: true, expiresAt: Date.parse(data.expires_at), kind: data.kind, offer: data.offer, owner, name: data.caller?.display_name || 'Incoming caller' };
         render(current, 'Incoming call');
     } catch {
         if (current?.accepted) void finish(current, 'end', 'The call ended after a connection error.');
