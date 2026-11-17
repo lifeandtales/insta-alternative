@@ -19,22 +19,49 @@ export function getHomeFeedItems() {
     return newestFirst(visible.filter(item => item.handle === currentUser.handle || (item.cloudOwnerId ? state.cloudFollowingIds?.has(item.cloudOwnerId) : isFollowing(item.handle))));
 }
 
-export function registerHomePullToRefresh(shell, indicator, refresh, refreshTarget = () => state.currentView === 'home' ? shell : null) {
+export function registerHomePullToRefresh(
+    shell, indicator, refresh, refreshTarget = () => state.currentView === 'home' ? shell : null,
+    pullContent = target => target,
+) {
     const threshold = 72;
+    const maxOffset = 58;
     let start;
     let distance = 0;
+    let offset = 0;
     let refreshing = false;
+    let releaseAnimation;
+    const moveContent = nextOffset => {
+        offset = nextOffset;
+        start.content.style.translate = offset ? `0 ${offset}px` : '';
+    };
+    const showIndicator = (progress, label) => {
+        indicator.hidden = false;
+        indicator.style.setProperty('--refresh-progress', `${Math.round(progress * 100)}%`);
+        if (indicator.textContent !== label) indicator.textContent = label;
+    };
     const reset = () => {
+        if (start && offset) {
+            const content = start.content;
+            const from = content.style.translate;
+            moveContent(0);
+            if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+                releaseAnimation = content.animate?.([{ translate: from }, { translate: '0 0' }],
+                    { duration: 170, easing: 'ease-out' });
+            }
+        }
         start = null;
         distance = 0;
         if (!refreshing) indicator.hidden = true;
     };
     shell.addEventListener('touchstart', event => {
+        if (refreshing) return;
         reset();
+        releaseAnimation?.cancel();
+        releaseAnimation = null;
         const target = refreshTarget(event.target);
-        if (refreshing || !target || target.scrollTop > 0 || shell.scrollTop > 0 || event.touches.length !== 1) return;
+        if (!target || target.scrollTop > 0 || shell.scrollTop > 0 || event.touches.length !== 1) return;
         const touch = event.touches[0];
-        start = { x: touch.clientX, y: touch.clientY, target, view: state.currentView };
+        start = { x: touch.clientX, y: touch.clientY, target, content: pullContent(target), view: state.currentView };
     }, { passive: true });
     shell.addEventListener('touchmove', event => {
         if (!start) return;
@@ -42,10 +69,15 @@ export function registerHomePullToRefresh(shell, indicator, refresh, refreshTarg
         const touch = event.touches[0];
         distance = touch.clientY - start.y;
         if (distance < -8 || Math.abs(touch.clientX - start.x) > Math.max(12, distance)) { reset(); return; }
-        if (distance < 12) return;
+        if (distance < 12) {
+            moveContent(0);
+            indicator.hidden = true;
+            return;
+        }
         if (event.cancelable) event.preventDefault();
-        indicator.hidden = false;
-        indicator.textContent = distance >= threshold ? 'Release to refresh' : 'Pull to refresh';
+        moveContent(Math.min(maxOffset, Math.round(distance * .68)));
+        showIndicator(Math.min(1, distance / threshold),
+            distance >= threshold ? 'Release to refresh' : 'Pull to refresh');
     }, { passive: false });
     shell.addEventListener('touchcancel', reset);
     shell.addEventListener('touchend', async () => {
@@ -54,12 +86,13 @@ export function registerHomePullToRefresh(shell, indicator, refresh, refreshTarg
         reset();
         if (!shouldRefresh || refreshing) return;
         refreshing = true;
-        indicator.hidden = false;
-        indicator.textContent = 'Refreshing…';
+        indicator.setAttribute('data-refreshing', '');
+        showIndicator(1, 'Refreshing…');
         try {
             await refresh(view);
         } finally {
             refreshing = false;
+            indicator.removeAttribute('data-refreshing');
             reset();
         }
     });

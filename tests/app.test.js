@@ -177,17 +177,29 @@ test('Home refreshes on release only after a downward pull from the top', async 
     const app = await loadApp();
     const { registerHomePullToRefresh } = app.exportsOf('src/features/home.js');
     const shell = app.element('pull-test-shell');
-    const indicator = { hidden: true };
+    const indicator = app.element('pull-test-indicator');
     let refreshes = 0;
     registerHomePullToRefresh(shell, indicator, async () => { refreshes++; });
     const trigger = (type, y) => app.listeners.find(item => item.key === 'pull-test-shell' && item.type === type).callback({
         touches: [{ clientX: 10, clientY: y }], cancelable: true, preventDefault() {},
     });
     trigger('touchstart', 20);
+    trigger('touchmove', 50);
+    assert.equal(shell.style.translate, '0 20px');
+    assert.equal(indicator.textContent, 'Pull to refresh');
+    assert.equal(indicator.style['--refresh-progress'], '42%');
+    await trigger('touchend', 50);
+    assert.equal(shell.style.translate, '');
+    assert.equal(refreshes, 0);
+
+    trigger('touchstart', 20);
     trigger('touchmove', 105);
+    assert.equal(shell.style.translate, '0 58px');
     assert.equal(indicator.textContent, 'Release to refresh');
+    assert.equal(indicator.style['--refresh-progress'], '100%');
     await trigger('touchend', 105);
     assert.equal(refreshes, 1);
+    assert.equal(shell.style.translate, '');
     assert.equal(indicator.hidden, true);
 
     shell.scrollTop = 10;

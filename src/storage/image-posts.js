@@ -66,7 +66,7 @@ export async function publishImagePost(post, { retry = false } = {}) {
     }
 }
 
-export async function loadCloudImagePosts(targetId = null) {
+export async function loadCloudImagePosts(targetId = null, taggedHandle = null) {
     const ownerId = state.signedInAccountId;
     if (!ownerId) return;
     const client = await getSupabaseClient();
@@ -74,7 +74,8 @@ export async function loadCloudImagePosts(targetId = null) {
     const rows = '*, ' + author;
     const query = columns => client.from(tableName).select(columns);
     const load = (columns, withLikes = false) => {
-        const request = query(columns).in('owner_id', scope).order('created_at', { ascending: false }).limit(100);
+        const request = (taggedHandle ? query(columns).contains('tags', [taggedHandle]) : query(columns).in('owner_id', scope))
+            .order('created_at', { ascending: false }).limit(100);
         return withLikes ? request.eq('viewer_like.user_id', ownerId) : request;
     };
     const scope = targetId ? [targetId] : [ownerId, ...(state.cloudFollowingIds || [])];
@@ -86,6 +87,10 @@ export async function loadCloudImagePosts(targetId = null) {
     if (error) throw error;
     const cloudPosts = await hydrateCloudImagePosts(client, data, ownerId);
     if (state.signedInAccountId !== ownerId) return;
+    if (taggedHandle) {
+        (state.cloudTaggedPosts ||= new Map()).set(taggedHandle, cloudPosts);
+        return;
+    }
     const cloudIds = new Set(cloudPosts.map(post => post.id));
     const remaining = posts.filter(post => !cloudIds.has(post.id) &&
         (!post.cloudImagePaths || (targetId && (post.cloudOwnerId || ownerId) !== targetId)));

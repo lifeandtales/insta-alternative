@@ -122,7 +122,7 @@ test('profile validation counts emoji, rejects unsafe links, and keeps identitie
     assert.match(model.validateProfile({...profile, username: 'mila_another'}), /five lifetime/);
 });
 
-test('private profiles conceal media and avatar; block preserves chats and unblock does not restore follows', async () => {
+test('private profiles show identity and hide media; block preserves chats and unblock does not restore follows', async () => {
     const app = await loadApp();
     const {state} = app.exportsOf('src/core/state.js');
     const {conversations} = app.exportsOf('src/data/sample-data.js');
@@ -131,7 +131,9 @@ test('private profiles conceal media and avatar; block preserves chats and unblo
     state.profileHandle = '@nia.makes';
     app.exportsOf('src/features/profile.js').renderProfile();
     assert.ok(!app.element('#profile-view').innerHTML.includes('data-profile-media-id="6"'));
-    assert.equal(app.exportsOf('src/features/profile.js').getProfileUser('@nia.makes').avatar, social.DEFAULT_AVATAR);
+    assert.match(app.element('#profile-view').innerHTML, /Private account/);
+    assert.doesNotMatch(app.element('#profile-view').innerHTML, /data-profile-section="posts"/);
+    assert.equal(app.exportsOf('src/features/profile.js').getProfileUser('@nia.makes').avatar, social.getAccount('@nia.makes').avatar);
     const count = conversations.length;
     assert.equal(model.setAccountBlocked('@noahvale', true), true);
     assert.equal(conversations.length, count);

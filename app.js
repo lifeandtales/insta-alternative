@@ -35,7 +35,7 @@ import {
     registerStoryGestureEvents,
     registerStoryUploadEvents,
 } from './src/features/stories.events.js';
-import { handleNavigationClick, handlePlaceholderClick } from './src/core/navigation.events.js';
+import { handleNavigationClick, handlePlaceholderClick, registerMobileNavigationGestures } from './src/core/navigation.events.js';
 import {
     handleProfileSectionClick,
     handleProfileMediaClick,
@@ -63,7 +63,7 @@ import { loadPreferences, persistPreferences } from './src/storage/preferences.j
 import { registerDeletionLock, syncDeletionLock } from './src/core/account-lock.js';
 import { openMediaFromHash } from './src/core/media-links.js';
 import { registerNotificationEvents, updateNotificationBadge, syncIncomingPostMentions, syncIncomingStoryMentions } from './src/features/notifications.js';
-import { getSupabaseClient } from './src/storage/supabase.js';
+import { getSupabaseClient, setSupabaseSessionPersistence, startTemporarySupabaseSession } from './src/storage/supabase.js';
 import { ensureSupabaseProfile, profileDetails, signOutAccount } from './src/features/account-auth.js';
 import { registerStoryToolEvents } from './src/features/story-tools.js';
 import { registerStoryOptionEvents } from './src/features/story-options.js';
@@ -73,12 +73,15 @@ const welcomeMessage = document.getElementById('welcome-message');
 const welcomeEntry = document.getElementById('welcome-entry');
 const welcomeForms = [...document.querySelectorAll('[data-entry-form]')];
 const welcomeStatus = document.getElementById('welcome-auth-status');
+const welcomeSessionChoice = document.getElementById('welcome-session-choice');
 let pendingProfileUser;
+let pendingLogin;
 let authBusy = false;
 
 function showWelcomeForm(mode, status = '') {
     welcomeMessage.hidden = Boolean(mode);
     welcomeEntry.hidden = !mode;
+    welcomeSessionChoice.hidden = mode !== 'remember';
     welcomeStatus.textContent = status;
     welcomeStatus.hidden = !status;
     for (const form of welcomeForms) {
@@ -92,11 +95,12 @@ function showWelcomeForm(mode, status = '') {
             button.setAttribute('aria-pressed', 'false');
         }
     }
-    const titles = { signup: 'Create account', login: 'Log in', profile: 'Complete your profile' };
+    const titles = { signup: 'Create account', login: 'Log in', profile: 'Complete your profile', remember: 'Keep me logged in?' };
     document.getElementById('welcome-entry-title').textContent = titles[mode] || '';
     document.getElementById('welcome-entry-eyebrow').textContent = '';
     document.getElementById('welcome-entry-description').textContent = '';
-    welcomeForms.find(form => form.dataset.entryForm === mode)?.querySelector('input')?.focus();
+    if (mode === 'remember') document.getElementById('welcome-entry-title').focus();
+    else welcomeForms.find(form => form.dataset.entryForm === mode)?.querySelector('input')?.focus();
 }
 
 function loadAccountPreferences() {
@@ -123,7 +127,6 @@ async function loadAccountContent() {
     syncIncomingStoryMentions();
     syncIncomingPostMentions();
     setView(state.currentView);
-    openMediaFromHash();
     updateNotificationBadge();
 }
 
@@ -151,6 +154,7 @@ async function enterAccount(user, profile) {
     if (syncDeletionLock()) return;
     document.querySelector('.app-shell').hidden = false;
     document.querySelector('.mobile-nav').hidden = false;
+    openMediaFromHash();
 }
 
 async function continueWithUser(client, user, details) {
@@ -159,9 +163,27 @@ async function continueWithUser(client, user, details) {
         await enterAccount(user, profile);
     } else {
         pendingProfileUser = user;
+        welcomeScreen.hidden = false;
         showWelcomeForm('profile', 'Choose an available username to finish creating your profile.');
         const form = welcomeForms.find(item => item.dataset.entryForm === 'profile');
         if (form) form.elements.displayName.value = details?.display_name || user.user_metadata?.display_name || '';
+    }
+}
+
+async function finishLogin(remember) {
+    if (!pendingLogin || authBusy) return;
+    authBusy = true;
+    const buttons = welcomeSessionChoice.querySelectorAll('button');
+    buttons.forEach(button => { button.disabled = true; });
+    try {
+        setSupabaseSessionPersistence(remember);
+        await continueWithUser(pendingLogin.client, pendingLogin.user);
+        pendingLogin = undefined;
+    } catch {
+        showWelcomeForm('remember', 'Could not continue. Try again or choose No to use this session only.');
+    } finally {
+        authBusy = false;
+        buttons.forEach(button => { button.disabled = false; });
     }
 }
 
@@ -180,6 +202,7 @@ document.addEventListener('click', event => {
     if (!action || authBusy) return;
     if (action === 'signup' || action === 'login') showWelcomeForm(action);
     else if (action === 'back') showWelcomeForm();
+    else if (action === 'remember-yes' || action === 'remember-no') void finishLogin(action === 'remember-yes');
     else if (action === 'signout') void signOutAccount().catch(() => showWelcomeForm('profile', 'Could not log out. Try again.'));
 });
 
@@ -223,9 +246,11 @@ document.addEventListener('submit', async event => {
             else showWelcomeForm('login', 'Check your email to confirm your account, then log in.');
         } else {
             const client = await getSupabaseClient();
+            startTemporarySupabaseSession();
             const { data, error } = await client.auth.signInWithPassword({ email, password });
             if (error) throw error;
-            await continueWithUser(client, data.user);
+            pendingLogin = { client, user: data.user };
+            showWelcomeForm('remember');
         }
     } catch (error) {
         errorElement.textContent = error.message || 'Could not continue. Try again.';
@@ -244,7 +269,7 @@ async function restoreAccount() {
         const verified = await client.auth.getUser();
         if (verified.error) throw verified.error;
         await continueWithUser(client, verified.data.user);
-    }
+    } else welcomeScreen.hidden = false;
     client.auth.onAuthStateChange((event) => {
         if (event === 'SIGNED_OUT' && state.signedInAccountId) window.location.reload();
     });
@@ -291,6 +316,7 @@ document.addEventListener('click', event => {
     }
 });
 registerHomeControlEvents();
+registerMobileNavigationGestures(document.querySelector('.mobile-nav'));
 registerNotificationEvents();
 registerAccountSettingsEvents();
 registerProfileEditorEvents();
@@ -343,6 +369,9 @@ registerHomePullToRefresh(refreshShell, document.getElementById('home-refresh-st
         case 'profile': return refreshShell;
         default: return null;
     }
+}, target => {
+    if (state.currentView === 'reels' || (state.currentView === 'messages' && state.activeConversationHandle)) return target;
+    return refreshShell.querySelector('.main-area') || target;
 });
 document.addEventListener('visibilitychange', () => {
     if (state.signedInAccountId && !document.hidden) void refreshSavedState().catch(() => {});
@@ -355,8 +384,16 @@ if (typeof window.setInterval === 'function') {
     }, 8000);
 }
 setView("home");
-if (demoContentEnabled) void loadAccountContent();
-else void restoreAccount().catch(() => showWelcomeForm('login', 'Sign in to connect to your account.'));
+if (demoContentEnabled) {
+    if (document.documentElement.classList.contains('auth-restoring')) welcomeScreen.hidden = false;
+    document.documentElement.classList.remove('auth-restoring');
+    void loadAccountContent().then(() => openMediaFromHash());
+} else {
+    void restoreAccount().catch(() => {
+        welcomeScreen.hidden = false;
+        showWelcomeForm('login', 'Sign in to connect to your account.');
+    }).finally(() => document.documentElement.classList.remove('auth-restoring', 'mobile-splash-pending'));
+}
 window.addEventListener?.('hashchange', () => openMediaFromHash());
 let localSaveTimer;
 for (const eventName of ['click', 'submit', 'change']) document.addEventListener(eventName, event => {

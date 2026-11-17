@@ -4,6 +4,20 @@ import { setView } from './navigation.js';
 import { state } from './state.js';
 import { currentUser } from '../data/sample-data.js';
 
+export function registerMobileNavigationGestures(nav) {
+    let start;
+    nav.addEventListener('touchstart', event => {
+        start = event.touches.length === 1 ? event.touches[0] : null;
+    }, { passive: true });
+    nav.addEventListener('touchmove', event => {
+        if (!start || !event.cancelable) return;
+        const touch = event.touches[0];
+        if (Math.hypot(touch.clientX - start.clientX, touch.clientY - start.clientY) >= 8) {
+            event.preventDefault();
+        }
+    }, { passive: false });
+}
+
 export function handleNavigationClick(event) {
     const viewButton = event.target.closest("[data-view]");
     if (viewButton) {

@@ -11,16 +11,32 @@ function dialog() {
     return document.getElementById('direct-call-dialog');
 }
 
+const handset = '<path d="M6 4h3l2 5-2 2a14 14 0 0 0 4 4l2-2 5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 4 6a2 2 0 0 1 2-2Z"/>';
+const micIcon = '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0m-7 7v3m-3 0h6"/>';
+const cameraIcon = '<rect x="3" y="6" width="12" height="12" rx="2"/><path d="m15 10 6-3v10l-6-3"/>';
+const offSlash = '<path class="call-icon-slash" d="m3 3 18 18"/>';
+
+function callButton(action, label, artwork, { hidden = false, toggle = false } = {}) {
+    return `<button type="button" class="call-control" data-call-${action} aria-label="${label}" title="${label}"${hidden ? ' hidden' : ''}${toggle ? ' aria-pressed="false"' : ''}>
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${artwork}</svg>
+      </button>`;
+}
+
 function render(call, status) {
     const panel = dialog();
     if (!panel.open) {
         panel.querySelector('[data-call-play]').hidden = true;
         panel.showModal();
     }
+    panel.classList.toggle('call-video-active', call.kind === 'video' &&
+        Boolean(panel.querySelector('[data-call-remote]').srcObject));
     panel.querySelector('[data-call-title]').textContent = (call.kind === 'video' ? 'Video call' : 'Voice call') + ' · ' + call.name;
     panel.querySelector('[data-call-status]').textContent = status;
     panel.querySelector('[data-call-answer]').hidden = !call.incoming || call.accepting || Boolean(call.peer);
-    panel.querySelector('[data-call-hangup]').textContent = call.incoming && !call.accepted ? 'Decline' : 'End call';
+    const hangup = panel.querySelector('[data-call-hangup]');
+    const hangupLabel = call.incoming && !call.accepted ? 'Decline' : 'End call';
+    hangup.setAttribute('aria-label', hangupLabel);
+    hangup.title = hangupLabel;
     panel.querySelector('[data-call-mic]').hidden = !call.stream;
     panel.querySelector('[data-call-camera]').hidden = !call.stream || call.kind !== 'video';
     panel.querySelector('[data-call-local]').hidden = call.kind !== 'video' || !call.stream;
@@ -47,11 +63,11 @@ function releasePeer(call) {
     panel.querySelector('[data-call-play]').hidden = true;
 }
 
-function acceptError(error, stage, kind) {
+function callError(error, stage, kind, incoming = true) {
     const devices = kind === 'video' ? 'microphone and camera' : 'microphone';
     if (stage === 'devices') {
         if (error?.name === 'NotAllowedError' || error?.name === 'SecurityError') {
-            return `Allow access to the ${devices}, then tap Accept again.`;
+            return `Allow access to the ${devices}, then ${incoming ? 'tap Accept' : 'call'} again.`;
         }
         if (error?.name === 'NotFoundError' || error?.name === 'OverconstrainedError') {
             return `No available ${devices}. Check your device settings and try again.`;
@@ -60,6 +76,13 @@ function acceptError(error, stage, kind) {
             return `The ${devices} could not start. Close other apps using them and try again.`;
         }
         return `The app could not open your ${devices}. Check permissions and try again.`;
+    }
+    if (!incoming) {
+        if (stage === 'local') return 'This device could not prepare the outgoing call. Try calling again.';
+        if (error?.code === '23505') return 'Another call is still open in this chat. End it or wait for it to expire.';
+        if (error?.code === 'PGRST202') return 'The server has not enabled calling yet. Run the Calls migration.';
+        if (error?.code === '42501') return 'Calling is unavailable for this chat. Check your follow and block settings.';
+        return 'The server could not start the call. Check your internet connection and try again.';
     }
     if (stage === 'remote') return 'This device could not read the incoming call offer. Ask the caller to call again using the latest build.';
     if (stage === 'local') return 'This device could not prepare a call answer. Try accepting again.';
@@ -120,12 +143,13 @@ async function setupPeer(call) {
     stream.getTracks().forEach(track => peer.addTrack(track, stream));
     const panel = dialog();
     panel.querySelector('[data-call-local]').srcObject = call.kind === 'video' ? stream : null;
-    panel.querySelector('[data-call-mic]').textContent = 'Mute microphone';
-    panel.querySelector('[data-call-camera]').textContent = 'Turn camera off';
+    panel.querySelector('[data-call-mic]').setAttribute('aria-pressed', 'false');
+    panel.querySelector('[data-call-camera]').setAttribute('aria-pressed', 'false');
     peer.addEventListener('track', event => {
         if (current !== call || call.peer !== peer) return;
         const remote = panel.querySelector(call.kind === 'video' ? '[data-call-remote]' : '[data-call-audio]');
         remote.srcObject = event.streams[0] || new MediaStream([event.track]);
+        if (call.kind === 'video') panel.classList.add('call-video-active');
         remote.play().catch(() => {
             const play = panel.querySelector('[data-call-play]');
             play.hidden = false;
@@ -155,14 +179,18 @@ export async function startInAppCall(chat, kind) {
     }
     const call = { kind, name: chat.user, owner: state.signedInAccountId };
     current = call;
-    render(call, 'Preparing call…');
+    render(call, 'Opening microphone…');
+    let stage = 'devices';
     try {
         const peer = await setupPeer(call);
         if (!peer) return;
+        stage = 'local';
+        render(call, 'Preparing outgoing call…');
         await peer.setLocalDescription(await peer.createOffer());
         await awaitIce(peer);
         if (current !== call) return;
         const client = await getSupabaseClient();
+        stage = 'server';
         const { data, error } = await client.rpc('start_direct_call', {
             target: chat.cloudId, call_kind: kind, call_offer: peer.localDescription.sdp
         });
@@ -171,8 +199,7 @@ export async function startInAppCall(chat, kind) {
         if (current !== call) { await respond(data, 'end').catch(() => {}); return; }
         render(call, 'Ringing…');
     } catch (error) {
-        if (current === call) await finish(call, 'end', error?.name === 'NotAllowedError'
-            ? 'Allow microphone or camera access to call.' : 'Could not start the call. Check that calling is set up.');
+        if (current === call) await finish(call, 'end', callError(error, stage, kind, false));
     }
 }
 
@@ -214,7 +241,7 @@ async function accept(call) {
         if (current !== call) return;
         releasePeer(call);
         call.accepting = false;
-        render(call, acceptError(error, stage, call.kind));
+        render(call, callError(error, stage, call.kind));
     }
 }
 
@@ -264,16 +291,16 @@ export async function refreshInAppCalls() {
 export function registerInAppCallControls() {
     const panel = dialog();
     panel.innerHTML = `
-      <h2 data-call-title></h2><p data-call-status role="status"></p>
+      <div class="call-heading"><h2 data-call-title></h2><p data-call-status role="status"></p></div>
       <video data-call-remote autoplay playsinline hidden></video>
       <video data-call-local autoplay playsinline muted hidden></video>
       <audio data-call-audio autoplay></audio>
-      <div class="panel-actions">
-        <button type="button" data-call-answer hidden>Accept</button>
-        <button type="button" data-call-play hidden>Play call audio</button>
-        <button type="button" data-call-mic hidden>Mute microphone</button>
-        <button type="button" data-call-camera hidden>Turn camera off</button>
-        <button type="button" data-call-hangup>End call</button>
+      <div class="call-actions">
+        ${callButton('answer', 'Accept call', handset, { hidden: true })}
+        ${callButton('play', 'Play call audio', '<path d="m9 5 11 7-11 7z"/>', { hidden: true })}
+        ${callButton('mic', 'Mute microphone', micIcon + offSlash, { hidden: true, toggle: true })}
+        ${callButton('camera', 'Turn camera off', cameraIcon + offSlash, { hidden: true, toggle: true })}
+        ${callButton('hangup', 'End call', handset)}
       </div>`;
     panel.addEventListener('cancel', event => {
         event.preventDefault();
@@ -289,8 +316,7 @@ export function registerInAppCallControls() {
         const track = mic ? call.stream?.getAudioTracks()[0] : camera ? call.stream?.getVideoTracks()[0] : null;
         if (track) {
             track.enabled = !track.enabled;
-            (mic || camera).textContent = mic ? (track.enabled ? 'Mute microphone' : 'Unmute microphone')
-                : (track.enabled ? 'Turn camera off' : 'Turn camera on');
+            (mic || camera).setAttribute('aria-pressed', String(!track.enabled));
         }
     });
     document.addEventListener('account-deletion-lock', () => { if (current) void finish(current); });

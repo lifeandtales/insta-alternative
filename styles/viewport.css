@@ -28,6 +28,7 @@
 
 .mobile-nav {
   position: fixed;
+  touch-action: none;
   z-index: 30;
   right: auto;
   bottom: 0;
@@ -214,12 +215,31 @@
   top: max(8px, env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
-  padding: 7px 12px;
-  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
   background: #fff;
-  color: var(--text);
   box-shadow: var(--shadow);
-  font-size: .8rem;
+  font-size: 0;
   pointer-events: none;
 }
 .home-refresh-status[hidden] { display: none; }
+.home-refresh-status::before {
+  content: "";
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: conic-gradient(#151515 var(--refresh-progress, 0%), #e5e3e9 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+}
+.home-refresh-status[data-refreshing]::before {
+  background: conic-gradient(#151515 72%, #e5e3e9 0);
+  animation: refresh-ring-spin .75s linear infinite;
+}
+@keyframes refresh-ring-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .home-refresh-status[data-refreshing]::before { animation: none; }
+}

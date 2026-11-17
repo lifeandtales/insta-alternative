@@ -18,8 +18,11 @@ test('generated profile QR decodes to the same profile URL',()=>{
  assert.equal(jsQR(pixels,size,size)?.data,url);
 });
 test('scanner accepts app profile links and rejects other sites, paths and malformed payloads',async()=>{
- const app=await loadApp();const {profileHandleFromQr}=app.exportsOf('src/features/profile-scanner.js');
+ const app=await loadApp();const {profileReferenceFromQr}=app.exportsOf('src/core/profile-links.js');
  const base='https://lifeandtales.github.io/insta-alternative/';
- assert.equal(profileHandleFromQr(base+'#profile-%40aribloom',base),'@aribloom');
- for(const value of ['javascript:alert(1)','https://other.example/#profile-a',base+'#post-1',base+'#profile-%E0%A4%A','https://lifeandtales.github.io/other/#profile-a'])assert.equal(profileHandleFromQr(value,base),null);
+ assert.deepEqual({...profileReferenceFromQr(base+'#profile-%40aribloom',base)},{handle:'@aribloom'});
+ const id='10000000-0000-0000-0000-000000000001';
+ assert.deepEqual({...profileReferenceFromQr(base+'#profile-id-'+id,'https://appassets.androidplatform.net/')},{id});
+ assert.deepEqual({...profileReferenceFromQr('https://appassets.androidplatform.net/#profile-%40aribloom',base)},{handle:'@aribloom'});
+ for(const value of ['javascript:alert(1)','https://other.example/#profile-a',base+'#post-1',base+'#profile-%E0%A4%A','https://lifeandtales.github.io/other/#profile-a'])assert.equal(profileReferenceFromQr(value,base),null);
 });

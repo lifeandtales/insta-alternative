@@ -36,13 +36,6 @@
     background: #929292;
   }
 
-  .splash-logo {
-    color: #fff;
-    font-size: 3rem;
-    font-weight: 800;
-    letter-spacing: -0.08em;
-  }
-
   .app-shell {
     grid-template-columns: 1fr;
     padding: 0 14px;

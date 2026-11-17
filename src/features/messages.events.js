@@ -17,6 +17,7 @@ import { appendChatMessage, renderMessages, renderReplyQuote, conversationAvatar
 import { canSendToConversation, createLocalGroup, respondToGroupInvitation, isJoinedGroup, leaveLocalGroup, isGroupAdmin, updateGroupMember, availableGroupInvitees, addLocalGroupMembers, visibleConversationMessages, hideConversationMessages, clearConversationForViewer, refreshConversationTimers } from './message-access.js';
 import { closeHomePanel, openReportPanel, showHomePanel } from './home-controls.js';
 import { persistSession } from '../storage/local-session.js';
+import { supabaseProjectUrl } from '../storage/supabase.js';
 import { openStoryRepostEditor } from './stories.events.js';
 import { openStoryGroup, showStoryAtIndex } from './stories.js';
 
@@ -39,18 +40,29 @@ function findMessageForBubble(bubble) {
 }
 
 function isGalleryAttachment(message) {
-    return message?.type === 'attachment' && (message.mediaKind === 'photo' || message.mediaKind === 'video');
+    return message?.type === 'attachment' && ['photo', 'video'].includes(message.mediaKind);
 }
 
-function downloadGalleryAttachment(message) {
-    if (!isGalleryAttachment(message) || !message.media?.startsWith('blob:')) return;
-    if (Number.isFinite(message.expiresAt) && message.expiresAt <= Date.now()) {
-        refreshChatAttachmentExpiry();
+function downloadableChatMedia(message) {
+    if (!message?.media || !['voice', 'attachment'].includes(message.type)) return null;
+    if (message.expiresAt <= Date.now() || message.serverExpiresAt <= Date.now()) return null;
+    const url = new URL(message.media, location.href);
+    if (url.protocol === 'blob:' || (url.origin === supabaseProjectUrl &&
+        url.pathname.startsWith('/storage/v1/object/sign/chat-attachments/'))) return url;
+    return null;
+}
+
+function downloadChatMedia(message) {
+    const url = downloadableChatMedia(message);
+    if (!url) {
+        showShareFeedback('This attachment is no longer available.');
         return;
     }
+    const filename = message.fileName || (message.type === 'voice' ? 'Voice message' : 'Attachment');
     const link = document.createElement('a');
-    link.href = message.media;
-    link.download = message.fileName || (message.mediaKind === 'photo' ? 'Photo' : 'Video');
+    if (url.protocol === 'blob:') link.download = filename;
+    else url.searchParams.set('download', filename);
+    link.href = url.href;
     document.body.append(link);
     link.click();
     link.remove();
@@ -150,17 +162,20 @@ function registerMessageReactionGestures(list) {
         pendingPostTap = null;
         const message = findMessageForBubble(bubble);
         const canCopy = message?.type === 'text';
-        const canDownload = isGalleryAttachment(message) && message.media?.startsWith('blob:')
-            && (!Number.isFinite(message.expiresAt) || message.expiresAt > Date.now());
+        const canDownload = downloadableChatMedia(message);
         const chatWindow = bubble.closest('.chat-window');
-        chatWindow.insertAdjacentHTML('beforeend', `<div class="chat-reaction-tray" role="group" aria-label="React to message">
+        chatWindow.insertAdjacentHTML('beforeend', `<div class="chat-reaction-tray" role="group" aria-label="Message actions">
+          <div class="chat-reaction-row" aria-label="Reactions">
           ${MESSAGE_REACTIONS.map(([emoji, label]) => `<button type="button" data-message-reaction="${emoji}" aria-label="${label}">${emoji}</button>`).join('')}
+          </div>
+          <div class="chat-message-actions">
           ${message && bubble.closest('.chat-window').querySelector('.chat-composer') ? '<button type="button" data-reply-to-message>Reply</button>' : ''}
+          ${message ? '<button type="button" data-delete-one-message>Delete</button>' : ''}
           ${canCopy ? '<button type="button" data-copy-message>Copy</button>' : ''}
           ${message?.type === 'voice' && message.media ? '<button type="button" data-copy-voice>Copy audio</button>' : ''}
-          ${canDownload ? '<button type="button" data-download-gallery>Download</button>' : ''}
+          ${canDownload ? '<button type="button" data-download-chat-media>Download</button>' : ''}
           ${canForwardMessage(message) && (!activeConversation()?.cloudId || message.type === 'text') ? '<button type="button" data-forward-message>Forward</button>' : ''}
-          ${message ? '<button type="button" data-delete-one-message>Delete</button>' : ''}
+          </div>
         </div>`);
         const tray = chatWindow.querySelector('.chat-reaction-tray');
         const bounds = bubble.getBoundingClientRect();
@@ -310,8 +325,8 @@ function registerMessageReactionGestures(list) {
                 renderMessages({ preserveComposer: true });
                 persistSession().catch(() => showShareFeedback('This device could not save the chat deletion.'));
             }
-        } else if (event.target.closest('[data-download-gallery]')) {
-            downloadGalleryAttachment(findMessageForBubble(openBubble));
+        } else if (event.target.closest('[data-download-chat-media]')) {
+            downloadChatMedia(findMessageForBubble(openBubble));
             closeTray();
         } else if (reaction) {
             setMessageReaction(openBubble, reaction.dataset.messageReaction);

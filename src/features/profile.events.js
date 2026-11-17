@@ -4,6 +4,8 @@ import { renderMessages } from './messages.js';
 import { deleteCloudImagePost, updateCloudImagePost } from '../storage/image-posts.js';
 import { openProfileScanner, registerProfileScannerEvents } from './profile-scanner.js';
 import qrcode from '../vendor/qrcode.js';
+import { profileUrl } from '../core/profile-links.js';
+export { profileUrl } from '../core/profile-links.js';
 import { persistPreferences } from '../storage/preferences.js';
 import { showHomePanel, closeHomePanel, openReportPanel } from './home-controls.js';
 
@@ -38,9 +40,9 @@ export function handleProfileSectionClick(event) {
     const message = event.target.closest('[data-cloud-message]');
     if (message) {
         const person = cloudPerson(message.dataset.cloudMessage);
-        if (!message.disabled && person?.mutual && mayInteract()) {
+        if (!message.disabled && person?.followStatus === 'accepted' && mayInteract()) {
             message.disabled = true;
-            void openCloudChat(person).then(chat => {
+            void openCloudChat(person, { fromInbox: true }).then(chat => {
                 if (state.currentView !== 'profile' || state.profileHandle !== person.handle) return;
                 state.activeConversationHandle = chat.handle;
                 setView('messages', { refresh: false });
@@ -48,7 +50,7 @@ export function handleProfileSectionClick(event) {
                 return loadCloudChat(chat).then(() => {
                     if (state.currentView === 'messages' && state.activeConversationHandle === chat.handle) renderMessages();
                 });
-            }).catch(() => showShareFeedback('Could not open the chat. Check that you still follow each other.'))
+            }).catch(() => showShareFeedback('Could not open the chat. Check that you still have an accepted follow.'))
                 .finally(() => { message.disabled = false; });
         }
         return true;
@@ -324,12 +326,6 @@ export function renderProfileConnectionResults() {
     }
 }
 
-export function profileUrl(handle) {
-    const url = new URL(window.location.href);
-    url.search = '';
-    url.hash = `profile-${encodeURIComponent(handle)}`;
-    return url.toString();
-}
 export function profileQrSvg(handle) {
     const code = qrcode(0, 'M');
     code.addData(profileUrl(handle)); code.make();
@@ -346,7 +342,7 @@ export function openProfileOptions() {
       ${option('report', 'Report')}</div>`);
 }
 export async function runProfileOption(action, handle) {
-    if (!getAccount(handle)) return;
+    if (!getAccount(handle) && !cloudPerson(handle)) return;
     if (action.startsWith('mute-')) {
         if (!mayInteract()) return;
         const handles = action === 'mute-posts' ? state.mutedPostHandles : state.mutedStoryHandles;

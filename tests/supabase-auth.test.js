@@ -2,13 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadApp } from './helpers/app-harness.js';
 
-test('a verified Supabase login opens the app under its own storage scope', async () => {
+for (const remember of [true, false]) test(`login uses ${remember ? 'device' : 'tab'} storage when Keep me logged in is ${remember ? 'accepted' : 'declined'}`, async () => {
     const app = await loadApp();
     const user = { id: 'account-1', user_metadata: { age_band: 'adult' } };
     const profile = { id: user.id, username: 'realaccount', display_name: 'Real Account', bio: '' };
-    app.context.window.supabase = { createClient: () => ({
+    let storageKey;
+    app.context.window.supabase = { createClient: (url, key, { auth: options }) => ({
         auth: { signInWithPassword: async ({ email }) => {
             assert.equal(email, 'person@example.com');
+            storageKey = options.storageKey;
+            options.storage.setItem(storageKey, 'test-session');
             return { data: { user }, error: null };
         } },
         from(table) {
@@ -30,6 +33,15 @@ test('a verified Supabase login opens the app under its own storage scope', asyn
     app.element('.app-shell').hidden = true;
     await submit({ target: { closest: () => form }, preventDefault() {} });
     assert.equal(error.hidden, true);
+    assert.equal(app.element('#welcome-session-choice').hidden, false);
+    assert.equal(app.element('.app-shell').hidden, true);
+    assert.equal(app.storage.get(storageKey), undefined);
+    const action = { dataset: { welcomeAction: remember ? 'remember-yes' : 'remember-no' } };
+    const click = app.listeners.find(item => item.type === 'click' && String(item.callback).includes('remember-yes')).callback;
+    click({ target: { closest: selector => selector === '[data-welcome-action]' ? action : null } });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(app.storage.get(storageKey), remember ? 'test-session' : undefined);
+    assert.equal(app.context.window.sessionStorage.getItem(storageKey), remember ? null : 'test-session');
     assert.equal(app.element('.app-shell').hidden, false);
     assert.equal(app.exportsOf('src/data/sample-data.js').currentUser.handle, '@realaccount');
     assert.equal(app.exportsOf('src/storage/browser-storage.js').accountStorageKey('insta-browser-data'), 'insta-browser-data:account-1');

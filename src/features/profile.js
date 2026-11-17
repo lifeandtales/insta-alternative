@@ -41,6 +41,13 @@ export function getSavedCollection() {
     return results.sort((left, right) => savedAt(right.entity) - savedAt(left.entity));
 }
 
+function profileTaggedPosts() {
+    const remote = state.cloudTaggedPosts?.get(state.profileHandle) || [];
+    const candidates = new Map([...posts, ...remote].map(post => [post.id, post]));
+    return [...candidates.values()].filter(post => canViewMedia(post) &&
+        (post.taggedUsers || []).some(handle => normalizeHandle(handle) === normalizeHandle(state.profileHandle)));
+}
+
 export function getProfileMediaCollection() {
     if (state.activeMediaViewerItems)
         return state.activeMediaViewerItems;
@@ -48,7 +55,7 @@ export function getProfileMediaCollection() {
     const ownReels = reels.filter((reel) => reel.handle === state.profileHandle && canViewMedia(reel));
     const savedCollection = getSavedCollection();
     const taggedCollection = [
-        ...posts.filter((post) => (post.taggedUsers || []).some(handle => normalizeHandle(handle) === normalizeHandle(state.profileHandle))).map((entity) => ({ type: "post", entity })),
+        ...profileTaggedPosts().map((entity) => ({ type: "post", entity })),
         ...reels.filter((reel) => (reel.taggedUsers || []).some(handle => normalizeHandle(handle) === normalizeHandle(state.profileHandle))).map((entity) => ({ type: "reel", entity }))
     ];
     const collection = state.activeProfileSection === "reels"
@@ -122,7 +129,7 @@ export function getProfileUser(handle) {
     const connected = cloudPerson(handle);
     if (connected && handle !== currentUser.handle) return {
         ...connected, bio: connected.bio || '', followers: connected.followers ?? '—', following: connected.following ?? '—',
-        isFollowing: connected.followStatus === 'accepted', links: []
+        postCount: connected.postCount, isFollowing: connected.followStatus === 'accepted', links: []
     };
     if (handle === currentUser.handle) {
         return { ...currentUser, followers: state.signedInAccountId ? connected?.followers ?? '—' : person?.followers?.length || 0,
@@ -136,11 +143,12 @@ export function getProfileUser(handle) {
     return {
         name: person?.name || user?.user || account?.name || handle,
         handle,
-        avatar: visibleAvatar(handle, user?.avatar || account?.avatar || currentUser.avatar),
+        avatar: state.blockedHandles.has(handle) ? visibleAvatar(handle) : person?.avatar || user?.avatar || account?.avatar || currentUser.avatar,
         bio: person?.bio || "Welcome to my profile.",
         links: person?.links || [],
-        followers: canViewAccount(handle) ? (person?.followers?.length || 0) : '—',
-        following: canViewAccount(handle) ? (person?.following?.length || 0) : '—',
+        followers: person?.followers?.length || 0,
+        following: person?.following?.length || 0,
+        postCount: posts.filter(post => post.handle === handle).length,
         isPrivate: person?.isPrivate ?? (userMedia.length > 0 && userMedia.every((item) => !item.public)),
         isFollowing: isAccountFollowed(handle)
     };
@@ -155,11 +163,11 @@ export function renderProfile() {
     const connectionControl = (kind) => `<button type="button" data-profile-connections="${kind}" ${accessible ? '' : 'disabled'}><strong>${user[kind]}</strong><span>${kind}</span></button>`;
     const ownPosts = posts.filter((post) => post.handle === state.profileHandle && canViewMedia(post));
     const ownReels = reels.filter((reel) => reel.handle === state.profileHandle && canViewMedia(reel));
-    const taggedPosts = posts.filter((post) => accessible && canViewMedia(post) && (post.taggedUsers || []).some(handle => normalizeHandle(handle) === normalizeHandle(state.profileHandle)));
+    const taggedPosts = accessible ? profileTaggedPosts() : [];
     const taggedReels = reels.filter((reel) => accessible && canViewMedia(reel) && (reel.taggedUsers || []).some(handle => normalizeHandle(handle) === normalizeHandle(state.profileHandle)));
     const isOwnProfile = state.profileHandle === currentUser.handle;
     if(state.activeProfileSection==='drafts')state.activeProfileSection='posts';
-    const canViewHighlights = accessible;
+    const count = user.postCount ?? (accessible ? ownPosts.length : '—');
     const savedCollection = getSavedCollection();
     document.getElementById("profile-view").innerHTML = `
     <div class="profile-topbar">
@@ -180,20 +188,20 @@ export function renderProfile() {
         : `<button class="profile-action ${user.isFollowing ? "secondary" : ""}" type="button" data-follow-kind="account" data-follow-value="${escapeHtml(state.profileHandle)}" aria-pressed="${user.isFollowing}" ${state.blockedHandles.has(state.profileHandle) ? 'disabled' : ''}>${person ? cloudFollowLabel(person) : state.followRequests.includes(state.profileHandle) ? 'Cancel request' : user.isFollowing ? 'Following' : 'Follow'}</button>`}
         </div>
         <div class="profile-stats">
-          <span><strong>${ownPosts.length}</strong><span>posts</span></span>
+          <span><strong>${count}</strong><span>posts</span></span>
           ${connectionControl('followers')}${connectionControl('following')}
         </div>
         ${!isOwnProfile && person?.followStatus === 'accepted' ? `<div class="profile-cloud-actions">
           <button class="profile-action secondary" type="button" data-follow-kind="account" data-follow-value="${escapeHtml(person.handle)}">Unfollow</button>
-          ${person.mutual ? `<button class="profile-action" type="button" data-cloud-message="${escapeHtml(person.handle)}">Message</button>` : ''}
+          <button class="profile-action" type="button" data-cloud-message="${escapeHtml(person.handle)}">Message</button>
         </div>` : ''}
-        <p>${escapeHtml(user.bio)}</p>
-        <div class="profile-links">${(user.links || []).map(link => `<button type="button" data-profile-link="${escapeHtml(link)}">${escapeHtml(link)}</button>`).join('')}</div>
+        ${accessible ? `<p>${escapeHtml(user.bio)}</p>
+        <div class="profile-links">${(user.links || []).map(link => `<button type="button" data-profile-link="${escapeHtml(link)}">${escapeHtml(link)}</button>`).join('')}</div>` : ''}
         ${isOwnProfile ? `<button class="profile-create-button" type="button" aria-label="Create a post or reel"><span aria-hidden="true">+</span> post</button>` : ""}
       </div>
     </header>
-    ${accessible ? '' : `<p class="private-profile-note">${state.blockedHandles.has(state.profileHandle) ? 'This account is blocked. Unblock it from Settings to restore search and request access.' : 'This account is private. Send a follow request to view their profile photo and content.'}</p>`}
-    ${canViewHighlights ? renderProfileHighlights(state.profileHandle, isOwnProfile) : ""}
+    ${accessible ? `
+    ${renderProfileHighlights(state.profileHandle, isOwnProfile)}
     <nav class="profile-section-tabs" aria-label="Profile sections">
       <button class="profile-section-tab ${state.activeProfileSection === "posts" ? "active" : ""}" type="button" data-profile-section="posts" aria-pressed="${state.activeProfileSection === "posts"}">Posts</button>
       <button class="profile-section-tab ${state.activeProfileSection === "reels" ? "active" : ""}" type="button" data-profile-section="reels" aria-pressed="${state.activeProfileSection === "reels"}">Reels</button>
@@ -222,6 +230,11 @@ export function renderProfile() {
         || '<p class="empty-profile-posts">Photos and reels you are tagged in will appear here.</p>'}
       </div>
     </section>
+    ` : `<section class="private-profile-note" aria-label="${state.blockedHandles.has(state.profileHandle) ? 'Blocked account' : 'Private account'}">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      <h3>${state.blockedHandles.has(state.profileHandle) ? 'Blocked account' : 'Private account'}</h3>
+      <p>${state.blockedHandles.has(state.profileHandle) ? 'Unblock this account from Settings.' : 'Send a follow request to see their posts, reels, tags and highlights.'}</p>
+    </section>`}
   `;
 }
 

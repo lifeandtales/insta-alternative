@@ -80,6 +80,15 @@ function inboxMessageTime(conversation) {
         ?? (conversation.messages?.length ? 0 : conversation.lastActivity ?? 0);
 }
 
+function formatInboxTime(timestamp) {
+    if (!timestamp) return '';
+    const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+    if (minutes === 0) return 'Just now';
+    if (minutes < 60) return `${minutes} min ago`;
+    if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
+    return `${Math.floor(minutes / 1440)}d ago`;
+}
+
 function renderGroupProfile(group) {
     const members = [...new Set(group.members)];
     const admin = isGroupAdmin(group);
@@ -148,11 +157,13 @@ export function renderMessages({ preserveComposer = false, preserveHistoryAnchor
               ].filter(Boolean).join(' · ')}</span>` : ''}
               ${item.membershipStatus === 'pending'
                 ? '<span class="conversation-preview">Group invitation — review to join</span>'
-                : unreadCount >= 4
-                  ? `<span class="conversation-unread-count" aria-label="${unreadCount} unread messages">+${unreadCount} new messages</span>`
-                  : `<span class="conversation-preview">${escapeHtml(preview)}</span>`}
+                : `<span class="conversation-preview">${escapeHtml(preview)}</span>`}
             </span>
-            <span class="conversation-time">${escapeHtml(formatConversationTime(timestamp || undefined))}</span>
+            <span class="conversation-meta">
+              <time class="conversation-time">${formatInboxTime(timestamp)}</time>
+              ${unreadCount > 0 && item.membershipStatus !== 'pending'
+                ? `<span class="conversation-unread-count" aria-label="${unreadCount > 4 ? 'More than 4' : unreadCount} unread ${unreadCount === 1 ? 'message' : 'messages'}">${unreadCount > 4 ? '+4' : unreadCount}</span>` : ''}
+            </span>
           </button>
         `;
         }).join("")}
@@ -187,17 +198,11 @@ export function renderMessages({ preserveComposer = false, preserveHistoryAnchor
             return;
         }
     }
-    const identity = `
-        <img src="${escapeHtml(conversationAvatar(conversation))}" alt="" />
-        <span class="chat-header-copy"><strong>${escapeHtml(conversation.user)}</strong><small>${conversation.isGroup ? `${conversation.members?.length || 0} members` : escapeHtml(conversation.handle)}</small></span>`;
     list.innerHTML = `
     <section class="chat-window" aria-label="Chat with ${escapeHtml(conversation.user)}">
       <header class="chat-header">
         <button class="chat-back-button" type="button" data-chat-back aria-label="Back to messages">‹</button>
-        ${conversation.isGroup
-            ? `<div class="chat-header-identity">${identity}</div>`
-            : `<button type="button" class="chat-header-identity" data-chat-profile
-                data-profile-handle="${escapeHtml(conversation.handle)}" aria-label="Visit ${escapeHtml(conversation.user)}'s profile">${identity}</button>`}
+        ${renderChatIdentity(conversation, conversationAvatar(conversation))}
         ${renderConversationActions(conversation, canSend)}
       </header>
       <div class="chat-history${/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(conversation.wallpaper || '') ? ` chat-history-custom" style="background-image:url(${conversation.wallpaper})` : ''}" aria-live="polite">
@@ -209,6 +214,19 @@ export function renderMessages({ preserveComposer = false, preserveHistoryAnchor
   `;
     const history = list.querySelector(".chat-history");
     history.scrollTop = history.scrollHeight;
+}
+
+function renderChatIdentity(chat, avatar) {
+    const photo = `<img src="${escapeHtml(avatar)}" alt="" />`;
+    const name = `<strong>${escapeHtml(chat.user)}</strong>`;
+    const username = `<small>${chat.isGroup ? `${chat.members?.length || 0} members` : escapeHtml(chat.handle)}</small>`;
+    const profile = `data-chat-profile data-profile-handle="${escapeHtml(chat.handle)}"`;
+    return `<div class="chat-header-identity">
+        ${chat.isGroup ? photo : `<button type="button" class="chat-header-photo" ${profile} aria-label="View profile photo and details">${photo}</button>`}
+        <div class="chat-header-copy">
+          ${chat.isGroup ? name + username : `<button type="button" ${profile}>${name}</button><button type="button" ${profile}>${username}</button>`}
+        </div>
+      </div>`;
 }
 
 function renderConversationActions(conversation, canSend) {
@@ -409,11 +427,7 @@ function renderConnectedChat(list, chat, { preserveComposer, preserveHistoryAnch
       <section class="chat-window" aria-label="Chat with ${escapeHtml(chat.user)}">
         <header class="chat-header">
           <button class="chat-back-button" type="button" data-chat-back aria-label="Back to messages">‹</button>
-          <button type="button" class="chat-header-identity" data-chat-profile data-profile-handle="${escapeHtml(chat.handle)}">
-            <img src="${escapeHtml(chat.avatar)}" alt="" /><span class="chat-header-copy">
-              <strong>${escapeHtml(chat.user)}</strong><small>${escapeHtml(chat.handle)}</small>
-            </span>
-          </button>
+          ${renderChatIdentity(chat, chat.avatar)}
             ${renderConversationActions(chat, chat.cloudCanSend)}
         </header>
         <div class="chat-history${wallpaper ? ` chat-history-custom" style="background-image:url(${wallpaper})` : ''}" aria-live="polite">${markup}</div>

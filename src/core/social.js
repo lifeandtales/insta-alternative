@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { cloudPerson } from '../features/cloud-people.js';
 import { currentUser, posts, reels, conversations } from '../data/sample-data.js';
 
 export const DEFAULT_AVATAR = 'data:image/svg+xml,' + encodeURIComponent(
@@ -79,6 +80,12 @@ export function canViewAccount(handle, viewerHandle = currentUser.handle) {
     if (handle === viewerHandle) return true;
     if (viewerHandle === currentUser.handle && state.blockedHandles.has(handle)) return false;
     if (handle === currentUser.handle && state.blockedHandles.has(viewerHandle)) return false;
+    const connected = viewerHandle === currentUser.handle && cloudPerson(handle);
+    if (connected?.isPrivate) {
+        if ('followStatus' in connected) return connected.followStatus === 'accepted';
+        return state.cloudFollowingIds?.has(connected.id) === true;
+    }
+    if (connected?.isPrivate === false) return true;
     const account = getAccount(handle);
     return !account?.isPrivate || isFollowing(handle, viewerHandle);
 }

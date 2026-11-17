@@ -174,7 +174,13 @@ async function refreshViewData(view, owner, handle, activeChat) {
             const followed = state.cloudFollowingIds ||= new Set();
             if (person.followStatus === 'accepted') followed.add(target);
             else followed.delete(target);
-            const loads = [loadCloudImagePosts(target), loadCloudHighlights(target, person.handle).catch(() => {})];
+            const accessible = target === owner || !person.isPrivate || person.followStatus === 'accepted';
+            const loads = accessible ? [
+                loadCloudImagePosts(target), loadCloudReels(target).catch(() => {}),
+                loadCloudImagePosts(null, person.handle).catch(() => {}),
+                loadCloudHighlights(target, person.handle).catch(() => {}),
+            ] : [];
+            if (!accessible) state.cloudTaggedPosts?.delete(person.handle);
             if (target === owner) {
                 loads.push(loadCloudSavedKeys(), loadCloudSavedCollection(), loadCloudStoryArchive().catch(() => {}));
             }

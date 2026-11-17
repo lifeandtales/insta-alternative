@@ -97,6 +97,7 @@ export async function fetchSocialProfile(id) {
     if (error) throw error;
     if (!data) return null;
     const person = rememberCloudPerson(data, await avatarLookup(client, [data]));
+    person.postCount = data.post_count;
     person.followers = data.followers;
     person.following = data.following;
     return person;

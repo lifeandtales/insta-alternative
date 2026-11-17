@@ -10,6 +10,7 @@ export function createEnvironment({ demoFixtures = true } = {}) {
     const elements = new Map();
     const listeners = [];
     const storage = new Map();
+    const session = new Map();
     function element(key) {
         if (elements.has(key)) return elements.get(key);
         const attributes = new Map();
@@ -54,11 +55,18 @@ export function createEnvironment({ demoFixtures = true } = {}) {
     math.random = () => 0.5;
     const localStorage = {
         getItem: key => storage.get(key) ?? null,
-        setItem: (key, value) => storage.set(key, value)
+        setItem: (key, value) => storage.set(key, value),
+        removeItem: key => storage.delete(key),
+    };
+    const sessionStorage = {
+        getItem: key => session.get(key) ?? null,
+        setItem: (key, value) => session.set(key, value),
+        removeItem: key => session.delete(key),
     };
     const historyEntries = [null];
     let historyIndex = 0;
     const window = {
+        sessionStorage,
         setTimeout: () => 1, clearTimeout() {}, location: {href: demoFixtures ? 'http://localhost:8000/?demo-fixtures=1' : 'http://localhost:8000/'},
         addEventListener: (type, callback) => listeners.push({key: 'window', type, callback}),
         history: {

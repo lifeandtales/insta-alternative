@@ -1,18 +1,8 @@
-import { getAccount } from '../core/social.js';
+import { profileReferenceFromQr, resolveProfileReference } from '../core/profile-links.js';
 import { state } from '../core/state.js';
 import { setView } from '../core/navigation.js';
 
 let stream = null, frame = null, generation = 0;
-
-export function profileHandleFromQr(value, base = window.location.href) {
-    let url, home;
-    try { url = new URL(value); home = new URL(base); } catch { return null; }
-    // Only route this app's profile links; never open arbitrary scanned URLs.
-    if (url.origin !== home.origin || url.pathname !== home.pathname) return null;
-    const match = /^#profile-(.+)$/.exec(url.hash);
-    if (!match) return null;
-    try { return decodeURIComponent(match[1]); } catch { return null; }
-}
 
 export function stopProfileScanner() {
     generation++;
@@ -23,14 +13,30 @@ export function stopProfileScanner() {
     if (video) { video.pause(); video.srcObject = null; video.hidden = true; }
 }
 
-function acceptCode(value) {
-    const handle = profileHandleFromQr(value);
+async function acceptCode(value, request) {
+    const reference = profileReferenceFromQr(value);
     const status = document.querySelector('.profile-scanner-status');
-    if (!handle) { status.textContent = 'This is not an Insta Alternative profile QR code.'; return false; }
-    if (!getAccount(handle)) { status.textContent = 'This profile is not available in this preview.'; return false; }
+    if (!reference) {
+        status.textContent = 'This is not an Insta Alternative profile QR code.';
+        return false;
+    }
+    status.textContent = 'Finding profile…';
+    let handle;
+    try { handle = await resolveProfileReference(reference); }
+    catch {
+        if (request === generation) status.textContent = 'Could not load the profile. Check your connection and try again.';
+        return false;
+    }
+    if (request !== generation) return false;
+    if (!handle) {
+        status.textContent = 'This profile is unavailable.';
+        return false;
+    }
     stopProfileScanner();
     document.querySelector('.profile-scanner-dialog').close();
-    state.profileHandle = handle; state.activeProfileSection = 'posts'; setView('profile');
+    state.profileHandle = handle;
+    state.activeProfileSection = 'posts';
+    setView('profile');
     return true;
 }
 
@@ -58,8 +64,8 @@ export async function startProfileScanCamera() {
         if (request !== generation) return;
         status.textContent = 'Point the camera at a profile QR code.';
         const canvas = document.createElement('canvas'), context = canvas.getContext('2d', {willReadFrequently:true});
-        let last = 0;
-        const scan = time => {
+        let last = 0, previousCode;
+        const scan = async time => {
             if (request !== generation) return;
             if (video.readyState >= 2 && video.videoWidth && time-last > 180) {
                 last = time; const ratio = Math.min(1, 720/video.videoWidth);
@@ -67,9 +73,12 @@ export async function startProfileScanCamera() {
                 context.drawImage(video,0,0,canvas.width,canvas.height);
                 const pixels = context.getImageData(0,0,canvas.width,canvas.height);
                 const result = decoder(pixels.data,canvas.width,canvas.height);
-                if (result && acceptCode(result.data)) return;
+                if (result?.data !== previousCode) {
+                    previousCode = result?.data;
+                    if (result && await acceptCode(result.data, request)) return;
+                }
             }
-            frame = requestAnimationFrame(scan);
+            if (request === generation) frame = requestAnimationFrame(scan);
         };
         frame = requestAnimationFrame(scan);
     } catch(error) {
@@ -93,7 +102,8 @@ export async function scanProfileQrImage(file) {
         const canvas = document.createElement('canvas');canvas.width=Math.round(image.naturalWidth*ratio);canvas.height=Math.round(image.naturalHeight*ratio);
         const context=canvas.getContext('2d');context.drawImage(image,0,0,canvas.width,canvas.height);
         const pixels=context.getImageData(0,0,canvas.width,canvas.height),result=decoder(pixels.data,canvas.width,canvas.height);
-        if (result) acceptCode(result.data);else status.textContent='No QR code found. Try a clearer image.';
+        if (result) await acceptCode(result.data, request);
+        else status.textContent = 'No QR code found. Try a clearer image.';
     } catch { if(request===generation)status.textContent='This image could not be read. Try another QR image.'; }
     finally { if(objectUrl)URL.revokeObjectURL(objectUrl); }
 }
@@ -106,6 +116,10 @@ export function registerProfileScannerEvents() {
         if(event.target===dialog||event.target.closest('[data-close-profile-scanner]')){stopProfileScanner();dialog.close();}
         if(event.target.closest('[data-start-profile-camera]'))startProfileScanCamera();
     });
-    dialog.querySelector('input').addEventListener('change',event=>scanProfileQrImage(event.target.files?.[0]));
+    dialog.querySelector('input').addEventListener('change', event => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        void scanProfileQrImage(file);
+    });
     document.addEventListener('visibilitychange',()=>{if(document.hidden)stopProfileScanner();});
 }

@@ -39,7 +39,8 @@ export async function loadCloudInbox() {
     const owner = state.signedInAccountId;
     if (!owner) return;
     const client = await getSupabaseClient();
-    let result = await client.rpc('connected_direct_inbox');
+    let result = await client.rpc('connected_direct_inbox_with_counts');
+    if (result.error?.code === 'PGRST202') result = await client.rpc('connected_direct_inbox');
     if (result.error?.code === 'PGRST202') result = await client.rpc('direct_inbox');
     const { data, error } = result;
     if (error) throw error;
@@ -54,6 +55,7 @@ export async function loadCloudInbox() {
         chat.lastActivity = Date.parse(row.sent_at);
         chat.lastMessage = row.kind === 'text' ? row.body : 'Attachment';
         chat.unread = row.unread;
+        chat.unreadCount = row.unread_count ?? 0;
         chat.pinned = row.pinned;
         chat.muted = row.muted;
         chat.cloudHasMessages = true;
@@ -172,6 +174,7 @@ export async function loadCloudChat(chat) {
         if (!error) {
             chat.cloudLastReadAt = latest.created_at;
             chat.unread = false;
+            chat.unreadCount = 0;
         }
     }
     return changed || sendChanged || wallpaperChanged || receiptChanged;
@@ -206,7 +209,8 @@ function toChatMessage(row, owner, links = new Map()) {
         replyToId: row.reply_to_id, reactions: row.reactions || [] };
     const meta = row.metadata || {};
     const media = links.get(row.object_path);
-    if (row.kind === 'voice' && media) return { ...message, media, type: 'voice', durationSeconds: Number(meta.durationSeconds) || 0 };
+    if (row.kind === 'voice' && media) return { ...message, media, type: 'voice',
+        fileName: String(meta.fileName || 'Voice message'), durationSeconds: Number(meta.durationSeconds) || 0 };
     if (['photo', 'video', 'file', 'voice'].includes(row.kind)) return {
         ...message, type: 'attachment', mediaKind: row.kind === 'voice' ? 'file' : row.kind,
         media, fileName: String(meta.fileName || (row.kind === 'voice' ? 'Voice message' : 'Attachment')),
@@ -328,11 +332,13 @@ export async function setCloudChatPreference(chat, action, enabled = true) {
     if (action === 'mute') chat.muted = enabled;
     if (action === 'unread') {
         chat.unread = enabled;
+        if (!enabled) chat.unreadCount = 0;
         chat.cloudLastReadAt = null;
     }
     if (action === 'clear') {
         chat.messages = [];
         chat.unread = false;
+        chat.unreadCount = 0;
         chat.cloudHasMessages = false;
     }
 }
