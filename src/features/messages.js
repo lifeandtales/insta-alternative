@@ -122,6 +122,24 @@ function renderGroupProfile(group) {
 }
 
 
+function renderInboxStories() {
+    const contacts = new Set(conversations.filter(chat => !chat.isGroup &&
+        (chat.cloudId ? chat.cloudHasMessages : chat.messages?.length)).map(chat => chat.handle));
+    const groups = new Map();
+    const stories = state.signedInAccountId ? state.inboxStories : state.stories;
+    for (const story of stories || []) {
+        if (!contacts.has(story.handle) || story.expiresAt <= Date.now() || !canViewStory(story)) continue;
+        const group = groups.get(story.handle) || { ...story, seen: true };
+        group.seen &&= state.seenStoryIds.has(story.id);
+        groups.set(story.handle, group);
+    }
+    if (!groups.size) return '';
+    return `<section class="inbox-stories stories-list" aria-label="Stories from your chats">${[...groups.values()].map(story =>
+        `<button type="button" class="story-item" data-inbox-story="${escapeHtml(story.handle)}">
+          <span class="story-ring has-story ${story.seen ? 'seen-story' : ''}"><img src="${escapeHtml(story.avatar)}" alt="" /></span>
+          <span>${escapeHtml(story.user)}</span></button>`).join('')}</section>`;
+}
+
 export function renderMessages({ preserveComposer = false, preserveHistoryAnchor = false, scrollToLatest = false } = {}) {
     const list = document.getElementById("messages-list");
     const group = conversations.find(item => item.handle === state.activeGroupProfileHandle);
@@ -139,6 +157,7 @@ export function renderMessages({ preserveComposer = false, preserveHistoryAnchor
           <circle cx="8" cy="7" r="3" /><path d="M2 19v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M15 4a3 3 0 0 1 0 6M19 13v7M15.5 16.5h7" />
         </svg>
       </button></header>
+      ${renderInboxStories()}
       <div class="conversation-list">
         ${conversations.filter(item => item.cloudId ? item.cloudHasMessages : !conversations.some(other => other.cloudId && other.cloudHasMessages && other.handle === item.handle)).sort((left, right) => Number(right.pinned) - Number(left.pinned) || inboxMessageTime(right) - inboxMessageTime(left)).map((item) => {
           const unreadCount = getUnreadMessageCount(item);
@@ -168,7 +187,7 @@ export function renderMessages({ preserveComposer = false, preserveHistoryAnchor
         `;
         }).join("")}
       </div>
-      ${state.signedInAccountId ? '<div class="messages-compose-footer"><button class="messages-compose-button" type="button" data-new-direct-message aria-label="New message" title="New message">＋</button></div>' : ''}
+      ${state.signedInAccountId ? '<div class="messages-compose-footer"><button class="messages-community-button" type="button" data-open-communities aria-label="Communities">Community</button><button class="messages-compose-button" type="button" data-new-direct-message aria-label="New message" title="New message">＋</button></div>' : ''}
       ${state.signedInAccountId ? (conversations.some(item => !item.cloudId || item.cloudHasMessages) ? '' : '<p class="messages-local-note">No messages yet.</p>') : '<p class="messages-local-note">Messages are saved on this device. Delivery and connected calls will be added later.</p>'}
     `;
         return;
@@ -219,12 +238,12 @@ export function renderMessages({ preserveComposer = false, preserveHistoryAnchor
 function renderChatIdentity(chat, avatar) {
     const photo = `<img src="${escapeHtml(avatar)}" alt="" />`;
     const name = `<strong>${escapeHtml(chat.user)}</strong>`;
-    const username = `<small>${chat.isGroup ? `${chat.members?.length || 0} members` : escapeHtml(chat.handle)}</small>`;
+    const members = chat.isGroup ? `<small>${chat.members?.length || 0} members</small>` : '';
     const profile = `data-chat-profile data-profile-handle="${escapeHtml(chat.handle)}"`;
     return `<div class="chat-header-identity">
         ${chat.isGroup ? photo : `<button type="button" class="chat-header-photo" ${profile} aria-label="View profile photo and details">${photo}</button>`}
         <div class="chat-header-copy">
-          ${chat.isGroup ? name + username : `<button type="button" ${profile}>${name}</button><button type="button" ${profile}>${username}</button>`}
+          ${chat.isGroup ? name + members : `<button type="button" ${profile}>${name}</button>`}
         </div>
       </div>`;
 }
@@ -261,6 +280,7 @@ function renderChatComposer() {
         <button class="chat-attach-button" type="button" data-chat-gallery aria-label="Attach a photo or video"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 17H3V5a2 2 0 0 1 2-2h12v2"/><g transform="translate(3 3) scale(.85)"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8" cy="9" r="1.5"/><path d="m4 17 5-5 4 3 3-5 4 6"/></g></svg></button>
         <input class="chat-gallery-input" type="file" accept="image/*,video/*" hidden />
         <input class="chat-file-input" type="file" hidden />
+        <input class="chat-sticker-input" type="file" accept="image/gif,image/webp,image/png,image/apng" hidden />
         <button class="chat-attach-button" type="button" data-chat-voice aria-label="Record a voice message"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3" fill="currentColor" stroke="none"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5m-3 0h6"/></svg></button>
         <input name="message" type="text" maxlength="1000" placeholder="Message..." aria-label="Message" autocomplete="off" enterkeyhint="send" />
         <button class="chat-send-button" type="submit">Send</button>
@@ -361,7 +381,7 @@ function renderConversationMessage(message, conversation, messagesById) {
                     content += `<small>Download by ${escapeHtml(new Date(expiresAt).toLocaleString())}</small>`;
                 }
             }
-            return `<article class="chat-message ${message.from === 'me' ? 'from-me' : 'from-them'} chat-attachment">${content}${message.caption ? `<p>${escapeHtml(message.caption)}</p>` : ''}<time>${escapeHtml(formatConversationTime(message.sentAt))}</time></article>`;
+            return `<article class="chat-message ${message.from === 'me' ? 'from-me' : 'from-them'} chat-attachment${message.sticker ? ' chat-sticker-message' : message.animated ? ' chat-gif-message' : ''}">${content}${message.caption ? `<p>${escapeHtml(message.caption)}</p>` : ''}<time>${escapeHtml(formatConversationTime(message.sentAt))}</time></article>`;
         }
         return `
       <article class="chat-message chat-text-message ${message.from === "me" ? "from-me" : "from-them"}">

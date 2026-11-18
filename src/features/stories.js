@@ -1,3 +1,4 @@
+import { renderLiveCircles } from './live-broadcasts.js';
 import { renderStoryDrafts } from './story-drafts.js';
 import { canViewStory, isFollowing, mayInteract, canViewMedia, mediaNeedsWarning } from '../core/social.js';
 import { showShareFeedback } from '../components/feedback.js';
@@ -13,6 +14,7 @@ import { syncStoryOptionButtons, openStoryExitDialog, closeStoryExitDialog } fro
 import { stopStoryCamera } from './story-camera.js';
 import { recordStoryMentions } from './notifications.js';
 import { getPublicHashtagStories } from '../core/hashtags.js';
+window.addEventListener('live-broadcasts-updated', () => { if (state.currentView === 'home') renderStories(); });
 let storyCreatorTrigger;
 let storyHistoryEntryOpen = false;
 let hashtagViewerClosed = null;
@@ -29,7 +31,7 @@ window.addEventListener('popstate', () => {
 
 export function getStoryGroups({ includeMuted = false, includeHandle = null } = {}) {
     const groupedStories = new Map();
-    state.stories.forEach((story) => {
+    [...state.stories, ...(includeHandle ? state.inboxStories.filter(story => story.handle === includeHandle && !state.stories.some(item => item.id === story.id)) : [])].forEach((story) => {
         if (!Number.isFinite(story.expiresAt)) {
             story.createdAt = Date.now();
             story.expiresAt = story.createdAt + state.storyLifetimeMs;
@@ -53,10 +55,11 @@ export function getStoryGroups({ includeMuted = false, includeHandle = null } = 
 
 export function expireStory(id) {
     state.storyExpiryTimers.delete(id);
-    const story = state.stories.find((item) => item.id === id);
+    const story = [...state.stories, ...state.inboxStories].find(item => item.id === id);
     if (!story || story.expiresAt > Date.now())
         return;
-    state.stories = state.stories.filter((item) => item.id !== id);
+    state.stories = state.stories.filter(item => item.id !== id);
+    state.inboxStories = state.inboxStories.filter(item => item.id !== id);
     const retainedMedia = new Set([
         ...state.storyHighlights.flatMap((highlight) => highlight.stories.map((item) => item.media)),
         ...state.stories.map(item => item.media),
@@ -85,6 +88,7 @@ export function renderStories() {
     const otherStories = groups.filter((group) => group.handle !== currentUser.handle && !group.muted);
     const mutedStories = groups.filter((group) => group.handle !== currentUser.handle && group.muted);
     list.innerHTML = `
+    ${renderLiveCircles()}
     <div class="story-own-group"><button class="story-item story-own" type="button" data-story-owner="${escapeHtml(currentUser.handle)}">
       <span class="story-ring ${ownStories ? `has-story ${ownStoriesSeen ? "seen-story" : ""}` : ""}">
         <img src="${escapeHtml(currentUser.avatar)}" alt="" />

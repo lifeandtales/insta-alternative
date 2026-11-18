@@ -1,3 +1,4 @@
+import { loadLiveData } from '../storage/live-broadcasts.js';
 import { loadCloudSavedCollection, loadCloudSavedKeys } from '../storage/cloud-saved-items.js';
 import { syncVisibleSaveButtons } from '../features/saved.events.js';
 import { syncVisibleImageLikes } from '../features/likes.js';
@@ -6,7 +7,7 @@ import { loadCloudInbox, loadCloudChat } from '../features/cloud-chat.js';
 import { loadCloudImagePosts } from '../storage/image-posts.js';
 import { loadCloudReels } from '../storage/cloud-reels.js';
 import { loadCloudHighlights, loadCloudStoryArchive } from '../storage/cloud-highlights.js';
-import { loadCloudStories } from '../storage/cloud-stories.js';
+import { loadInboxStories, loadCloudStories } from '../storage/cloud-stories.js';
 import { conversations, currentUser } from '../data/sample-data.js';
 import { renderNotificationsPage, restoreNotificationFocus } from '../features/notifications.js';
 import { renderPostCards } from '../components/post-card.js';
@@ -192,7 +193,7 @@ async function refreshViewData(view, owner, handle, activeChat) {
         }
     } else if (view === 'messages') {
         const chat = conversations.find(item => item.handle === activeChat && item.cloudId);
-        const changed = chat ? await loadCloudChat(chat) : (await loadCloudInbox(), true);
+        const changed = chat ? await loadCloudChat(chat) : (await loadCloudInbox(), await loadInboxStories().catch(() => {}), true);
         if (stillVisible() && state.activeConversationHandle === activeChat && !state.activeGroupProfileHandle) {
             if (changed && (chat || !activeChat)) renderMessages({ preserveComposer: Boolean(chat) });
             else if (chat) refreshReadReceiptLabel(chat);
@@ -203,7 +204,8 @@ async function refreshViewData(view, owner, handle, activeChat) {
     } else if (view === 'home' || view === 'explore') {
         await loadCloudFollowing();
         await Promise.all([loadCloudImagePosts(), loadCloudSavedKeys(),
-            view === 'home' ? loadCloudStories().catch(() => {}) : undefined]);
+            view === 'home' ? loadCloudStories().catch(() => {}) : undefined,
+            view === 'home' ? loadLiveData().catch(() => {}) : undefined]);
         if (stillVisible()) {
             if (view === 'home') {
                 renderPostCards(getHomeFeedItems());

@@ -343,3 +343,14 @@ export async function sendCloudStoryReply(story, text) {
     });
     if (error) throw error;
 }
+
+export async function loadInboxStories() {
+    const owner = state.signedInAccountId;
+    if (!owner) return;
+    const client = await getSupabaseClient();
+    const { data, error } = await client.rpc('connected_inbox_story_feed');
+    if (error) throw error;
+    const stories = await hydrateCloudStories(client, data.slice().reverse(), owner);
+    if (owner !== state.signedInAccountId) return;
+    state.inboxStories = stories;
+}

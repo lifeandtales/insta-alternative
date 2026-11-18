@@ -214,7 +214,7 @@ function toChatMessage(row, owner, links = new Map()) {
     if (['photo', 'video', 'file', 'voice'].includes(row.kind)) return {
         ...message, type: 'attachment', mediaKind: row.kind === 'voice' ? 'file' : row.kind,
         media, fileName: String(meta.fileName || (row.kind === 'voice' ? 'Voice message' : 'Attachment')),
-        fileSize: Number(meta.fileSize) || 0
+        sticker: meta.sticker === true, animated: meta.animated === true, fileSize: Number(meta.fileSize) || 0
     };
     if (row.kind === 'location') return { ...message, type: 'location', place: String(meta.place || '') };
     if (row.kind === 'contact') return { ...message, type: 'contact', contactName: String(meta.contactName || ''), phone: String(meta.phone || '') };
@@ -250,6 +250,7 @@ export async function sendCloudMedia(chat, message) {
         payload.kind = message.type === 'voice' ? 'voice' : message.mediaKind;
         payload.object_path = `${chat.cloudId}/${owner}/${crypto.randomUUID()}`;
         payload.metadata = { fileName: String(message.fileName || 'Voice message').slice(0, 180),
+            sticker: message.sticker === true, animated: message.animated === true,
             fileSize: blob.size, durationSeconds: message.durationSeconds || 0 };
         const { error } = await bucket.upload(payload.object_path, blob, { contentType: blob.type || 'application/octet-stream' });
         if (error) throw error;

@@ -27,7 +27,7 @@ export async function subscribeToSocialUpdates(owner) {
                 || (['messages', 'conversation_preferences', 'message_reactions'].includes(table) && view === 'messages')
                 || (table === 'image_posts' && ['home', 'profile', 'explore'].includes(view))
                 || (table === 'image_post_comments' && ['home', 'profile', 'explore'].includes(view))
-                || (table === 'media_content' && ['home', 'reels'].includes(view));
+                || (table === 'media_content' && ['home', 'reels', 'messages'].includes(view));
             if (!relevant) return;
             clearTimeout(refreshTimer);
             refreshTimer = setTimeout(() => {

@@ -1,3 +1,4 @@
+import { registerLiveEvents } from './src/features/live-broadcasts.js';
 import { registerInAppCallControls } from './src/features/in-app-calls.js';
 import { loadCloudSavedKeys, subscribeToSavedChanges } from './src/storage/cloud-saved-items.js';
 import { subscribeToSocialUpdates } from './src/features/social-updates.js';
@@ -318,6 +319,7 @@ document.addEventListener('click', event => {
 registerHomeControlEvents();
 registerMobileNavigationGestures(document.querySelector('.mobile-nav'));
 registerNotificationEvents();
+registerLiveEvents();
 registerAccountSettingsEvents();
 registerProfileEditorEvents();
 registerVideoPointerEvents();

@@ -63,6 +63,7 @@ export const state = {
     scheduledStories: new Map(),
     hasScheduledCloudStory: false,
     cloudArchivedStories: [],
+    inboxStories: [],
     storySettings: { allowReplies: true, saveToArchive: true },
     storyUploadSelection: null,
     storyUploadInputFallback: null,

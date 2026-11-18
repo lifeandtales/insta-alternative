@@ -1,3 +1,4 @@
+import { registerCommunityEvents } from './communities.js';
 import { startInAppCall } from './in-app-calls.js';
 import { findMessageRecipients, hideCloudMessage, hideCloudMessages, loadCloudChat, loadOlderCloudMessages, muteConnectedCalls, openCloudChat, sendCloudMedia, sendCloudText,
     setCloudChatPreference, setCloudMessageReaction, updateCloudChatTimer } from './cloud-chat.js';
@@ -29,6 +30,7 @@ const MESSAGE_REACTIONS = [['❤️', 'Like'], ['😂', 'Laugh'], ['😮', 'Surp
 let recorder, recordingStream, recordingTimer, recordingGeneration = 0, pendingAttachment;
 let voiceComposer, voiceDraft, stopVoiceMeter;
 let copiedVoice;
+let copiedChatMedia;
 const activeConversation = () => conversations.find(item => item.handle === state.activeConversationHandle);
 const closePanel = () => { document.querySelector('.home-controls-backdrop').hidden = true; };
 const replyTargets = new WeakMap();
@@ -173,8 +175,8 @@ function registerMessageReactionGestures(list) {
           ${message ? '<button type="button" data-delete-one-message>Delete</button>' : ''}
           ${canCopy ? '<button type="button" data-copy-message>Copy</button>' : ''}
           ${message?.type === 'voice' && message.media ? '<button type="button" data-copy-voice>Copy audio</button>' : ''}
-          ${canDownload ? '<button type="button" data-download-chat-media>Download</button>' : ''}
-          ${canForwardMessage(message) && (!activeConversation()?.cloudId || message.type === 'text') ? '<button type="button" data-forward-message>Forward</button>' : ''}
+          ${canDownload ? '<button type="button" data-copy-chat-media>Copy</button><button type="button" data-download-chat-media>Download</button>' : ''}
+          ${canForwardMessage(message) && (!activeConversation()?.cloudId || ['text', 'attachment', 'voice'].includes(message.type)) ? '<button type="button" data-forward-message>Forward</button>' : ''}
           </div>
         </div>`);
         const tray = chatWindow.querySelector('.chat-reaction-tray');
@@ -324,6 +326,16 @@ function registerMessageReactionGestures(list) {
             } else if (message && hideConversationMessages(chat, [message.id])) {
                 renderMessages({ preserveComposer: true });
                 persistSession().catch(() => showShareFeedback('This device could not save the chat deletion.'));
+            }
+        } else if (event.target.closest('[data-copy-chat-media]')) {
+            const message = findMessageForBubble(openBubble);
+            closeTray();
+            if (message?.media) {
+                void fetch(message.media).then(async response => {
+                    if (!response.ok) throw new Error('Unavailable');
+                    copiedChatMedia = { ...message, blob: await response.blob() };
+                    showShareFeedback('Copied. Use + → Paste media in a chat.');
+                }).catch(() => showShareFeedback('Could not copy this attachment.'));
             }
         } else if (event.target.closest('[data-download-chat-media]')) {
             downloadChatMedia(findMessageForBubble(openBubble));
@@ -1134,6 +1146,11 @@ export function handleMessageClick(event) {
         }
         return true;
     }
+    const inboxStory = event.target.closest('[data-inbox-story]');
+    if (inboxStory) {
+        openStoryGroup(inboxStory.dataset.inboxStory, { allowUnfollowed: true });
+        return true;
+    }
     const options = event.target.closest('[data-chat-options]');
     if (options) {
         const menu = document.querySelector('.chat-options-menu');
@@ -1244,12 +1261,30 @@ export function handleMessageClick(event) {
     if (event.target.closest('[data-chat-attach]')) {
         if (canSendToConversation(activeConversation())) {
             showHomePanel('Share in chat', `<div class="profile-options-list">
+              <button type="button" data-chat-pick-sticker>GIF or sticker</button>
               <button type="button" data-chat-share-kind="file">Share a file</button>
               <button type="button" data-chat-share-kind="location">Share your location</button>
               <button type="button" data-chat-share-kind="contact">Share a contact</button>
+              ${copiedChatMedia ? '<button type="button" data-chat-paste-media>Paste media</button>' : ''}
               ${copiedVoice ? '<button type="button" data-chat-share-kind="paste-audio">Paste audio</button>' : ''}
             </div>`);
         }
+        return true;
+    }
+    if (event.target.closest('[data-chat-paste-media]')) {
+        const chat = activeConversation();
+        if (copiedChatMedia && canSendToConversation(chat)) {
+            const { blob, mediaKind, fileName, sticker, animated } = copiedChatMedia;
+            if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.media);
+            pendingAttachment = { conversation: chat, type: 'attachment', mediaKind, fileName,
+                sticker, animated, fileSize: blob.size, media: URL.createObjectURL(blob) };
+            showHomePanel('Paste media', '<div class="panel-actions"><button type="button" data-attachment-send>Send</button><button type="button" data-attachment-discard>Cancel</button></div>');
+        }
+        return true;
+    }
+    if (event.target.closest('[data-chat-pick-sticker]')) {
+        closeHomePanel();
+        document.querySelector('.chat-sticker-input')?.click();
         return true;
     }
     if (event.target.closest('[data-chat-gallery]')) {
@@ -1379,8 +1414,9 @@ async function forwardChatMessage(form) {
     submit.disabled = true;
     if (source.cloudId || target.cloudId) {
         try {
-            if (source.cloudId && target.cloudId && original.type === 'text') {
-                await sendCloudText(target, original.text);
+            if (source.cloudId && target.cloudId) {
+                if (original.type === 'text') await sendCloudText(target, original.text);
+                else await sendCloudMedia(target, original);
                 closeHomePanel();
                 if (activeConversation() === target) renderMessages({ preserveComposer: true, scrollToLatest: true });
                 showShareFeedback('Message forwarded.');
@@ -1431,6 +1467,7 @@ export function registerMessageFormEvents() {
         syncVoicePlayer(audio);
     });
     registerChatWallpaperEvents();
+    registerCommunityEvents();
     window.addEventListener('pageshow', refreshChatAttachmentExpiry);
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) refreshChatAttachmentExpiry();
@@ -1505,27 +1542,41 @@ export function registerMessageFormEvents() {
             form.querySelector('.chat-reply-draft')?.remove();
         }
     });
-    document.getElementById('messages-list').addEventListener('change', event => {
-        if (!event.target.matches('.chat-gallery-input, .chat-file-input')) return;
+    const prepareAttachment = (file, mode) => {
         const conversation = activeConversation();
-        const file = event.target.files?.[0];
-        event.target.value = '';
         if (!file || !canSendToConversation(conversation)) return;
         if (conversation.cloudId && file.size > 50000000) {
             showShareFeedback('Attachments must be no larger than 50 MB.');
             return;
         }
-        const mediaKind = event.target.matches('.chat-file-input') ? 'file'
+        const mediaKind = mode === 'file' ? 'file'
             : file.type.startsWith('video/') ? 'video'
                 : file.type.startsWith('image/') ? 'photo' : null;
         if (!mediaKind) {
             showShareFeedback('Choose a photo or video.');
             return;
         }
+        if (mode === 'sticker' || file.type === 'image/gif') {
+            const message = {
+                type: 'attachment', mediaKind, fileName: file.name, fileSize: file.size,
+                media: URL.createObjectURL(file), sticker: mode === 'sticker' && file.type !== 'image/gif',
+                animated: file.type === 'image/gif',
+            };
+            if (conversation.cloudId) {
+                void sendConnectedMedia(conversation, message, { disabled: false }, () => {}).finally(() => {
+                    URL.revokeObjectURL(message.media);
+                });
+            } else if (!saveMessage(conversation, { ...message, from: 'me' })) {
+                URL.revokeObjectURL(message.media);
+            }
+            return;
+        }
         if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.media);
         pendingAttachment = {
             conversation, type: 'attachment', mediaKind,
             fileName: file.name, fileSize: file.size, media: URL.createObjectURL(file),
+            sticker: mode === 'sticker' && file.type !== 'image/gif',
+            animated: file.type === 'image/gif',
         };
         const url = escapeHtml(pendingAttachment.media);
         const preview = mediaKind === 'video' ? `<video controls playsinline src="${url}"></video>`
@@ -1536,6 +1587,30 @@ export function registerMessageFormEvents() {
           ${temporary ? '<p>This attachment is over 200 MB and will be deleted automatically 24 hours after sending. Download it before it expires.</p>' : ''}
           <div class="panel-actions"><button type="button" data-attachment-send>${temporary ? 'Send' : `Send ${mediaKind}`}</button>
           <button type="button" data-attachment-discard>${temporary ? 'Cancel' : 'Discard'}</button></div>`);
+    };
+    messagesList.addEventListener('change', event => {
+        if (!event.target.matches('.chat-gallery-input, .chat-file-input, .chat-sticker-input')) return;
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        prepareAttachment(file, event.target.matches('.chat-file-input') ? 'file'
+            : event.target.matches('.chat-sticker-input') ? 'sticker' : 'gallery');
+    });
+    messagesList.addEventListener('paste', event => {
+        if (!event.target.closest('.chat-composer')) return;
+        const file = [...(event.clipboardData?.files || [])].find(item => item.type.startsWith('image/'));
+        if (!file) return;
+        event.preventDefault();
+        prepareAttachment(file, file.type === 'image/gif' ? 'gallery' : 'sticker');
+    });
+    window.addEventListener('android-chat-content', async event => {
+        if (state.currentView !== 'messages' || !document.activeElement?.closest('.chat-composer')) return;
+        const detail = event.detail;
+        if (!detail || !/^image\/(gif|webp|png|apng|jpeg)$/.test(detail.mime) || typeof detail.base64 !== 'string') return;
+        try {
+            const response = await fetch(`data:${detail.mime};base64,${detail.base64}`);
+            const file = new File([await response.blob()], 'keyboard.' + detail.mime.split('/')[1], { type: detail.mime });
+            prepareAttachment(file, detail.mime === 'image/gif' ? 'gallery' : 'sticker');
+        } catch { showShareFeedback('Could not read this keyboard sticker.'); }
     });
     document.addEventListener('submit', event => {
         const form = event.target;

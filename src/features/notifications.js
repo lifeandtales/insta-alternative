@@ -1,3 +1,4 @@
+import { liveNotifications, loadLiveData, markLiveNoticesRead } from '../storage/live-broadcasts.js';
 import { loadCloudFollowRequests, reviewCloudFollowRequest } from './cloud-people.js';
 import { getUnreadMessageCount } from './messages.js';
 import { captionMentions } from '../components/caption.js';
@@ -71,6 +72,7 @@ function renderNotificationItem(item){
         const image=preview?.cover||preview?.poster||preview?.media;
         thumbnail=`<button type="button" class="notification-story-link" data-post-notice="${escapeHtml(String(item.postId))}" data-notice-entity-type="${item.entityType==='reel'?'reel':'post'}" aria-label="${escapeHtml(available?`View post: ${item.text}`:'Post unavailable')}" ${available?'':'disabled'}>${image?`<img src="${escapeHtml(image)}" alt="" loading="lazy" />`:'<span aria-hidden="true">◷</span>'}</button>`;
     }
+    if (item.liveId) thumbnail = `<button type="button" class="notification-live-link" data-open-live="${escapeHtml(item.liveId)}" ${item.isLive ? '' : 'disabled'}>${item.isLive ? 'Watch LIVE' : 'Live ended'}</button>`;
     const others=item.otherCount?`<p class="notification-others">+${item.otherCount} ${item.otherCount===1?'other':'others'}</p>`:'';
     return `<li class="notification-card"><div class="notification-copy"><div class="notification-item-heading"><strong>${escapeHtml(item.title)}</strong>${notificationTime(item)}</div><p>${escapeHtml(item.text)}</p>${others}</div>${thumbnail}</li>`;
 }
@@ -92,7 +94,8 @@ export function availableLocalNotifications() {
         title: notice.kind==='post-mention'?'Caption mention':notice.kind==='post-tag'?'Post tag':notice.kind === 'story-mention' ? 'Story mention' : notice.kind==='post-like'?'Post like':'Story like',
         text: notice.kind==='post-mention'?`${notice.actorName || notice.actor} mentioned you in a caption.`:notice.kind==='post-tag'?`${notice.actorName || notice.actor} tagged you in a post.`:notice.kind === 'story-mention' ? `${notice.actorName || notice.actor} mentioned you in their story.` : `${notice.actorName || notice.actor} liked your ${notice.kind==='post-like'?'post':'story'}.`
     }));
-    return [...storyLikes, ...requests, ...unread, ...approvals].sort((left,right)=>notificationTimestamp(right)-notificationTimestamp(left));
+    const live = liveNotifications().map(row => ({ liveId: row.broadcast_id, isLive: row.is_live, createdAt: Date.parse(row.created_at), title: 'Live broadcast', text: `${row.display_name} ${row.is_live ? 'is live now.' : 'went live.'}` }));
+    return [...live, ...storyLikes, ...requests, ...unread, ...approvals].sort((left,right)=>notificationTimestamp(right)-notificationTimestamp(left));
 }
 
 export function recordStoryMentions(story) {
@@ -221,7 +224,7 @@ function ensureDemoStoryLike() {
 export function updateNotificationBadge() {
     const badge = document.querySelector('.home-notifications .notification-badge');
     if (!badge) return;
-    const count = groupLikeNotifications((state.localStoryNotifications || []).filter(notice => notice.recipient === currentUser.handle && !state.blockedHandles.has(notice.actor))).filter(notice=>!notice.read).length;
+    const count = groupLikeNotifications((state.localStoryNotifications || []).filter(notice => notice.recipient === currentUser.handle && !state.blockedHandles.has(notice.actor))).filter(notice=>!notice.read).length + liveNotifications().filter(notice => !notice.read_at).length;
     badge.hidden = count === 0;
     badge.textContent = count ? (count > 9 ? '9+' : String(count)) : '';
     document.querySelector('.home-notifications')?.setAttribute('aria-label', count ? `Notifications, ${count} unread` : 'Notifications');
@@ -243,12 +246,14 @@ export function openNotifications(button){
     trigger=button;
     trigger?.setAttribute('aria-expanded','true');
     setView('notifications');
+    if (state.signedInAccountId) void loadLiveData().catch(() => {});
 }
 
 export function renderNotificationsPage(){
     if(state.deletionRequestedAt)return;
     if (demoContentEnabled) ensureDemoStoryLike();
     updateNotificationBadge();
+    void markLiveNoticesRead().then(updateNotificationBadge).catch(() => {});
     const items = availableLocalNotifications();
     const content = document.querySelector('.notifications-content');
     content.innerHTML = items.length
@@ -283,6 +288,10 @@ export function renderNotificationsPage(){
 export function registerNotificationEvents() {
     const page = document.getElementById('notifications-page');
     updateNotificationBadge();
+    window.addEventListener('live-broadcasts-updated', () => {
+        if (state.currentView === 'notifications') renderNotificationsPage();
+        else updateNotificationBadge();
+    });
     page.addEventListener('click', event => {
         const request = event.target.closest('[data-cloud-request]');
         if (request) {
