@@ -50,6 +50,12 @@ export function registerSignupValidation(root) {
         if (form.dataset.entryForm === 'login' && input.name !== 'email') return;
         const previous = pending.get(input); if (previous) clearTimeout(previous.timer);
         const record = { version: (previous?.version || 0) + 1 }; pending.set(input, record);
+        if (form.dataset.entryForm === 'login' && !input.value.includes('@')) {
+            const valid = /^[a-z0-9._]{3,30}$/i.test(input.value.trim());
+            paint(form, input, valid ? { state: 'valid', message: 'Username format looks good.' }
+                : immediate ? { state: 'invalid', message: 'Enter your email or username.' } : { state: 'empty', message: '' });
+            return;
+        }
         let feedback = localSignupFeedback(input.name, input.value, form.elements.password.value);
         if (feedback.state === 'empty' && immediate) feedback = { state: 'invalid', message: `Enter ${labels[input.name].toLowerCase()}.` };
         if (input.name === 'email' && feedback.state === 'check' && input.validity?.typeMismatch) feedback = availabilityFeedback('email', 'invalid');

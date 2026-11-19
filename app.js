@@ -235,7 +235,12 @@ document.addEventListener('submit', async event => {
             await continueWithUser(await getSupabaseClient(), pendingProfileUser, details);
             return;
         }
-        const email = readAuthEmail(form.elements.email);
+        const identifier = form.elements.email.value.trim().toLowerCase();
+        const useUsername = mode === 'login' && !identifier.includes('@');
+        if (useUsername && !/^[a-z0-9._]{3,30}$/.test(identifier)) {
+            throw Object.assign(new Error('Enter your email or username.'), { field: 'email' });
+        }
+        const email = useUsername ? null : readAuthEmail(form.elements.email);
         const password = form.elements.password.value;
         if (!password) throw new Error('Enter your password.');
         if (mode === 'signup') {
@@ -257,7 +262,18 @@ document.addEventListener('submit', async event => {
         } else {
             const client = await getSupabaseClient();
             startTemporarySupabaseSession();
-            const { data, error } = await client.auth.signInWithPassword({ email, password });
+            let result;
+            if (useUsername) {
+                const login = await client.functions.invoke('username-login', { body: { username: identifier, password } });
+                if (login.error) {
+                    const denied = login.error.context?.status === 401;
+                    throw new Error(denied ? 'Invalid username or password.' : 'Username login is unavailable. Try logging in with your email.');
+                }
+                result = await client.auth.setSession(login.data);
+            } else {
+                result = await client.auth.signInWithPassword({ email, password });
+            }
+            const { data, error } = result;
             if (error) throw error;
             pendingLogin = { client, user: data.user };
             showWelcomeForm('remember');

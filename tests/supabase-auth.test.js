@@ -46,3 +46,34 @@ for (const remember of [true, false]) test(`login uses ${remember ? 'device' : '
     assert.equal(app.exportsOf('src/data/sample-data.js').currentUser.handle, '@realaccount');
     assert.equal(app.exportsOf('src/storage/browser-storage.js').accountStorageKey('insta-browser-data'), 'insta-browser-data:account-1');
 });
+
+test('username login uses the returned session and opens Keep me logged in', async () => {
+    const app = await loadApp();
+    const user = { id: 'account-1' };
+    const tokens = { access_token: 'test-token', refresh_token: 'test-refresh' };
+    app.context.window.supabase = { createClient: () => ({
+        functions: { invoke: async (name, { body }) => {
+            assert.equal(name, 'username-login');
+            assert.equal(body.username, 'realaccount');
+            assert.equal(body.password, 'test-only');
+            return { data: tokens };
+        } },
+        auth: { setSession: async session => {
+            assert.equal(session, tokens);
+            return { data: { user } };
+        } },
+    }) };
+    const createElement = app.document.createElement;
+    app.document.createElement = tag => Object.assign(createElement(tag), { remove() {} });
+    app.document.head = { append: script => script.onload() };
+    const error = {};
+    const form = {
+        dataset: { entryForm: 'login' },
+        elements: { email: { value: ' RealAccount ' }, password: { value: 'test-only' } },
+        querySelector: selector => selector === '.welcome-form-error' ? error : {},
+    };
+    const submit = app.listeners.find(item => item.type === 'submit' && String(item.callback).includes('username-login')).callback;
+    await submit({ target: { closest: () => form }, preventDefault() {} });
+    assert.equal(error.hidden, true);
+    assert.equal(app.element('#welcome-session-choice').hidden, false);
+});
