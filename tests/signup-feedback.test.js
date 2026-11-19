@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { loadApp } from './helpers/app-harness.js';
+test('signup provides local password, matching confirmation and display-name feedback', async () => {
+    const app = await loadApp();
+    const { localSignupFeedback: check, availabilityFeedback: available } = app.exportsOf('src/features/signup-validation.js');
+    assert.equal(check('password', 'short').state, 'invalid');
+    assert.equal(check('password', 'long password').state, 'invalid');
+    assert.equal(check('password', 'long-password').state, 'valid');
+    assert.equal(check('confirmPassword', 'different', 'long-password').state, 'invalid');
+    assert.equal(check('confirmPassword', 'long-password', 'long-password').state, 'valid');
+    assert.equal(check('displayName', '   ').state, 'invalid');
+    assert.equal(check('displayName', 'A Person').state, 'valid');
+    assert.equal(check('username', 'short').state, 'invalid');
+    assert.equal(check('username', 'real.person').state, 'check');
+    assert.equal(available('email', 'taken').message, 'Email already exists. Enter another email.');
+    assert.equal(available('username', 'taken').state, 'invalid');
+    assert.equal(available('username', 'available').state, 'valid');
+    assert.notEqual(available('email', undefined).state, 'valid');
+});

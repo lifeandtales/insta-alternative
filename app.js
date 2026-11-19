@@ -1,3 +1,5 @@
+import { registerSignupValidation, resetSignupFeedback, pauseSignupValidation } from './src/features/signup-validation.js';
+import { readAuthEmail, checkSignupEmailResponse } from './src/features/auth-email.js';
 import { registerLiveEvents } from './src/features/live-broadcasts.js';
 import { registerInAppCallControls } from './src/features/in-app-calls.js';
 import { loadCloudSavedKeys, subscribeToSavedChanges } from './src/storage/cloud-saved-items.js';
@@ -86,9 +88,13 @@ function showWelcomeForm(mode, status = '') {
     welcomeStatus.textContent = status;
     welcomeStatus.hidden = !status;
     for (const form of welcomeForms) {
+        resetSignupFeedback(form);
         form.reset();
         form.hidden = form.dataset.entryForm !== mode;
         form.querySelector('.welcome-form-error').hidden = true;
+        const emailError = form.querySelector('[data-email-error]');
+        if (emailError) { emailError.hidden = true; emailError.textContent = ''; }
+        form.elements.email?.removeAttribute?.('aria-invalid');
         for (const input of form.querySelectorAll('.welcome-password-wrap input')) input.type = 'password';
         for (const button of form.querySelectorAll('[data-toggle-password]')) {
             button.textContent = 'Show';
@@ -212,10 +218,14 @@ document.addEventListener('submit', async event => {
     if (!form) return;
     event.preventDefault();
     if (authBusy) return;
+    pauseSignupValidation(form);
     const mode = form.dataset.entryForm;
     const errorElement = form.querySelector('.welcome-form-error');
     const submit = form.querySelector('button[type="submit"]');
     errorElement.hidden = true;
+    const emailError = form.querySelector('[data-email-error]');
+    if (emailError) { emailError.hidden = true; emailError.textContent = ''; }
+    form.elements.email?.removeAttribute?.('aria-invalid');
     authBusy = true;
     submit.disabled = true;
     try {
@@ -225,12 +235,11 @@ document.addEventListener('submit', async event => {
             await continueWithUser(await getSupabaseClient(), pendingProfileUser, details);
             return;
         }
-        const email = form.elements.email.value.trim();
+        const email = readAuthEmail(form.elements.email);
         const password = form.elements.password.value;
-        if (!email || !form.elements.email.validity.valid) throw new Error('Enter a valid email address.');
         if (!password) throw new Error('Enter your password.');
         if (mode === 'signup') {
-            if (password.length < 8) throw new Error('Use at least 8 characters in your password.');
+            if (password.length < 8 || /\s/.test(password)) throw new Error('Use at least 8 characters without spaces in your password.');
             if (password !== form.elements.confirmPassword.value) throw new Error('The passwords do not match.');
             const ageBand = form.elements.ageBand.value;
             if (!['minor', 'adult'].includes(ageBand)) throw new Error('Choose your age band.');
@@ -242,7 +251,7 @@ document.addEventListener('submit', async event => {
                     emailRedirectTo: 'https://lifeandtales.github.io/insta-alternative/',
                 },
             });
-            if (error) throw error;
+            checkSignupEmailResponse({ data, error });
             if (data.session && data.user) await continueWithUser(client, data.user, details);
             else showWelcomeForm('login', 'Check your email to confirm your account, then log in.');
         } else {
@@ -254,8 +263,14 @@ document.addEventListener('submit', async event => {
             showWelcomeForm('remember');
         }
     } catch (error) {
-        errorElement.textContent = error.message || 'Could not continue. Try again.';
-        errorElement.hidden = false;
+        const target = error.field === 'email' && emailError ? emailError : errorElement;
+        target.textContent = error.message || 'Could not continue. Try again.';
+        target.hidden = false;
+        target.setAttribute?.('data-state', 'invalid');
+        if (error.field === 'email') {
+            form.elements.email.setAttribute?.('aria-invalid', 'true');
+            form.elements.email.focus?.();
+        }
     } finally {
         authBusy = false;
         submit.disabled = false;
@@ -405,3 +420,5 @@ for (const eventName of ['click', 'submit', 'change']) document.addEventListener
     clearTimeout(localSaveTimer);
     localSaveTimer = window.setTimeout(() => persistSession().catch(() => showShareFeedback('Your latest changes could not be saved on this device.')), 300);
 });
+
+registerSignupValidation(welcomeScreen);

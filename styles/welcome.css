@@ -68,7 +68,7 @@
 .welcome-password-toggle { position: absolute; right: 8px; min-width: 48px; padding: 7px 8px; border-radius: 8px; color: var(--primary); background: transparent; font-size: .78rem; font-weight: 700; }
 .welcome-password-toggle:hover { background: rgba(124, 58, 237, .08); }
 .welcome-password-note { margin: -3px 0 0; color: var(--muted); font-size: .74rem; line-height: 1.4; }
-.welcome-form-error { margin: 4px 0 0; color: #a6284b; font-size: .82rem; line-height: 1.4; }
+.welcome-form-error, .welcome-email-error { margin: 4px 0 0; color: #a6284b; font-size: .82rem; line-height: 1.4; }
 .welcome-form .welcome-actions { margin-top: 10px; }
 .welcome-form .welcome-primary { flex: 1 1 180px; }
 .welcome-form .welcome-secondary { flex: 0 0 auto; }
@@ -101,3 +101,8 @@
   .welcome-sticker { right: calc(50% - 175px); bottom: -25px; }
 }
 @media (prefers-reduced-motion: reduce) { .welcome-actions button { transition: none; } }
+.welcome-field-feedback { margin: 4px 0 0; font-size: .82rem; line-height: 1.4; }
+:is(.welcome-field-feedback, .welcome-email-error)[data-state=valid] { color: #197143; }
+:is(.welcome-field-feedback, .welcome-email-error)[data-state=invalid] { color: #a6284b; }
+:is(.welcome-field-feedback, .welcome-email-error):is([data-state=check], [data-state=unavailable]) { color: var(--muted); }
+.welcome-form input[aria-invalid=true] { border-color: #a6284b; }
