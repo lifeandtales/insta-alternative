@@ -1,3 +1,4 @@
+import { enableAndroidPush } from './src/features/android-push.js';
 import { registerSignupValidation, resetSignupFeedback, pauseSignupValidation } from './src/features/signup-validation.js';
 import { readAuthEmail, checkSignupEmailResponse } from './src/features/auth-email.js';
 import { registerLiveEvents } from './src/features/live-broadcasts.js';
@@ -152,6 +153,7 @@ async function enterAccount(user, profile) {
     if (account) Object.assign(account, { id: user.id, ...identity, avatar: currentUser.avatar });
     state.viewerAgeBand = user.user_metadata?.age_band === 'adult' ? 'adult' : 'minor';
     renderAccountIdentity();
+    void enableAndroidPush({ sync: true }).catch(() => {});
     await loadAccountContent();
     void subscribeToSocialUpdates(user.id).catch(() => {});
     void subscribeToSavedChanges(user.id, refreshSavedState).catch(() => {});

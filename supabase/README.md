@@ -74,6 +74,65 @@ expiry. Removing expired objects from Storage requires a scheduled server
 cleanup. UI integration for the new tables, notification delivery, and
 moderation workflows are separate from this migration.
 
+## Browser push notifications
+
+1. Run `migrations/20261112000300_web_push.sql` after the full app schema.
+2. Generate a VAPID key pair once, for example with
+   `npx web-push@3.6.7 generate-vapid-keys`. Configure the Edge Function secrets
+   `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (a `mailto:` contact),
+   and `PUSH_WORKER_SECRET` (a random shared secret). Keep the private values in
+   Supabase secrets and Vault.
+3. Deploy with `supabase functions deploy web-push --no-verify-jwt`. The
+   function exposes only the VAPID public key on GET and checks the separate
+   worker secret on POST. Configure Supabase Cron to POST to
+   `/functions/v1/web-push` every minute with
+   `Authorization: Bearer <PUSH_WORKER_SECRET>`, pulled from Vault.
+4. On the deployed HTTPS web app, sign in and open **Profile → Settings →
+   Push notifications → Enable on this browser**. Test with a second account
+   by inserting a chat message via the authenticated Supabase API, then check
+   that the notification appears on the subscribed browser.
+
+The chat trigger runs on Supabase message inserts. Device-local messages do
+not reach this trigger. The packaged Android WebView requires a native push
+integration, such as Firebase Cloud Messaging.
+
+## Android push notifications
+
+1. Run `migrations/20261112000400_android_push.sql` after the browser-push migration.
+2. In Firebase Console, add an Android app with package name
+   `com.lifeandtales.instaalternative`. Save its `google-services.json` in
+   `android/google-services.json`. The file is ignored by Git.
+3. Add the Firebase service-account JSON to the Supabase Edge Function secret
+   `FIREBASE_SERVICE_ACCOUNT`. The account needs permission to send FCM HTTP v1
+   messages. Keep the service-account key in Supabase secrets.
+4. Deploy the updated worker using the browser-push instructions. Android-only
+   delivery requires the worker secret and Firebase credentials. VAPID keys
+   are needed for browser delivery.
+5. Open the `android/` folder as a Gradle project in Android Studio with API
+   36 installed, sync, and run the app on a Google Play-enabled emulator.
+   Open **Profile → Settings → Push notifications → Enable on this device**.
+
+The direct SDK build script still produces the WebView preview without
+Firebase. The Gradle build includes the Android Firebase integration.
+
+## Admin dashboard
+
+1. Run `20261112000500_admin_dashboard.sql`, then
+   `20261112000600_admin_users.sql`. Grant the app account access in SQL Editor
+   by adding its Auth user ID to `app_private.admin_members`.
+2. Deploy account controls with
+   `supabase functions deploy admin-users --no-verify-jwt`. The function checks
+   the caller with Supabase Auth and enforces the database admin role on every
+   request. It uses the project's built-in service credential on the server.
+3. Serve the web app over HTTP for local testing or HTTPS for a public
+   deployment. Open `admin.html`, sign in and select **Users**.
+
+Suspending an account blocks sign-in until restored. Existing sessions can
+persist under Supabase Auth. Permanent deletion removes the Auth account and
+cascading database records. If Supabase rejects deletion because the user owns
+Storage objects, handle those objects in Supabase Storage and retry. Activity
+only includes records synced to the cloud.
+
 ## Connected Social
 
 Apply `20261116000200_connected_social.sql` after the combined app backend and
@@ -84,26 +143,3 @@ avatars are restricted to their owner and accepted followers. Direct text
 sending requires mutual following. A chat appears in the recipient's inbox
 after the first message. Reels reads published public video rows from
 `media_content`; older device-only media and chats are not uploaded.
-
-## Activate in-app calling
-
-1. In Supabase SQL Editor, run the `20261116000700_in_app_calls.sql` migration after the Connected Chat Controls migration.
-2. Install the new Android APK or serve the new web build over HTTPS. Open Insta Alternative on both devices, sign in with different connected accounts, open the chat, and grant microphone or camera access when prompted.
-3. Call from the upper-right Voice or Video button. On the other device choose **Accept**. Verify that both devices can hear each other, then repeat with video and test **Decline** and **End call**.
-
-## TURN relay
-
-The default STUN server supports direct media connections when both networks permit them. For networks that require relaying, configure a TURN service that supports shared-secret (TURN REST) credentials. Set these values as Supabase Edge Function secrets:
-
-- `TURN_URLS` with the provider's comma-separated TURN URLs
-- `TURN_SHARED_SECRET` with the provider's shared secret
-
-From the linked Supabase project root, deploy the `call-ice` Edge Function.
-
-```sh
-supabase functions deploy call-ice --no-verify-jwt
-```
-
-The function validates the caller's Supabase access token before issuing short-lived credentials. Keep the shared secret in the Edge Function environment.
-
-Calls are scoped to an open app. Android background and lock-screen ringing will need the native push setup separately. Connected chat attachments use the existing 50 MB Storage bucket limit.

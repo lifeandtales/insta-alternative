@@ -1,3 +1,5 @@
+import { disableAndroidPush } from './android-push.js';
+import { disableWebPush } from './web-push.js';
 import { getSupabaseClient } from '../storage/supabase.js';
 
 export function profileDetails(form) {
@@ -29,6 +31,7 @@ export async function ensureSupabaseProfile(client, user, details = user.user_me
 
 export async function signOutAccount() {
     const client = await getSupabaseClient();
+    await Promise.allSettled([disableWebPush(), disableAndroidPush()]);
     const { error } = await client.auth.signOut({ scope: 'local' });
     if (error) throw error;
     window.location.reload();

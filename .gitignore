@@ -2,3 +2,7 @@ work/
 node_modules/
 .DS_Store
 coverage/
+
+android/google-services.json
+android/.gradle/
+android/build/

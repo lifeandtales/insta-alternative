@@ -1,5 +1,7 @@
 import { setCloudBlock } from './cloud-people.js';
 import { readCloudAvatar, saveCloudAvatar } from '../storage/cloud-avatars.js';
+import { supportsAndroidPush, enableAndroidPush, disableAndroidPush } from './android-push.js';
+import { enableWebPush, disableWebPush } from './web-push.js';
 import { saveSupabaseProfile, signOutAccount } from './account-auth.js';
 import { state } from '../core/state.js';
 import { currentUser, posts, reels } from '../data/sample-data.js';
@@ -40,7 +42,7 @@ async function saveProfilePhoto(image, preview) {
 export function openAccountSettings() {
     if (syncDeletionLock()) return;
     const pending = state.verificationStatus !== 'approved';
-    showHomePanel('Settings', `<div class="settings-menu"><p class="settings-account">${escapeHtml(currentUser.name)} <small>${escapeHtml(currentUser.handle)}</small></p>${state.deletionRequestedAt ? deletionNotice() : ''}<button type="button" data-settings-page="verification">Verification · ${pending ? 'Pending' : 'Approved account'}</button>${pending ? '<p>You can browse accessible content and Stories while review is pending. Social actions become available after approval.</p>' : `<button type="button" data-edit-profile>Edit profile</button><button type="button" data-settings-page="privacy">Account privacy and followers</button><button type="button" data-settings-page="friends">Close Friends and muted accounts</button><button type="button" data-settings-page="activity">Your Activity</button><button type="button" data-settings-page="blocked">Blocked accounts</button><button type="button" data-settings-page="groups">Group invitations</button><button type="button" data-settings-page="audience">Creator audience</button><button type="button" data-settings-page="deletion">${state.deletionRequestedAt ? 'Cancel deletion request' : 'Delete account'}</button>`}<button type="button" data-settings-page="theme">Theme</button><button type="button" data-settings-page="help">Help</button><button type="button" data-account-logout>Log out</button></div>`);
+    showHomePanel('Settings', `<div class="settings-menu"><p class="settings-account">${escapeHtml(currentUser.name)} <small>${escapeHtml(currentUser.handle)}</small></p>${state.deletionRequestedAt ? deletionNotice() : ''}<button type="button" data-settings-page="verification">Verification · ${pending ? 'Pending' : 'Approved account'}</button>${pending ? '<p>You can browse accessible content and Stories while review is pending. Social actions become available after approval.</p>' : `<button type="button" data-edit-profile>Edit profile</button><button type="button" data-settings-page="privacy">Account privacy and followers</button><button type="button" data-settings-page="friends">Close Friends and muted accounts</button><button type="button" data-settings-page="activity">Your Activity</button><button type="button" data-settings-page="blocked">Blocked accounts</button><button type="button" data-settings-page="groups">Group invitations</button><button type="button" data-settings-page="audience">Creator audience</button><button type="button" data-settings-page="deletion">${state.deletionRequestedAt ? 'Cancel deletion request' : 'Delete account'}</button>`}<button type="button" data-settings-page="notifications">Push notifications</button><button type="button" data-settings-page="theme">Theme</button><button type="button" data-settings-page="help">Help</button><button type="button" data-account-logout>Log out</button></div>`);
 }
 function deletionNotice() {
     const end = new Date(state.deletionRequestedAt + 15 * 86400000);
@@ -80,6 +82,10 @@ function drawCrop(canvas, image, form) {
     canvas.getContext('2d').drawImage(image, x, y, size, size, 0, 0, canvas.width, canvas.height);
 }
 function openSettingsPage(page) {
+    if (page === 'notifications') showHomePanel('Push notifications', `<div class="panel-actions">
+      <button type="button" data-web-push="enable">${supportsAndroidPush() ? 'Enable on this device' : 'Enable on this browser'}</button>
+      <button type="button" data-web-push="disable">Turn off</button>
+    </div>`);
     if (page === 'theme') showHomePanel('Theme', '');
     if (page === 'privacy') openPrivacySettings();
     if (page === 'friends') openHomeSettings();
@@ -96,6 +102,19 @@ export function registerAccountSettingsEvents() {
     document.addEventListener('click', event => {
         if (event.target.closest('[data-edit-profile]')) openProfileEditor();
         const page = event.target.closest('[data-settings-page]'); if (page) openSettingsPage(page.dataset.settingsPage);
+        const push = event.target.closest('[data-web-push]');
+        if (push) {
+            const enabling = push.dataset.webPush === 'enable';
+            push.disabled = true;
+            const change = supportsAndroidPush()
+                ? (enabling ? enableAndroidPush : disableAndroidPush)
+                : (enabling ? enableWebPush : disableWebPush);
+            void change()
+                .then(() => showShareFeedback(enabling ? 'Push notifications enabled.' : 'Push notifications turned off.'))
+                .catch(error => showShareFeedback(error.message || 'Could not update push notifications.'))
+                .finally(() => { push.disabled = false; });
+        }
+
         const block = event.target.closest('[data-account-block], [data-account-unblock]');
         if (block && !block.disabled && mayInteract()) {
             const handle = block.dataset.accountBlock || block.dataset.accountUnblock;
