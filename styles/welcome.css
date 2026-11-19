@@ -9,6 +9,16 @@
   overflow: auto;
   background: radial-gradient(ellipse at 80% 18%, rgba(236, 72, 153, .12), transparent 34%), radial-gradient(ellipse at 12% 88%, rgba(124, 58, 237, .12), transparent 35%), #fbf9ff;
 }
+/* Let Safari scroll the document and bring focused fields above the keyboard. */
+#welcome-screen {
+  position: relative;
+  inset: auto;
+  overflow: visible;
+  min-height: 100vh;
+  min-height: 100dvh;
+  align-content: start;
+}
+
 .welcome-screen[hidden] { display: none; }
 #deletion-lock { z-index: 10000; }
 #deletion-lock > section { width: min(520px, 100%); }
