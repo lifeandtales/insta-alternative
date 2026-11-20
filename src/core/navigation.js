@@ -154,7 +154,7 @@ export function setView(view, { fromHistory = false, refresh = true } = {}) {
     if (view === "explore")
         renderExplore();
     if (view === "reels")
-        renderReels();
+        renderReels({ status: refresh && state.signedInAccountId && previousView !== view ? 'loading' : 'ready' });
     if (view === "messages")
         renderMessages();
     if (view === "shared-post")
@@ -230,8 +230,14 @@ async function refreshViewData(view, owner, handle, activeChat) {
             else if (chat) refreshReadReceiptLabel(chat);
         }
     } else if (view === 'reels') {
-        await Promise.all([loadCloudReels(), loadCloudSavedKeys()]);
-        if (stillVisible()) renderReels();
+        if (stillVisible()) renderReels({ status: 'loading' });
+        void loadCloudSavedKeys().then(() => { if (stillVisible()) syncVisibleSaveButtons(); }).catch(() => {});
+        try {
+            await Promise.all([loadCloudReels(), loadCloudFollowing().catch(() => {})]);
+            if (stillVisible()) renderReels();
+        } catch {
+            if (stillVisible()) renderReels({ status: 'error' });
+        }
     } else if (view === 'home' || view === 'explore') {
         const imagePosts = loadCloudFollowing().then(() => loadCloudImagePosts());
         if (view === 'explore') {

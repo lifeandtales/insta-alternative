@@ -144,3 +144,41 @@ test('private profiles show identity and hide media; block preserves chats and u
     model.setAccountPrivacy(true);
     assert.deepEqual(Array.from(social.getAccount('@mila_rose').followers), followers);
 });
+
+test('Reels shows owner and approved follower uploads while public discovery stays public', async () => {
+    const app = await loadApp();
+    const { state } = app.exportsOf('src/core/state.js');
+    const { currentUser, reels } = app.exportsOf('src/data/sample-data.js');
+    const { rememberCloudPerson } = app.exportsOf('src/features/cloud-people.js');
+    const { rankRecommendedReels, renderReels } = app.exportsOf('src/features/reels.js');
+    const base = { ...reels[0], user: 'Creator', public: false, cloudAudience: 'followers', sensitive: false };
+    const mine = { ...base, id: 861, handle: currentUser.handle, cloudOwnerId: 'viewer' };
+    const approved = { ...base, id: 862, handle: '@friend', cloudOwnerId: 'friend' };
+    const stranger = { ...base, id: 863, handle: '@stranger', cloudOwnerId: 'stranger', public: true, cloudAudience: 'public' };
+    reels.splice(0, reels.length, mine, approved, stranger);
+    currentUser.isPrivate = true;
+    state.signedInAccountId = 'viewer';
+    state.cloudFollowingIds = new Set(['friend']);
+    rememberCloudPerson({ id: 'friend', username: 'friend', display_name: 'Friend', is_private: true, follow_status: 'accepted' });
+    rememberCloudPerson({ id: 'stranger', username: 'stranger', display_name: 'Stranger', is_private: true });
+    assert.equal(rankRecommendedReels().length, 0);
+
+    const feed = app.element('#reels-feed');
+    renderReels();
+    assert.match(feed.innerHTML, /data-reel-id="861"/);
+    assert.match(feed.innerHTML, /data-reel-id="862"/);
+    assert.doesNotMatch(feed.innerHTML, /data-reel-id="863"/);
+    assert.match(feed.innerHTML, /Followers only/);
+    assert.match(feed.innerHTML, /Your reel/);
+    state.cloudFollowingIds.clear();
+    renderReels();
+    assert.doesNotMatch(feed.innerHTML, /data-reel-id="862"/);
+
+    reels.splice(0);
+    renderReels({ status: 'loading' });
+    assert.match(feed.innerHTML, /Loading Reels/);
+    renderReels({ status: 'error' });
+    assert.match(feed.innerHTML, /data-reels-retry/);
+    renderReels();
+    assert.match(feed.innerHTML, /No Reels to show yet/);
+});

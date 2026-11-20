@@ -1,3 +1,4 @@
+import { cloudPerson } from './cloud-people.js';
 import { renderCaption } from '../components/caption.js';
 import { actionIcon } from '../components/action-icons.js';
 import { accountStorageKey } from '../storage/browser-storage.js';
@@ -28,11 +29,20 @@ function interestOption(reel, value, label) {
 }
 
 const DAY = 24 * 60 * 60 * 1000;
+const publicReel = reel => reel.public && accountIsPublic(reel.handle);
+
+function authorizedReel(reel) {
+  const owner = state.signedInAccountId;
+  if (!owner || !reel.cloudOwnerId) return false;
+  if (reel.cloudOwnerId === owner) return true;
+  if (!reel.public && reel.cloudAudience !== 'followers') return false;
+  return state.cloudFollowingIds?.has(reel.cloudOwnerId) ?? (cloudPerson(reel.handle)?.followStatus === 'accepted');
+}
 
 // Trending has 70% influence; recency has 30%. Scores normalize views,
 // watch-time per view, and likes against the current public Reel set.
 export function rankRecommendedReels(items = reels, now = Date.now()) {
-  const eligible = items.filter(reel => reel.public && accountIsPublic(reel.handle) && canViewMedia(reel));
+  const eligible = items.filter(reel => publicReel(reel) && canViewMedia(reel));
   if (!eligible.length) return [];
   const maxViews = Math.max(1, ...eligible.map(reel => Number(reel.views) || 0));
   const maxWatch = Math.max(1, ...eligible.map(reel => (Number(reel.watchTimeSeconds) || (Number(reel.views) || 0) * 4) / Math.max(1, Number(reel.views) || 0)));
@@ -52,12 +62,25 @@ function warningNeeded(reel) {
   return Boolean(reel.sensitive || reel.audience === 'adult' || getAccount(reel.handle)?.contentAudience === 'adult');
 }
 
-export function renderReels() {
+export function renderReels({ status = 'ready' } = {}) {
   const feed = document.getElementById('reels-feed');
-  feed.innerHTML = rankRecommendedReels().map(reel => {
+  const recommended = rankRecommendedReels();
+  const personal = reels.filter(reel => !publicReel(reel) && authorizedReel(reel) && canViewMedia(reel))
+    .sort((left, right) => (right.createdAt || 0) - (left.createdAt || 0));
+  const visible = [...recommended, ...personal];
+  if (!visible.length) {
+    const message = status === 'loading' ? 'Loading Reels…' : status === 'error'
+      ? 'Could not load Reels.' : 'No Reels to show yet.';
+    feed.innerHTML = `<div class="reels-status"><p role="status">${message}</p>
+      ${status === 'error' ? '<button type="button" data-reels-retry>Try again</button>' : ''}</div>`;
+    return;
+  }
+  feed.innerHTML = visible.map(reel => {
     const gated = warningNeeded(reel) && !state.revealedMediaKeys.has(`reel:${reel.id}`);
     const blockedForMinor = gated && state.viewerAgeBand === 'minor';
     const muted = state.reelMuted || reel.originalAudioMuted;
+    const audience = publicReel(reel) ? 'Public reel'
+      : reel.cloudOwnerId === state.signedInAccountId ? 'Your reel' : 'Followers only';
     return `
     <article class="reel-card ${gated ? 'reel-gated' : ''}" data-reel-id="${reel.id}" data-likeable-id="${reel.id}" data-likeable-type="reel">
       <div class="likeable-media reel-media" data-likeable-id="${reel.id}" data-likeable-type="reel">
@@ -70,7 +93,7 @@ export function renderReels() {
       </div>
       <div class="reel-caption">
         <div class="post-user"><button class="profile-avatar-link" type="button" data-profile-handle="${escapeHtml(reel.handle)}" aria-label="Open ${escapeHtml(reel.user)} profile"><img src="${escapeHtml(reel.avatar)}" alt="${escapeHtml(reel.user)} avatar" /></button>
-          <div><button class="author-name reel-author-name" type="button" data-profile-handle="${escapeHtml(reel.handle)}">${escapeHtml(reel.user)}</button><span>Public reel</span></div>
+          <div><button class="author-name reel-author-name" type="button" data-profile-handle="${escapeHtml(reel.handle)}">${escapeHtml(reel.user)}</button><span>${audience}</span></div>
         </div>
         <p>${renderCaption(reel.caption)}</p>
         <small data-media-view-count="reel:${reel.id}">${formatCount(reel.views || 0)} views</small>

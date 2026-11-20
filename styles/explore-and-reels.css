@@ -340,3 +340,23 @@
   border-color: #fff5;
 }
 .reel-sound-toggle:disabled { opacity: .65; }
+
+.reels-status {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  flex: 0 0 100%;
+  gap: 10px;
+  padding: 56px 20px 24px;
+  color: #eee8f6;
+  text-align: center;
+}
+.reels-status p { margin: 0; }
+.reels-status button {
+  min-height: 42px;
+  padding: 8px 16px;
+  border: 1px solid #ffffff55;
+  border-radius: 10px;
+  background: #2e233b;
+  color: #fff;
+}
