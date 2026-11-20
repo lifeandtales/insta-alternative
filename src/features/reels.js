@@ -1,5 +1,5 @@
 import { renderCaption } from '../components/caption.js';
-import { renderSaveButton } from '../components/post-card.js';
+import { renderRepostOption, renderSaveButton } from '../components/post-card.js';
 import { escapeHtml, formatCount } from '../core/utils.js';
 import { state } from '../core/state.js';
 import { reels } from '../data/sample-data.js';
@@ -46,6 +46,14 @@ export function renderReels() {
         <button class="video-sound-toggle" type="button" ${reel.originalAudioMuted ? 'disabled' : ''} data-video-sound aria-label="Turn video sound ${state.reelMuted ? 'on' : 'off'}" aria-pressed="${!state.reelMuted}">${state.reelMuted ? '🔇' : '🔊'}</button>
         <button class="reel-play-state" type="button" data-reel-play aria-label="Pause reel">Ⅱ</button>
         <span class="double-like-heart" aria-hidden="true">♥</span>
+      </div>
+      <div class="post-options-wrap reel-options-wrap" data-id="${reel.id}" data-entity-type="reel">
+        <button class="post-options" type="button" data-action="post-options" aria-label="Reel options" aria-expanded="false">•••</button>
+        <div class="post-options-menu" hidden>
+          <button type="button" data-post-option="copy-link">Copy link</button>
+          ${renderRepostOption(reel)}
+          <button type="button" data-post-option="report">Report</button>
+        </div>
       </div>
       <div class="reel-caption">
         <div class="post-user"><button class="profile-avatar-link" type="button" data-profile-handle="${escapeHtml(reel.handle)}" aria-label="Open ${escapeHtml(reel.user)} profile"><img src="${escapeHtml(reel.avatar)}" alt="${escapeHtml(reel.user)} avatar" /></button>

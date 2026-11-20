@@ -319,3 +319,17 @@
 .hashtag-story-ring > span { display: grid; align-content: center; width: 86px; height: 86px; padding: 8px; border: 3px solid var(--surface, #fff); border-radius: 50%; background: var(--surface, #fff); color: var(--text); font-weight: 700; overflow-wrap: anywhere; text-align: center; line-height: 1.1; }
 .hashtag-story-ring.seen { background: #a8a8a8; }
 .hashtag-empty { padding: 16px 0; color: var(--muted); }
+
+.reel-options-wrap {
+  position: absolute;
+  z-index: 4;
+  top: max(52px, calc(env(safe-area-inset-top) + 44px));
+  right: 12px;
+}
+
+.reel-options-wrap > .post-options {
+  min-width: 44px;
+  min-height: 44px;
+  background: #181422b8;
+  color: #fff;
+}

@@ -17,7 +17,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
-    <link rel="stylesheet" href="styles.css?v=324" />
+    <link rel="stylesheet" href="styles.css?v=326" />
     <link rel="stylesheet" href="styles/android-interface.css?v=323" />
     <link rel="stylesheet" href="styles/creation-studio.css?v=323" />
     <link rel="stylesheet" href="styles/home-notifications.css?v=323" />
@@ -283,8 +283,12 @@
           <h2 id="comments-dialog-title">Comments</h2>
           <button class="comments-close" type="button" aria-label="Close comments">×</button>
         </header>
-        <div class="comments-dialog-list"></div>
+        <div class="comments-dialog-list" tabindex="0"></div>
         <form class="comment-form comments-dialog-form">
+          <div class="comment-reply-context" hidden>
+            <span role="status"></span>
+            <button type="button" data-cancel-comment-reply aria-label="Cancel reply">×</button>
+          </div>
           <label class="visually-hidden" for="dialog-comment">Write a comment</label>
           <input id="dialog-comment" name="comment" type="text" maxlength="500" placeholder="Add a comment..." required />
           <button type="submit">Post</button>
@@ -662,7 +666,7 @@
   "imports": {
     "./src/components/caption.js": "./src/components/caption.js?v=319",
     "./src/components/feedback.js": "./src/components/feedback.js?v=319",
-    "./src/components/post-card.js": "./src/components/post-card.js?v=323",
+    "./src/components/post-card.js": "./src/components/post-card.js?v=326",
     "./src/core/account-lock.js": "./src/core/account-lock.js?v=319",
     "./src/core/dom.js": "./src/core/dom.js?v=323",
     "./src/core/events.js": "./src/core/events.js?v=319",
@@ -671,12 +675,12 @@
     "./src/core/local-preview.js": "./src/core/local-preview.js?v=319",
     "./src/core/media-links.js": "./src/core/media-links.js?v=319",
     "./src/core/navigation.events.js": "./src/core/navigation.events.js?v=319",
-    "./src/core/navigation.js": "./src/core/navigation.js?v=323",
+    "./src/core/navigation.js": "./src/core/navigation.js?v=326",
     "./src/core/profile-links.js": "./src/core/profile-links.js?v=319",
     "./src/core/social.js": "./src/core/social.js?v=319",
     "./src/core/state.js": "./src/core/state.js?v=320",
     "./src/core/utils.js": "./src/core/utils.js?v=319",
-    "./src/data/entities.js": "./src/data/entities.js?v=319",
+    "./src/data/entities.js": "./src/data/entities.js?v=326",
     "./src/data/sample-data.js": "./src/data/sample-data.js?v=319",
     "./src/data/story-emojis.js": "./src/data/story-emojis.js?v=319",
     "./src/features/account-auth.js": "./src/features/account-auth.js?v=319",
@@ -691,8 +695,8 @@
     "./src/features/chat-wallpaper.js": "./src/features/chat-wallpaper.js?v=319",
     "./src/features/cloud-chat.js": "./src/features/cloud-chat.js?v=319",
     "./src/features/cloud-people.js": "./src/features/cloud-people.js?v=323",
-    "./src/features/comments.events.js": "./src/features/comments.events.js?v=323",
-    "./src/features/comments.js": "./src/features/comments.js?v=323",
+    "./src/features/comments.events.js": "./src/features/comments.events.js?v=326",
+    "./src/features/comments.js": "./src/features/comments.js?v=326",
     "./src/features/communities.js": "./src/features/communities.js?v=319",
     "./src/features/create.events.js": "./src/features/create.events.js?v=323",
     "./src/features/create.js": "./src/features/create.js?v=320",
@@ -709,23 +713,23 @@
     "./src/features/likes.events.js": "./src/features/likes.events.js?v=319",
     "./src/features/likes.js": "./src/features/likes.js?v=323",
     "./src/features/live-broadcasts.js": "./src/features/live-broadcasts.js?v=319",
-    "./src/features/media-options.events.js": "./src/features/media-options.events.js?v=319",
-    "./src/features/media-options.js": "./src/features/media-options.js?v=319",
+    "./src/features/media-options.events.js": "./src/features/media-options.events.js?v=326",
+    "./src/features/media-options.js": "./src/features/media-options.js?v=326",
     "./src/features/message-access.js": "./src/features/message-access.js?v=319",
     "./src/features/messages.events.js": "./src/features/messages.events.js?v=323",
     "./src/features/messages.js": "./src/features/messages.js?v=323",
     "./src/features/notifications.js": "./src/features/notifications.js?v=323",
     "./src/features/post-media.js": "./src/features/post-media.js?v=319",
     "./src/features/profile-scanner.js": "./src/features/profile-scanner.js?v=319",
-    "./src/features/profile.events.js": "./src/features/profile.events.js?v=320",
-    "./src/features/profile.js": "./src/features/profile.js?v=319",
+    "./src/features/profile.events.js": "./src/features/profile.events.js?v=326",
+    "./src/features/profile.js": "./src/features/profile.js?v=326",
     "./src/features/reel-cover.js": "./src/features/reel-cover.js?v=319",
-    "./src/features/reels.js": "./src/features/reels.js?v=320",
+    "./src/features/reels.js": "./src/features/reels.js?v=326",
     "./src/features/saved.events.js": "./src/features/saved.events.js?v=319",
     "./src/features/sharing.events.js": "./src/features/sharing.events.js?v=319",
     "./src/features/sharing.js": "./src/features/sharing.js?v=319",
     "./src/features/signup-validation.js": "./src/features/signup-validation.js?v=319",
-    "./src/features/social-updates.js": "./src/features/social-updates.js?v=323",
+    "./src/features/social-updates.js": "./src/features/social-updates.js?v=326",
     "./src/features/stories.events.js": "./src/features/stories.events.js?v=319",
     "./src/features/stories.js": "./src/features/stories.js?v=323",
     "./src/features/story-camera.js": "./src/features/story-camera.js?v=319",
@@ -749,12 +753,13 @@
     "./src/storage/browser-storage.js": "./src/storage/browser-storage.js?v=319",
     "./src/storage/cloud-avatars.js": "./src/storage/cloud-avatars.js?v=319",
     "./src/storage/cloud-highlights.js": "./src/storage/cloud-highlights.js?v=319",
-    "./src/storage/cloud-image-comments.js": "./src/storage/cloud-image-comments.js?v=323",
+    "./src/storage/cloud-reposts.js": "./src/storage/cloud-reposts.js?v=326",
+    "./src/storage/cloud-comments.js": "./src/storage/cloud-comments.js?v=326",
     "./src/storage/cloud-image-likes.js": "./src/storage/cloud-image-likes.js?v=319",
-    "./src/storage/cloud-reels.js": "./src/storage/cloud-reels.js?v=320",
-    "./src/storage/cloud-saved-items.js": "./src/storage/cloud-saved-items.js?v=320",
+    "./src/storage/cloud-reels.js": "./src/storage/cloud-reels.js?v=326",
+    "./src/storage/cloud-saved-items.js": "./src/storage/cloud-saved-items.js?v=326",
     "./src/storage/cloud-stories.js": "./src/storage/cloud-stories.js?v=319",
-    "./src/storage/image-posts.js": "./src/storage/image-posts.js?v=323",
+    "./src/storage/image-posts.js": "./src/storage/image-posts.js?v=326",
     "./src/storage/live-broadcasts.js": "./src/storage/live-broadcasts.js?v=319",
     "./src/storage/local-session.js": "./src/storage/local-session.js?v=319",
     "./src/storage/preferences.js": "./src/storage/preferences.js?v=319",

@@ -5,7 +5,7 @@ import { currentUser, posts } from '../data/sample-data.js';
 import { mediaEdits } from '../features/post-media.js';
 import { getSupabaseClient } from './supabase.js';
 import { loadVideoEngagement } from './video-engagement.js';
-import { hydrateImageComments, imageCommentProjection } from './cloud-image-comments.js';
+import { hydrateImageComments, imageCommentProjection } from './cloud-comments.js';
 
 const bucketName = 'post-images';
 const tableName = 'image_posts';
@@ -78,12 +78,13 @@ export async function publishImagePost(post, { retry = false } = {}) {
     }
 }
 
+export const cloudImageAuthorProjection = 'author:profiles!image_posts_owner_id_fkey!inner(username,display_name,avatar_path,is_private)';
+
 export async function loadCloudImagePosts(targetId = null, taggedHandle = null) {
     const ownerId = state.signedInAccountId;
     if (!ownerId) return;
     const client = await getSupabaseClient();
-    const author = 'author:profiles!image_posts_owner_id_fkey!inner(username,display_name,avatar_path)';
-    const rows = '*, ' + author;
+    const rows = '*, ' + cloudImageAuthorProjection;
     const query = columns => client.from(tableName).select(columns);
     const load = (columns, withLikes = false, withPreviews = false) => {
         let request = (taggedHandle ? query(columns).contains('tags', [taggedHandle]) : query(columns).in('owner_id', scope))

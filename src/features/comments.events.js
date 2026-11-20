@@ -9,18 +9,21 @@ import {
 } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { findEntity } from '../data/entities.js';
-import { closeComments, handleCommentSubmit, openComments, removeCloudComment, renderCommentsDialog } from './comments.js';
+import { cancelCommentReply, closeComments, handleCommentSubmit, openComments, removeCloudComment, startCommentReply, toggleCommentLike } from './comments.js';
 import { closeLikers } from './likes.js';
-import { mayInteract, canViewMedia } from '../core/social.js';
+import { canViewMedia } from '../core/social.js';
 
 export function handleCommentClick(event) {
+    const reply = event.target.closest('[data-comment-reply]');
+    if (reply) { startCommentReply(reply.dataset.commentReply); return true; }
+    if (event.target.closest('[data-cancel-comment-reply]')) { cancelCommentReply(); return true; }
     const remove = event.target.closest('[data-delete-cloud-comment]');
     if (remove) {
         const active = state.activeCommentEntity;
-        const post = active?.type === 'post' ? findEntity('post', active.id) : null;
-        if (post?.cloudClientId && !remove.disabled) {
+        const entity = active && findEntity(active.type, active.id);
+        if (entity && !remove.disabled) {
             remove.disabled = true;
-            void removeCloudComment(post, remove.dataset.deleteCloudComment)
+            void removeCloudComment(active.type, entity, remove.dataset.deleteCloudComment)
                 .catch(() => showShareFeedback('Could not delete this comment.'))
                 .finally(() => { remove.disabled = false; });
         }
@@ -36,14 +39,9 @@ export function handleCommentClick(event) {
         return true;
     }
     const commentLikeButton = event.target.closest('[data-action="like-comment"]');
-    if (commentLikeButton && state.activeCommentEntity) {
-        const entity = findEntity(state.activeCommentEntity.type, state.activeCommentEntity.id);
-        const comment = entity?.commentItems?.[Number(commentLikeButton.dataset.commentIndex)];
-        if (!comment || !mayInteract() || !canViewMedia(entity))
-            return true;
-        comment.liked = !comment.liked;
-        comment.likes = Math.max(0, (Number(comment.likes) || 0) + (comment.liked ? 1 : -1));
-        renderCommentsDialog(entity);
+    if (commentLikeButton) {
+        const { commentIndex, replyIndex } = commentLikeButton.dataset;
+        void toggleCommentLike(Number(commentIndex), replyIndex === undefined ? undefined : Number(replyIndex));
         return true;
     }
     return false;
@@ -60,6 +58,16 @@ export function registerCommentEvents() {
     commentsBackdrop.addEventListener("click", (event) => {
         if (event.target === commentsBackdrop || event.target.closest(".comments-close"))
             closeComments();
+    });
+    commentsBackdrop.addEventListener("keydown", (event) => {
+        if (event.key !== "Tab") return;
+        const controls = Array.from(commentsBackdrop.querySelectorAll(':is(button, input):not(:disabled), [tabindex="0"]'));
+        const visible = controls.filter(control => !control.closest('[hidden]'));
+        const first = visible[0];
+        const last = visible.at(-1);
+        if (event.target !== (event.shiftKey ? first : last)) return;
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus({ preventScroll: true });
     });
     likersBackdrop.addEventListener("click", (event) => {
         if (event.target === likersBackdrop || event.target.closest(".likers-close"))

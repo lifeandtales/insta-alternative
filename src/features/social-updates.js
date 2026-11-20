@@ -25,6 +25,11 @@ export async function subscribeToSocialUpdates(owner) {
             if (owner === state.signedInAccountId && !document.hidden) handleHomeNotificationEvent(change.new, event === 'INSERT');
         });
     }
+    for (const table of ['media_comments', 'comment_replies']) {
+        next.on('postgres_changes', { event: 'INSERT', schema: 'public', table }, () => {
+            if (state.signedInAccountId === owner && !document.hidden) void refreshOpenCloudComments().catch(() => {});
+        });
+    }
     for (const table of ['profiles', 'account_follows', 'messages', 'image_posts', 'media_content', 'image_post_comments', 'conversation_preferences', 'message_reactions']) {
         for (const event of table === 'media_content' ? ['INSERT', 'UPDATE', 'DELETE'] : ['INSERT', 'UPDATE']) next.on('postgres_changes', { event, schema: 'public', table }, () => {
             if (owner !== state.signedInAccountId || document.hidden) return;

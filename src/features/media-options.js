@@ -1,3 +1,4 @@
+import { canRepost, setRepost } from '../storage/cloud-reposts.js';
 import { feed } from '../core/dom.js';
 import { currentUser } from '../data/sample-data.js';
 import { openReportPanel } from './home-controls.js';
@@ -27,6 +28,17 @@ export function handlePostOption(option, post, type, control) {
             openMediaEditor(type, post);
         else
             openMediaDeleteConfirmation(type, post, { fromHome });
+        return;
+    }
+    if (option === 'repost') {
+        if (!canRepost(post) || control.disabled) return;
+        control.disabled = true;
+        const desired = control.dataset.reposted !== 'true';
+        void setRepost(post, desired).then(() => {
+            if (state.currentView === 'profile') setView('profile');
+            showShareFeedback(desired ? 'Added to your profile’s Reposts.' : 'Repost removed.');
+        }).catch(() => showShareFeedback('Could not update the repost. Check that the original is public.'))
+            .finally(() => { control.disabled = false; });
         return;
     }
     if (option === "download") {

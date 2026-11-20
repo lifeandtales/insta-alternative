@@ -1,3 +1,4 @@
+import { loadCloudReposts } from '../storage/cloud-reposts.js';
 import { cloudPerson, fetchSocialConnections } from './cloud-people.js';
 import { loadCloudChat, openCloudChat } from './cloud-chat.js';
 import { renderMessages } from './messages.js';
@@ -91,6 +92,13 @@ export function handleProfileSectionClick(event) {
     if (profileSectionButton) {
         state.activeProfileSection = profileSectionButton.dataset.profileSection;
         renderProfile();
+        if (state.activeProfileSection === 'reposts') {
+            const handle = state.profileHandle;
+            const target = handle === currentUser.handle ? state.signedInAccountId : cloudPerson(handle)?.id;
+            if (target) void loadCloudReposts(target, handle).then(() => {
+                if (state.currentView === 'profile' && state.profileHandle === handle && state.activeProfileSection === 'reposts') renderProfile();
+            }).catch(() => showShareFeedback('Could not load reposts. Try again.'));
+        }
         return true;
     }
     return false;

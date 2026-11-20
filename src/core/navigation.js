@@ -1,4 +1,5 @@
 import { loadLiveData } from '../storage/live-broadcasts.js';
+import { loadCloudReposts } from '../storage/cloud-reposts.js';
 import { loadCloudSavedCollection, loadCloudSavedKeys } from '../storage/cloud-saved-items.js';
 import { syncVisibleSaveButtons } from '../features/saved.events.js';
 import { syncVisibleImageLikes } from '../features/likes.js';
@@ -204,7 +205,13 @@ async function refreshViewData(view, owner, handle, activeChat) {
                 loadCloudImagePosts(null, person.handle).catch(() => {}),
                 loadCloudHighlights(target, person.handle).catch(() => {}),
             ] : [];
-            if (!accessible) state.cloudTaggedPosts?.delete(person.handle);
+            if (!accessible) {
+                state.cloudTaggedPosts?.delete(person.handle);
+                if (state.cloudReposts?.handle === handle) state.cloudReposts = null;
+            }
+            if (accessible && state.activeProfileSection === 'reposts' && state.profileHandle === handle) {
+                loads.push(loadCloudReposts(target, person.handle).catch(() => {}));
+            }
             if (target === owner) {
                 loads.push(loadCloudSavedKeys(), loadCloudSavedCollection(), loadCloudStoryArchive().catch(() => {}));
             }

@@ -486,3 +486,9 @@
 .profile-qr-image-label input { display: block; max-width: 100%; margin-top: 8px; font-size: .8rem; }
 
 .profile-cloud-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+
+@media (max-width: 480px) {
+  .profile-section-tabs { gap: 2px; }
+  .profile-section-tab { min-width: 0; gap: 4px; padding-inline: 2px; font-size: .76rem; }
+  .profile-section-tab span { min-width: 0; padding-inline: 4px; }
+}

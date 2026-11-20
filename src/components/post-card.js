@@ -9,7 +9,12 @@ import { currentUser } from '../data/sample-data.js';
 import { renderCommentSection } from '../features/comments.js';
 import { observePostVideos } from '../media/video.js';
 import { isMediaSaved } from '../storage/cloud-saved-items.js';
+import { canRepost } from '../storage/cloud-reposts.js';
 import { actionIcon } from './action-icons.js';
+
+export function renderRepostOption(entity) {
+    return canRepost(entity) ? '<button type="button" data-post-option="repost">Repost</button>' : '';
+}
 
 export function renderSaveButton(type, entity) {
     const saved = isMediaSaved(type, entity);
@@ -59,6 +64,7 @@ export function renderPostCards(items, target = feed) {
             ${(canManageMedia || target === feed) && post.handle === currentUser.handle ? '<button type="button" data-post-option="delete">Delete</button>' : ''}
             <button type="button" data-post-option="download">Download</button>
             <button type="button" data-post-option="copy-link">Copy link</button>
+            ${renderRepostOption(post)}
             ${post.handle !== currentUser.handle ? `
             <button type="button" data-post-option="hide">Hide post</button>
             <button type="button" data-post-option="mute-posts">Mute posts</button>

@@ -4,7 +4,10 @@ import { reels } from '../data/sample-data.js';
 import { getSupabaseClient } from './supabase.js';
 import { remoteMediaId } from './remote-media-id.js';
 import { mediaEdits } from '../features/post-media.js';
+import { cloudMediaCommentCounts } from './cloud-comments.js';
 import { loadVideoEngagement } from './video-engagement.js';
+
+export const cloudReelProjection = 'id,owner_id,caption,audience,publish_at,metadata,author:profiles!inner(username,display_name,avatar_path,is_private),assets:media_assets(object_path,mime_type,position),' + cloudMediaCommentCounts;
 
 export async function publishCloudReel(reel, id) {
     const owner = state.signedInAccountId;
@@ -68,7 +71,7 @@ export async function loadCloudReels(targetId = null) {
     if (!accountId) return;
     const client = await getSupabaseClient();
     const query = client.from('media_content')
-        .select('id,owner_id,caption,audience,publish_at,metadata,author:profiles!inner(username,display_name,avatar_path),assets:media_assets(object_path,mime_type,position)')
+        .select(cloudReelProjection)
         .eq('kind', 'reel').lte('publish_at', new Date().toISOString());
     const { data, error } = await (targetId ? query.eq('owner_id', targetId) : query)
         .order('publish_at', { ascending: false }).limit(50);
@@ -116,7 +119,7 @@ export async function hydrateCloudReels(client, data, accountId) {
             mediaType: 'video', videoUrl: url, sensitive: row.metadata?.sensitive === true,
             views: metrics?.views ?? previous?.views ?? 0, viewed: metrics?.viewed ?? false,
             likes: metrics?.likes ?? previous?.likes ?? 0, liked: metrics?.liked ?? previous?.liked ?? false,
-            comments: previous?.comments || 0, commentItems: previous?.commentItems || [],
+            comments: row.cloud_comments?.[0]?.count ?? previous?.comments ?? 0, commentItems: previous?.commentItems || [],
         }];
     });
     return fresh;

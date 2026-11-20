@@ -1,3 +1,4 @@
+import { getRepostedMedia } from '../storage/cloud-reposts.js';
 import { cloudSavedEntities, cloudSavedKey, isMediaSaved } from '../storage/cloud-saved-items.js';
 import { cloudFollowLabel, cloudPerson } from './cloud-people.js';
 import { persistSession, unexpiredDrafts } from '../storage/local-session.js';
@@ -51,6 +52,7 @@ function profileTaggedPosts() {
 export function getProfileMediaCollection() {
     if (state.activeMediaViewerItems)
         return state.activeMediaViewerItems;
+    if (state.activeProfileSection === 'reposts') return getRepostedMedia();
     const ownPosts = posts.filter((post) => post.handle === state.profileHandle && canViewMedia(post));
     const ownReels = reels.filter((reel) => reel.handle === state.profileHandle && canViewMedia(reel));
     const savedCollection = getSavedCollection();
@@ -84,14 +86,16 @@ export function renderProfileViewerAt(type, id) {
 }
 
 export function openProfileMedia(type, id, trigger, options = {}) {
-    const entity = findEntity(type, id);
+    const fromReposts = Boolean(trigger?.closest('[data-profile-content="reposts"]'));
+    const entity = fromReposts ? getRepostedMedia().find(item => item.type === type && item.entity.id === id)?.entity
+        : findEntity(type, id);
     if (state.deletionRequestedAt || !entity || !canViewMedia(entity))
         return;
     state.activeProfileMediaTrigger = trigger;
     const isSharedMedia = Boolean(trigger?.closest(".chat-shared-post"));
     const isExploreMedia = Boolean(trigger?.closest("#explore-grid, #community-view"));
     profilePostViewer.classList.toggle("square-media", isExploreMedia);
-    state.activeMediaViewerItems = options.singleItem || isSharedMedia || (!trigger && state.currentView === 'profile') ? [{ type, entity }] : isExploreMedia
+    state.activeMediaViewerItems = options.singleItem || fromReposts || isSharedMedia || (!trigger && state.currentView === 'profile') ? [{ type, entity }] : isExploreMedia
         ? state.activeExplorePosts.map((post) => ({ type: "post", entity: post }))
         : null;
     if (renderProfileViewerAt(type, id) < 0)
@@ -169,6 +173,7 @@ export function renderProfile() {
     if(state.activeProfileSection==='drafts')state.activeProfileSection='posts';
     const count = user.postCount ?? (accessible ? ownPosts.length : '—');
     const savedCollection = getSavedCollection();
+    const reposted = accessible ? getRepostedMedia() : [];
     document.getElementById("profile-view").innerHTML = `
     <div class="profile-topbar">
       ${isOwnProfile ? '<span aria-hidden="true"></span>' : '<button type="button" class="profile-back" data-profile-back aria-label="Back to previous screen">←</button>'}
@@ -207,7 +212,14 @@ export function renderProfile() {
       <button class="profile-section-tab ${state.activeProfileSection === "reels" ? "active" : ""}" type="button" data-profile-section="reels" aria-pressed="${state.activeProfileSection === "reels"}">Reels</button>
       ${isOwnProfile ? `<button class="profile-section-tab ${state.activeProfileSection === "saved" ? "active" : ""}" type="button" data-profile-section="saved" aria-pressed="${state.activeProfileSection === "saved"}">Saved <span>${savedCollection.length}</span></button>` : ""}
       <button class="profile-section-tab ${state.activeProfileSection === "tags" ? "active" : ""}" type="button" data-profile-section="tags" aria-pressed="${state.activeProfileSection === "tags"}">Tags</button>
+      <button class="profile-section-tab ${state.activeProfileSection === 'reposts' ? 'active' : ''}" type="button" data-profile-section="reposts" aria-pressed="${state.activeProfileSection === 'reposts'}">Reposts</button>
     </nav>
+    <section class="profile-section-content" data-profile-content="reposts" ${state.activeProfileSection === 'reposts' ? '' : 'hidden'}>
+      <div class="media-grid profile-media-grid">
+        ${reposted.map(({ type, entity }) => `<article class="profile-media-tile" data-profile-media-type="${type}" data-profile-media-id="${entity.id}" tabindex="0" role="button" aria-label="View ${escapeHtml(entity.user)}'s ${type}">${renderProfileMedia(type, entity)}</article>`).join('')
+        || '<p class="empty-profile-posts">No reposts yet.</p>'}
+      </div>
+    </section>
     <section class="profile-section-content" data-profile-content="posts" ${state.activeProfileSection === "posts" ? "" : "hidden"}>
       <div class="media-grid profile-media-grid">
         ${ownPosts.length ? ownPosts.map((post) => `<article class="profile-media-tile" data-profile-media-type="post" data-profile-media-id="${post.id}" tabindex="0" role="button" aria-label="View ${escapeHtml(post.user)}'s post">${renderProfileMedia("post", post)}</article>`).join("") : '<p class="empty-profile-posts">No posts yet.</p>'}
@@ -233,7 +245,7 @@ export function renderProfile() {
     ` : `<section class="private-profile-note" aria-label="${state.blockedHandles.has(state.profileHandle) ? 'Blocked account' : 'Private account'}">
       <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
       <h3>${state.blockedHandles.has(state.profileHandle) ? 'Blocked account' : 'Private account'}</h3>
-      <p>${state.blockedHandles.has(state.profileHandle) ? 'Unblock this account from Settings.' : 'Send a follow request to see their posts, reels, tags and highlights.'}</p>
+      <p>${state.blockedHandles.has(state.profileHandle) ? 'Unblock this account from Settings.' : 'Send a follow request to see their posts, reels, tags, reposts and highlights.'}</p>
     </section>`}
   `;
 }
