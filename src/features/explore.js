@@ -6,10 +6,11 @@ import { escapeHtml, formatCount, newestFirst, normalizeSearchText } from '../co
 import { communities, conversations, currentUser, demoViewCounts, posts, reels } from '../data/sample-data.js';
 import { isFollowed } from './follows.js';
 import { observePostVideos } from '../media/video.js';
-import { visibleAvatar, canViewMedia, mediaNeedsWarning } from '../core/social.js';
+import { visibleAvatar, accountIsPublic, canViewMedia, mediaNeedsWarning } from '../core/social.js';
 import { extractHashtags, hashtagKey, getPublicHashtagStories, isPublicHashtagItem } from '../core/hashtags.js';
 
 const HOUR_MS = 60 * 60 * 1000;
+const canDiscoverPost = post => post.public && !post.reel && accountIsPublic(post.handle) && canViewMedia(post);
 
 function postViews(post) {
     const demoCount = demoViewCounts.get(post.id);
@@ -58,7 +59,7 @@ export function renderExplore() {
     viewHeading.hidden = false;
     const community = communities.find((item) => item.id === state.activeCommunityId);
     const matchingPosts = posts.filter((post) => {
-        if (!post.public || post.reel || !canViewMedia(post))
+        if (!canDiscoverPost(post))
             return false;
         if (community)
             return community.postIds.includes(post.id);
@@ -119,7 +120,7 @@ export function getHashtagResults(tag, now = Date.now()) {
     const key = hashtagKey(tag);
     if (!key || !/^[\p{L}\p{N}_]+$/u.test(key)) return { posts: [], stories: [] };
     const matches = tags => tags.some(value => hashtagKey(value) === key);
-    const matchingPosts = posts.filter(post => !post.reel && isPublicHashtagItem(post) && canViewMedia(post) && matches(extractHashtags(post.caption)));
+    const matchingPosts = posts.filter(post => canDiscoverPost(post) && isPublicHashtagItem(post) && matches(extractHashtags(post.caption)));
     return { posts: newestFirst(matchingPosts), stories: getPublicHashtagStories(tag, now) };
 }
 
@@ -172,7 +173,7 @@ export function getSearchableAccounts() {
 
 export function getPublicHashtags() {
     const hashtags = new Map();
-    posts.filter((post) => post.public && !post.reel && canViewMedia(post)).forEach((post) => {
+    posts.filter(canDiscoverPost).forEach((post) => {
         const postTags = new Set(post.caption.match(/#[\p{L}\p{N}_]+/gu) || []);
         postTags.forEach((tag) => {
             const key = normalizeSearchText(tag.slice(1));

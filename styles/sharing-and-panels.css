@@ -319,3 +319,48 @@
   color: var(--muted);
 }
 
+
+.media-share-open .share-dialog {
+  width: min(100%, 535px);
+  min-height: min(58dvh, 440px);
+  max-height: min(86dvh, 680px);
+}
+.media-share-open .share-friends-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+.share-dialog-footer { flex-shrink: 0; }
+.share-shortcuts:not([hidden]) {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 12px;
+}
+.share-shortcuts button {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 5px;
+  min-height: 56px;
+  padding: 6px 3px;
+  border-radius: 12px;
+  background: #f2ebfa;
+  color: #402c58;
+  font-size: .8rem;
+  font-weight: 650;
+}
+.share-shortcuts .action-icon { width: 21px; height: 21px; }
+.share-friends-status { margin: 10px 8px; color: var(--muted); }
+@media (max-width: 640px) {
+  .share-backdrop.media-share-open { align-items: end; padding: 10px 8px env(safe-area-inset-bottom); }
+}
+.share-load-more {
+  display: block;
+  margin: 6px auto;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #f2ebfa;
+  color: #402c58;
+  font-weight: 650;
+}

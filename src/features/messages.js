@@ -1,3 +1,4 @@
+import { sharedMediaReference } from '../core/media-links.js';
 import { getStoryGroups, renderOwnStoryTile } from './stories.js';
 import { attachmentExpiryForSize, isExpiredAttachment } from './chat-attachment-expiry.js';
 import { canViewMedia, canViewStory, visibleAvatar, mediaNeedsWarning, getAccount, DEFAULT_AVATAR } from '../core/social.js';
@@ -435,6 +436,14 @@ function renderConversationMessage(message, conversation, messagesById) {
                 }
             }
             return `<article class="chat-message ${message.from === 'me' ? 'from-me' : 'from-them'} chat-attachment${message.sticker ? ' chat-sticker-message' : message.animated ? ' chat-gif-message' : ''}">${content}${message.caption ? `<p>${escapeHtml(message.caption)}</p>` : ''}<time>${escapeHtml(formatConversationTime(message.sentAt))}</time></article>`;
+        }
+        const forwarded = message.type === 'text' && sharedMediaReference(message.text);
+        if (forwarded) {
+            return `<article class="chat-message ${message.from === 'me' ? 'from-me' : 'from-them'}">
+                <button type="button" class="chat-share-card" data-open-shared-media="${escapeHtml(forwarded.hash)}">
+                  <small>Shared ${forwarded.type === 'reel' ? 'Reel' : 'post'}</small><strong>Open ${forwarded.type === 'reel' ? 'Reel' : 'post'}</strong>
+                </button><time>${escapeHtml(formatConversationTime(message.sentAt))}</time>
+              </article>`;
         }
         return `
       <article class="chat-message chat-text-message ${message.from === "me" ? "from-me" : "from-them"}">

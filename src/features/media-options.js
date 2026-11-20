@@ -1,9 +1,13 @@
+import { openMediaStoryEditor } from './stories.events.js';
+import { downloadSilentReel } from './media-sharing-actions.js';
+import { saveReelInterest } from './reels.js';
+import { mediaUrl } from '../core/media-links.js';
 import { canRepost, setRepost } from '../storage/cloud-reposts.js';
 import { feed } from '../core/dom.js';
 import { currentUser } from '../data/sample-data.js';
 import { openReportPanel } from './home-controls.js';
 import { state } from '../core/state.js';
-import { changeFollow, isFollowing, mediaKey, mayInteract, canViewMedia } from '../core/social.js';
+import { changeFollow, isFollowing, mediaKey, mayInteract, canViewMedia, mediaNeedsWarning } from '../core/social.js';
 import { persistPreferences } from '../storage/preferences.js';
 import { setView } from '../core/navigation.js';
 import { showShareFeedback } from '../components/feedback.js';
@@ -41,14 +45,27 @@ export function handlePostOption(option, post, type, control) {
             .finally(() => { control.disabled = false; });
         return;
     }
-    if (option === "download") {
-        downloadPost(post);
+    if (option === 'interested' || option === 'not-interested') {
+        if (saveReelInterest(post, option)) {
+            control.parentElement.querySelectorAll('[aria-pressed]').forEach(button =>
+                button.setAttribute('aria-pressed', String(button === control)));
+            showShareFeedback('Preference saved.');
+        } else showShareFeedback('Could not save your preference.');
+        return;
     }
-    else if (option === "copy-link") {
-        copyPostLink(post);
+    if (option === 'report') { openReportPanel(post, type); return; }
+    if (option === 'copy-link') { void copyPostLink(post, type); return; }
+    if (mediaNeedsWarning(post) && !state.revealedMediaKeys.has(`${type}:${post.id}`)) {
+        showShareFeedback('View the content before downloading or adding it to a Story.');
+        return;
     }
-    else if (option === "report") {
-        openReportPanel(post, type);
+    if (option === 'add-to-story') {
+        if (!openMediaStoryEditor(post, type)) showShareFeedback('This item could not be added to a Story.');
+        return;
+    }
+    if (option === 'download') {
+        if (type === 'reel') void downloadSilentReel(post);
+        else void downloadPost(post);
     }
 }
 
@@ -74,22 +91,18 @@ export async function downloadPost(post) {
     }
 }
 
-export function postUrl(post) {
-    const url = new URL(window.location.href);
-    url.hash = `${post.reel ? 'reel' : 'post'}-${post.id}`;
-    return url.toString();
-}
-
-export async function copyPostLink(post) {
+export async function copyPostLink(post, type = post.reel ? 'reel' : 'post') {
     if (navigator.clipboard?.writeText) {
         try {
-            await navigator.clipboard.writeText(postUrl(post));
-            showShareFeedback("Post link copied.");
+            await navigator.clipboard.writeText(mediaUrl(post, type));
+            showShareFeedback(type === 'reel' ? 'Reel link copied.' : 'Post link copied.');
+            return true;
         }
         catch {
             showShareFeedback("Couldn't copy the post link. Please try again.");
         }
-        return;
+        return false;
     }
     showShareFeedback("Copying links isn't available in this browser.");
+    return false;
 }

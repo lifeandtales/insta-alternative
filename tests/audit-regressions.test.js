@@ -177,3 +177,74 @@ test('one-day username hold permits its owner to reclaim but still enforces chan
     state.usernameChanges = 5;
     assert.match(model.validateProfile(profile('mila_newname')), /five lifetime/);
 });
+
+test('tapping the Reel surface dismisses Options before handling playback', async () => {
+    const app = await loadApp();
+    const { state } = app.exportsOf('src/core/state.js');
+    const menu = app.element('.reel-options-wrap .post-options-menu:not([hidden])');
+    const options = app.element('[data-action="post-options"]');
+    menu.hidden = false;
+    options.setAttribute('aria-expanded', 'true');
+    const video = app.element('reel-video');
+    const view = app.element('#reels-feed');
+    view.children = [app.element('reel-card')];
+    video.closest = selector => selector === '.reels-feed' ? view : null;
+    const queryAll = app.document.querySelectorAll;
+    app.document.querySelectorAll = selector => selector === '.post-options-menu' ? [menu]
+        : selector === '[data-action="post-options"]' ? [options] : queryAll(selector);
+    state.currentView = 'reels';
+    const dispatch = app.listeners.filter(listener => listener.key === 'document' && listener.type === 'click')
+        .find(listener => listener.callback.toString().includes('clickHandlers'));
+    dispatch.callback({ target: video, clientY: 60 });
+    assert.equal(menu.hidden, true);
+    assert.equal(options.getAttribute('aria-expanded'), 'false');
+    assert.equal(state.pendingVideoTap, null);
+});
+
+test('only the Reel uploader sees Reply and both accounts see likes', async () => {
+    const app = await loadApp();
+    const { state } = app.exportsOf('src/core/state.js');
+    const { reels } = app.exportsOf('src/data/sample-data.js');
+    const { renderCommentsDialog } = app.exportsOf('src/features/comments.js');
+    const reel = { ...reels[0], reel: true, cloudOwnerId: 'uploader', cloudContentId: 'reel-source',
+        cloudCommentRepliesAvailable: true, commentItems: [{
+            id: 'comment', text: 'Viewer comment', handle: '@viewer', likes: 2,
+            replies: [{ id: 'reply', text: 'Uploader reply', handle: '@uploader', likes: 3 }],
+        }] };
+    const list = app.element('.comments-dialog-list');
+    state.signedInAccountId = 'uploader';
+    renderCommentsDialog(reel);
+    assert.match(list.innerHTML, /data-comment-reply/);
+    state.signedInAccountId = 'visitor';
+    renderCommentsDialog(reel);
+    assert.doesNotMatch(list.innerHTML, /data-comment-reply/);
+    assert.match(list.innerHTML, /comment-like-count">2</);
+    assert.match(list.innerHTML, /comment-like-count">3</);
+});
+
+test('old public uploads leave Trending for both their owner and an accepted follower after going private', async () => {
+    const app = await loadApp();
+    const { state } = app.exportsOf('src/core/state.js');
+    const { posts, currentUser } = app.exportsOf('src/data/sample-data.js');
+    const { renderExplore } = app.exportsOf('src/features/explore.js');
+    const { rememberCloudPerson } = app.exportsOf('src/features/cloud-people.js');
+    const { canViewMedia } = app.exportsOf('src/core/social.js');
+    const previousOwner = { id: 'author', username: 'trendingphoto', display_name: 'Author', is_private: false };
+    const source = { ...posts[0], id: 90021, handle: '@trendingphoto', cloudOwnerId: 'author', public: true };
+    posts.push(source);
+    state.signedInAccountId = 'follower';
+    state.cloudFollowingIds = new Set(['author']);
+    rememberCloudPerson(previousOwner);
+    renderExplore();
+    assert.ok(state.activeExplorePosts.includes(source));
+    rememberCloudPerson({ ...previousOwner, is_private: true });
+    assert.equal(canViewMedia(source), true);
+    renderExplore();
+    assert.ok(!state.activeExplorePosts.includes(source));
+    state.signedInAccountId = 'author';
+    currentUser.handle = source.handle;
+    currentUser.isPrivate = true;
+    renderExplore();
+    assert.ok(!state.activeExplorePosts.includes(source));
+    assert.equal(source.public, true);
+});

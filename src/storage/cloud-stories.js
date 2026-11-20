@@ -23,9 +23,10 @@ function storyEdits(value) {
 
 function storySource(story) {
     if (story.repostedStoryId) return { source_id: story.cloudSourceStoryId || null };
-    if (story.sourcePostId) {
+    if (story.sourceReelId || story.cloudSourceReelId) return { source_id: story.cloudSourceReelId || null };
+    if (story.sourcePostId || story.cloudSourcePostId) {
         const post = posts.find(item => item.id === story.sourcePostId);
-        return { post_owner: post?.cloudOwnerId, post_id: post?.cloudClientId };
+        return { post_owner: story.cloudSourcePostOwner || post?.cloudOwnerId, post_id: story.cloudSourcePostId || post?.cloudClientId };
     }
     return {};
 }
@@ -59,7 +60,7 @@ export async function publishCloudStory(story, scheduledAt, importing) {
     const owner = state.signedInAccountId;
     const source = storySource(story);
     const hasSource = Boolean(source.source_id || source.post_id);
-    if (!hasSource && (story.repostedStoryId || story.sourcePostId)) {
+    if (!hasSource && (story.repostedStoryId || story.sourcePostId || story.sourceReelId)) {
         throw new Error('The original must be available online before you can repost it.');
     }
     if (!hasSource && !/^(blob:|data:)/.test(story.media || '')) {
@@ -88,7 +89,7 @@ export async function publishCloudStory(story, scheduledAt, importing) {
             starts_at: scheduledAt ? new Date(scheduledAt).toISOString() : null, mime,
             composition: {
                 edits: storyEdits(story.edits), music, sensitive: story.sensitive === true,
-                repostSourceEdits: story.repostedStoryId ? storyEdits(story.repostSourceEdits) : null,
+                repostSourceEdits: hasSource ? storyEdits(story.repostSourceEdits) : null,
                 repostPosition: story.repostPosition, repostScale: story.repostScale,
                 repostRotation: story.repostRotation, repostFullCanvas: story.repostFullCanvas === true,
             },
@@ -224,7 +225,13 @@ export async function hydrateCloudStories(client, data, owner, previous = new Ma
             edits: restoreEdits(metadata.edits, metadata.music, assetUrl('app-media', row.audio_path)),
             sensitive: metadata.sensitive === true || source?.sensitive === true,
             ...(original ? {
-                repostedStoryId: source.id, cloudSourceStoryId: source.id, repostedFromHandle: original.handle,
+                ...(source.kind === 'reel' ? {
+                    cloudSourceReelId: source.id, repostedMediaType: 'reel', repostedMediaHash: '#reel-id-' + source.id,
+                } : source.kind === 'post' ? {
+                    cloudSourcePostOwner: source.owner_id, cloudSourcePostId: source.id,
+                    repostedMediaType: 'post', repostedMediaHash: `#post-id-${source.owner_id}-${source.id}`,
+                } : { repostedStoryId: source.id, cloudSourceStoryId: source.id }),
+                repostedFromHandle: original.handle,
                 repostedFromUser: original.name, repostedFromAvatar: original.avatar,
                 repostSourceEdits: restoreEdits(metadata.repostSourceEdits, source.metadata?.music, assetUrl('app-media', source.audio_path)),
                 repostPosition: Number.isFinite(position?.x) && Number.isFinite(position?.y) ? position : undefined,

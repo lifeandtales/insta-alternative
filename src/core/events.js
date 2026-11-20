@@ -34,8 +34,12 @@ import { closeVideoFullscreen, handleVideoTap } from '../media/video.js';
 
 export function dismissOpenMenus(event) {
     if (!event.target.closest(".post-options-wrap")) {
+        const dismissReelOptions = event.target.closest('.reels-feed')
+            && !event.target.closest('a, button, input, .post-user')
+            && document.querySelector('.reel-options-wrap .post-options-menu:not([hidden])');
         document.querySelectorAll(".post-options-menu").forEach((menu) => { menu.hidden = true; });
         document.querySelectorAll('[data-action="post-options"]').forEach((button) => button.setAttribute("aria-expanded", "false"));
+        if (dismissReelOptions) return true;
     }
     if (!event.target.closest(".story-viewer-header") && !event.target.closest(".story-options-menu")) {
         document.querySelector(".story-options-menu").hidden = true;

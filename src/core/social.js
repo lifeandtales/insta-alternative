@@ -119,8 +119,9 @@ export function canViewStory(story, viewerHandle = currentUser.handle, visited =
             if (!canViewStory(source, viewerHandle, chain)) return false;
         }
     }
-    if (story.sourcePostId) {
-        const source = [...posts, ...reels].find(item => item.id === story.sourcePostId);
+    if (story.sourcePostId || story.sourceReelId) {
+        const source = story.sourceReelId ? reels.find(item => item.id === story.sourceReelId)
+            : [...posts, ...reels].find(item => item.id === story.sourcePostId);
         if (!source || !canViewMedia(source, viewerHandle)) return false;
     }
     if (story.handle === viewerHandle) return true;
@@ -148,6 +149,9 @@ export function mayInteract() {
 }
 
 export function accountIsPublic(handle) {
+    if (handle === currentUser.handle) return !currentUser.isPrivate;
+    const connected = cloudPerson(handle);
+    if (typeof connected?.isPrivate === 'boolean') return !connected.isPrivate;
     const account = getAccount(handle);
     if (account) return !account.isPrivate;
     return [...posts, ...reels].some(item => item.handle === handle && item.public);

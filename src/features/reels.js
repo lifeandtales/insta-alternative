@@ -1,4 +1,6 @@
 import { renderCaption } from '../components/caption.js';
+import { actionIcon } from '../components/action-icons.js';
+import { accountStorageKey } from '../storage/browser-storage.js';
 import { renderRepostOption, renderSaveButton } from '../components/post-card.js';
 import { escapeHtml, formatCount } from '../core/utils.js';
 import { state } from '../core/state.js';
@@ -6,12 +8,31 @@ import { reels } from '../data/sample-data.js';
 import { accountIsPublic, canViewMedia, getAccount } from '../core/social.js';
 import { observePostVideos } from '../media/video.js';
 
+function preferenceKey(reel) {
+  return accountStorageKey('insta-reel-interest:' + (reel.cloudContentId || reel.id));
+}
+
+export function saveReelInterest(reel, interest) {
+  try {
+    localStorage.setItem(preferenceKey(reel), interest);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function interestOption(reel, value, label) {
+  let selected = false;
+  try { selected = localStorage.getItem(preferenceKey(reel)) === value; } catch {}
+  return `<button type="button" data-post-option="${value}" aria-pressed="${selected}">${label}</button>`;
+}
+
 const DAY = 24 * 60 * 60 * 1000;
 
 // Trending has 70% influence; recency has 30%. Scores normalize views,
 // watch-time per view, and likes against the current public Reel set.
 export function rankRecommendedReels(items = reels, now = Date.now()) {
-  const eligible = items.filter(reel => reel.public && (reel.cloudOwnerId || accountIsPublic(reel.handle)) && canViewMedia(reel));
+  const eligible = items.filter(reel => reel.public && accountIsPublic(reel.handle) && canViewMedia(reel));
   if (!eligible.length) return [];
   const maxViews = Math.max(1, ...eligible.map(reel => Number(reel.views) || 0));
   const maxWatch = Math.max(1, ...eligible.map(reel => (Number(reel.watchTimeSeconds) || (Number(reel.views) || 0) * 4) / Math.max(1, Number(reel.views) || 0)));
@@ -36,24 +57,16 @@ export function renderReels() {
   feed.innerHTML = rankRecommendedReels().map(reel => {
     const gated = warningNeeded(reel) && !state.revealedMediaKeys.has(`reel:${reel.id}`);
     const blockedForMinor = gated && state.viewerAgeBand === 'minor';
+    const muted = state.reelMuted || reel.originalAudioMuted;
     return `
     <article class="reel-card ${gated ? 'reel-gated' : ''}" data-reel-id="${reel.id}" data-likeable-id="${reel.id}" data-likeable-type="reel">
       <div class="likeable-media reel-media" data-likeable-id="${reel.id}" data-likeable-type="reel">
-        <video class="reel-video" tabindex="0" playsinline preload="none" loop poster="${escapeHtml(reel.poster)}" ${state.reelMuted || reel.originalAudioMuted ? 'muted' : ''} ${reel.originalAudioMuted ? 'data-original-audio-muted="true"' : ''}>
+        <video class="reel-video" tabindex="0" playsinline preload="none" loop poster="${escapeHtml(reel.poster)}" ${muted ? 'muted' : ''} ${reel.originalAudioMuted ? 'data-original-audio-muted="true"' : ''}>
           <source src="${escapeHtml(reel.video)}" />Your browser does not support video playback.
         </video>
         ${gated ? `<div class="reel-content-warning"><strong>Sensitive content</strong><p>${blockedForMinor ? 'This content is not available for under-18 accounts.' : 'This Reel may contain sensitive content.'}</p>${blockedForMinor ? '' : `<button type="button" data-reel-reveal="${reel.id}">View content</button>`}</div>` : ''}
-        <button class="video-sound-toggle" type="button" ${reel.originalAudioMuted ? 'disabled' : ''} data-video-sound aria-label="Turn video sound ${state.reelMuted ? 'on' : 'off'}" aria-pressed="${!state.reelMuted}">${state.reelMuted ? '🔇' : '🔊'}</button>
         <button class="reel-play-state" type="button" data-reel-play aria-label="Pause reel">Ⅱ</button>
         <span class="double-like-heart" aria-hidden="true">♥</span>
-      </div>
-      <div class="post-options-wrap reel-options-wrap" data-id="${reel.id}" data-entity-type="reel">
-        <button class="post-options" type="button" data-action="post-options" aria-label="Reel options" aria-expanded="false">•••</button>
-        <div class="post-options-menu" hidden>
-          <button type="button" data-post-option="copy-link">Copy link</button>
-          ${renderRepostOption(reel)}
-          <button type="button" data-post-option="report">Report</button>
-        </div>
       </div>
       <div class="reel-caption">
         <div class="post-user"><button class="profile-avatar-link" type="button" data-profile-handle="${escapeHtml(reel.handle)}" aria-label="Open ${escapeHtml(reel.user)} profile"><img src="${escapeHtml(reel.avatar)}" alt="${escapeHtml(reel.user)} avatar" /></button>
@@ -63,12 +76,25 @@ export function renderReels() {
         <small data-media-view-count="reel:${reel.id}">${formatCount(reel.views || 0)} views</small>
         ${reel.demoVideoCredit ? `<small class="reel-demo-credit">${escapeHtml(reel.demoVideoCredit)}</small>` : ''}
         <div class="reel-actions">
-          <button class="like-btn ${reel.liked ? 'liked' : ''}" type="button" data-action="like" data-entity-type="reel" data-entity-id="${reel.id}" aria-pressed="${reel.liked}">♥ ${formatCount(reel.likes)}</button>
-          <button class="comment-btn" type="button" data-action="comments" data-entity-type="reel" data-entity-id="${reel.id}" aria-label="View ${reel.comments} comments" aria-expanded="false">💬 ${reel.comments}</button>
-          <button class="share-btn" type="button" data-action="share-post" data-entity-type="reel" data-entity-id="${reel.id}" aria-label="Share ${escapeHtml(reel.user)}'s reel">↗</button>
+          <button class="like-btn ${reel.liked ? 'liked' : ''}" type="button" data-action="like" data-entity-type="reel" data-entity-id="${reel.id}" aria-label="${reel.liked ? 'Unlike' : 'Like'} reel" aria-pressed="${Boolean(reel.liked)}">${actionIcon('like')}<span data-reel-like-count>${formatCount(reel.likes)}</span></button>
+          <button class="comment-btn" type="button" data-action="comments" data-entity-type="reel" data-entity-id="${reel.id}" aria-label="View ${reel.comments} comments" aria-expanded="false">${actionIcon('comment')}<span class="post-comment-count">${formatCount(reel.comments)}</span></button>
+          <button class="share-btn" type="button" data-action="share-post" data-entity-type="reel" data-entity-id="${reel.id}" aria-label="Share ${escapeHtml(reel.user)}'s reel">${actionIcon('share')}</button>
           ${renderSaveButton('reel', reel)}
+          <div class="post-options-wrap reel-options-wrap" data-id="${reel.id}" data-entity-type="reel">
+            <button class="post-options" type="button" data-action="post-options" aria-label="Reel options" aria-expanded="false">${actionIcon('options')}</button>
+            <div class="post-options-menu" hidden>
+              ${renderRepostOption(reel)}
+              <button type="button" data-post-option="download">Download</button>
+              <button type="button" data-post-option="add-to-story">Add to story</button>
+              <button type="button" data-post-option="copy-link">Copy link</button>
+              ${interestOption(reel, 'interested', 'Interested')}
+              ${interestOption(reel, 'not-interested', 'Not interested')}
+              <button type="button" data-post-option="report">Report</button>
+            </div>
+          </div>
         </div>
       </div>
+      <button class="video-sound-toggle reel-sound-toggle" type="button" ${reel.originalAudioMuted ? 'disabled' : ''} data-video-sound aria-label="${reel.originalAudioMuted ? 'Original audio is disabled' : `Turn video sound ${muted ? 'on' : 'off'}`}" aria-pressed="${!muted}">${actionIcon(muted ? 'sound-off' : 'sound-on')}</button>
     </article>`;
   }).join('');
   observePostVideos(feed);

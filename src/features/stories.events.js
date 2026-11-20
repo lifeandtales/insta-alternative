@@ -6,7 +6,7 @@ import { persistSession, unexpiredDrafts } from '../storage/local-session.js';
 import { loadCloudStoryViewers, recordCloudStoryEngagement, saveCloudStorySettings, sendCloudStoryReply } from '../storage/cloud-stories.js';
 import { persistPreferences } from '../storage/preferences.js';
 import { conversations } from '../data/sample-data.js';
-import { mayInteract, canViewMedia, canViewStory, getAccount } from '../core/social.js';
+import { mayInteract, canViewMedia, canViewStory, getAccount, mediaNeedsWarning } from '../core/social.js';
 import { setView } from '../core/navigation.js';
 import { appendChatMessage } from './messages.js';
 import { showShareFeedback } from '../components/feedback.js';
@@ -27,7 +27,7 @@ import {
 import { openHighlightShareDialog } from './sharing.js';
 import { openShareDialog } from './sharing.js';
 import { openReportPanel } from './home-controls.js';
-import { copyStoryLink, openMediaFromHash } from '../core/media-links.js';
+import { copyStoryLink, mediaHash, openMediaFromHash } from '../core/media-links.js';
 import {
     pauseStory,
     resumeStory,
@@ -80,6 +80,30 @@ export function openStoryRepostEditor(activeStory) {
     };
     state.activeStoryDraftId = null;
     document.getElementById('story-caption').value = state.pendingStoryMedia.caption;
+    renderSelectedStory();
+    document.querySelector('.story-create-back').focus();
+    return true;
+}
+
+export function openMediaStoryEditor(entity, type) {
+    if (!mayInteract() || !canViewMedia(entity) ||
+        (mediaNeedsWarning(entity) && !state.revealedMediaKeys.has(`${type}:${entity.id}`))) return false;
+    const first = entity.mediaItems?.[0];
+    const video = type === 'reel' || (first ? first.type === 'video' : entity.mediaType === 'video');
+    const media = first?.url || (video ? (entity.video || entity.videoUrl) : entity.media);
+    if (!media) return false;
+    openStoryCreator();
+    state.pendingStoryMedia = {
+        type: video ? 'video' : 'image', media, poster: first?.cover || entity.cover || entity.poster,
+        ...(type === 'reel' ? { sourceReelId: entity.id, cloudSourceReelId: entity.cloudContentId }
+            : { sourcePostId: entity.id, cloudSourcePostOwner: entity.cloudOwnerId, cloudSourcePostId: entity.cloudClientId }),
+        repostedFromHandle: entity.handle, repostedFromUser: entity.user, repostedFromAvatar: entity.avatar,
+        repostedMediaHash: mediaHash(entity, type), repostedMediaType: type,
+        caption: '', sensitive: Boolean(entity.sensitive),
+        repostSourceEdits: storyComposition({ video: { muted: entity.originalAudioMuted === true } }),
+        edits: storyComposition({ video: { muted: entity.originalAudioMuted === true } }),
+    };
+    state.activeStoryDraftId = null;
     renderSelectedStory();
     document.querySelector('.story-create-back').focus();
     return true;
@@ -272,10 +296,10 @@ export function handleStoryClick(event) {
         const story = state.activeStorySequence[state.activeStoryIndex];
         if (!story?.repostedFromUser) return true;
         const targetType = story.repostedSourcePostId ? 'post' : 'story';
-        const destination = targetType === 'post' ? `#post-${Number(story.repostedSourcePostId)}` : `#story-${encodeURIComponent(story.repostedStoryId || '')}`;
+        const destination = story.repostedMediaHash || (targetType === 'post' ? `#post-${Number(story.repostedSourcePostId)}` : `#story-${encodeURIComponent(story.repostedStoryId || '')}`);
         pauseStory();
         showHomePanel('',
-            `<button type="button" class="primary-btn" data-reposted-open="${escapeHtml(destination)}">Visit original story</button>`,
+            `<button type="button" class="primary-btn" data-reposted-open="${escapeHtml(destination)}">Visit original ${story.repostedMediaType === 'reel' ? 'Reel' : story.repostedMediaType === 'post' ? 'post' : 'story'}</button>`,
             { minimal: true });
         return true;
     }
@@ -732,6 +756,7 @@ export function registerStoryUploadEvents() {
 
 function renderSelectedStory() {
     const story = state.pendingStoryMedia;
+    const sharedReel = story?.repostedMediaType === 'reel';
     setStoryCreationStep(Boolean(story));
     const container = document.querySelector('.story-selected-preview');
     container.classList.toggle('story-reposted-preview', Boolean(story?.repostedFromUser));
@@ -740,7 +765,7 @@ function renderSelectedStory() {
     const repostFrame = story?.repostedFromUser ? document.createElement('div') : null;
     if (repostFrame) {
         repostFrame.className = `story-repost-drag-frame${story.repostFullCanvas ? ' story-repost-full-canvas-frame' : ''}`;
-        if (story.repostFrameSize) {
+        if (story.repostFrameSize && !sharedReel) {
             repostFrame.style.width = `${story.repostFrameSize.width}px`;
             repostFrame.style.height = `${story.repostFrameSize.height}px`;
             repostFrame.dataset.frameLocked = 'true';
@@ -767,10 +792,20 @@ function renderSelectedStory() {
             document.querySelector('.story-save-draft').disabled = true;
         }, { once: true });
         if (story.type === 'video') {
-            media.controls = true; media.playsInline = true; media.preload = 'metadata';
+            media.controls = !sharedReel; media.playsInline = true; media.preload = 'metadata';
             if (story.poster) media.poster = story.poster;
             if (story.repostedFromUser && !story.repostFullCanvas) media.addEventListener('loadedmetadata', () => {
-                if (!story.repostFrameSize) story.repostFrameSize = fitRepostMediaFrame(mediaFrame, media, .58);
+                if (sharedReel) {
+                    const canvas = container.getBoundingClientRect();
+                    const controls = document.querySelector('.story-preview-actions').getBoundingClientRect();
+                    const toolbar = document.querySelector('.story-editor-toolbar').getBoundingClientRect();
+                    const center = canvas.top + canvas.height / 2;
+                    const space = Math.min(controls.top - center, center - toolbar.bottom);
+                    const ratio = Number.isFinite(space) ? Math.min(.58, Math.max(.16, 2 * (space - 8) / window.innerHeight)) : .58;
+                    story.repostFrameSize = fitRepostMediaFrame(mediaFrame, media, ratio);
+                } else if (!story.repostFrameSize) {
+                    story.repostFrameSize = fitRepostMediaFrame(mediaFrame, media, .58);
+                }
                 if (story.repostFrameSize) mediaFrame.dataset.frameLocked = 'true';
             }, { once: true });
             const update = () => {
@@ -793,7 +828,7 @@ function renderSelectedStory() {
     playButton.hidden = !story || story.type !== 'video';
     playButton.textContent = '▶';
     playButton.setAttribute('aria-label', 'Play video preview');
-    if (repostFrame && story.repostSourceEdits)
+    if (repostFrame && story.repostSourceEdits && !sharedReel)
         applyStoryComposition(repostFrame, { ...story, edits: story.repostSourceEdits }, { editing: true });
     prepareStoryTools();
     if (story?.repostedFromUser && story.repostedFromHandle) {

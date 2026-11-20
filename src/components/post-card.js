@@ -62,6 +62,7 @@ export function renderPostCards(items, target = feed) {
             ${canManageMedia && post.handle === currentUser.handle ? '<button type="button" data-post-option="edit">Edit</button>' : ''}
             ${(canManageMedia || target === feed) && post.handle === currentUser.handle ? '<button type="button" data-post-option="delete">Delete</button>' : ''}
             <button type="button" data-post-option="download">Download</button>
+            <button type="button" data-post-option="add-to-story">Add to story</button>
             <button type="button" data-post-option="copy-link">Copy link</button>
             ${renderRepostOption(post)}
             ${post.handle !== currentUser.handle ? `

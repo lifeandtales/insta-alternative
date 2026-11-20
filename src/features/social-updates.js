@@ -2,7 +2,9 @@ import { refreshOpenImageLikers } from './likes.js';
 import { refreshOpenCloudComments } from './comments.js';
 import { state } from '../core/state.js';
 import { refreshConnectedView } from '../core/navigation.js';
-import { refreshVisibleExplorePeople } from './explore.js';
+import { cloudPerson, rememberCloudPerson } from './cloud-people.js';
+import { currentUser } from '../data/sample-data.js';
+import { renderExplore, refreshVisibleExplorePeople } from './explore.js';
 import { loadCloudStories } from '../storage/cloud-stories.js';
 import { renderStories } from './stories.js';
 import { getSupabaseClient } from '../storage/supabase.js';
@@ -38,9 +40,19 @@ export async function subscribeToSocialUpdates(owner) {
         });
     }
     for (const table of ['profiles', 'account_follows', 'messages', 'image_posts', 'media_content', 'image_post_comments', 'conversation_preferences', 'message_reactions']) {
-        for (const event of table === 'media_content' ? ['INSERT', 'UPDATE', 'DELETE'] : ['INSERT', 'UPDATE']) next.on('postgres_changes', { event, schema: 'public', table }, () => {
-            if (owner !== state.signedInAccountId || document.hidden) return;
+        for (const event of table === 'media_content' ? ['INSERT', 'UPDATE', 'DELETE'] : ['INSERT', 'UPDATE']) next.on('postgres_changes', { event, schema: 'public', table }, change => {
+            if (owner !== state.signedInAccountId) return;
             const view = state.currentView;
+            const profile = table === 'profiles' ? change.new : null;
+            if (profile?.username && typeof profile.is_private === 'boolean') {
+                const handle = '@' + profile.username;
+                const previous = profile.id === owner ? currentUser.isPrivate : cloudPerson(handle)?.isPrivate;
+                rememberCloudPerson(profile);
+                if (profile.id === owner) currentUser.isPrivate = profile.is_private;
+                if (view === 'explore' && !document.hidden && (previous !== profile.is_private ||
+                    (profile.is_private && state.activeExplorePosts.some(post => post.handle === handle)))) renderExplore();
+            }
+            if (document.hidden) return;
             const relevant = table === 'profiles' || table === 'account_follows'
                 || (['messages', 'conversation_preferences', 'message_reactions'].includes(table) && view === 'messages')
                 || (table === 'image_posts' && ['home', 'profile', 'explore'].includes(view))

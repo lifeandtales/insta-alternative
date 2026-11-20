@@ -70,7 +70,8 @@ export function setAccountPrivacy(isPrivate) {
     if (!mayInteract()) return false;
     currentUser.isPrivate = isPrivate;
     const owner = getAccount(currentUser.handle); if (owner) owner.isPrivate = isPrivate;
-    [...posts, ...reels].filter(item => item.handle === currentUser.handle).forEach(item => { item.public = !isPrivate; });
+    [...posts, ...reels].filter(item => item.handle === currentUser.handle && !item.cloudOwnerId)
+        .forEach(item => { item.public = !isPrivate; });
     return true;
 }
 

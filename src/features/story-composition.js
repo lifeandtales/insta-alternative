@@ -85,6 +85,15 @@ export function compositionHistory(initial = {}) {
     };
 }
 
+export function storyRepostSourceComposition(story, edits = story.edits) {
+    const source = storyComposition(story.repostSourceEdits);
+    if (story.repostedMediaType === 'reel') {
+        const video = storyComposition(edits).video;
+        source.video = { ...video, muted: video.muted || source.video.muted };
+    }
+    return source;
+}
+
 export function storyVideoRange(story, duration) {
     const edit=storyComposition(story.edits).video;
     const full=Math.min(STORY_VIDEO_LIMIT_SECONDS,Number.isFinite(duration) && duration>0 ? duration : 15);

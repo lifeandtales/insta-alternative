@@ -232,6 +232,7 @@ public class MainActivity extends Activity {
             Uri uri = Uri.parse(url);
             if (isChatDownload(uri)) queueChatDownload(uri);
         });
+        ReelDownloads.register(this, web, ASSET_HOST, STORAGE_HOST);
         configureWebView(web);
         web.setBackgroundColor(PAGE_BACKGROUND);
         setContentView(web);

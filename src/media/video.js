@@ -1,3 +1,4 @@
+import { actionIcon } from '../components/action-icons.js';
 import { showShareFeedback } from '../components/feedback.js';
 import { videoFullscreenBackdrop, videoFullscreenStage } from '../core/dom.js';
 import { state } from '../core/state.js';
@@ -53,7 +54,8 @@ export function observePostVideos(container) {
 }
 
 export function updateSoundButton(button, muted, subject) {
-    button.textContent = muted ? "🔇" : "🔊";
+    if (button.classList.contains('reel-sound-toggle')) button.innerHTML = actionIcon(muted ? 'sound-off' : 'sound-on');
+    else button.textContent = muted ? "🔇" : "🔊";
     button.setAttribute("aria-label", `Turn ${subject} sound ${muted ? "on" : "off"}`);
     button.setAttribute("aria-pressed", String(!muted));
 }
@@ -123,10 +125,30 @@ export function toggleFullscreenVideoPlayback() {
     }
 }
 
+export function handleReelTap(video) {
+    if (!canPlayInlineVideo(video)) return;
+    if (state.pendingVideoTap?.video === video) {
+        clearTimeout(state.pendingVideoTap.timer);
+        state.pendingVideoTap = null;
+        doubleTapLike(video.closest('.likeable-media'));
+        return;
+    }
+    if (state.pendingVideoTap) clearTimeout(state.pendingVideoTap.timer);
+    const timer = window.setTimeout(() => {
+        state.pendingVideoTap = null;
+        if (video.isConnected && state.currentView === 'reels') toggleInlinePlayback(video);
+    }, 300);
+    state.pendingVideoTap = { video, timer };
+}
+
 export function handleVideoTap(video) {
     if (!canPlayInlineVideo(video)) return;
     if (state.suppressNextVideoClick) {
         state.suppressNextVideoClick = false;
+        return;
+    }
+    if (video.closest('.reel-card')) {
+        toggleInlinePlayback(video);
         return;
     }
     if (state.fullscreenVideo === video) {
@@ -141,17 +163,8 @@ export function handleVideoTap(video) {
     }
     if (state.pendingVideoTap)
         clearTimeout(state.pendingVideoTap.timer);
-    if (video.closest('.reel-card') && video.paused) {
-        toggleInlinePlayback(video);
-        state.pendingVideoTap = { video, timer: window.setTimeout(() => { state.pendingVideoTap = null; }, 320) };
-        return;
-    }
     const timer = window.setTimeout(() => {
         state.pendingVideoTap = null;
-        if (video.closest('.reel-card')) {
-            toggleInlinePlayback(video);
-            return;
-        }
         const exploreTile = video.closest(".explore-thumbnail");
         if (exploreTile)
             openProfileMedia("post", Number(exploreTile.dataset.id), exploreTile);
@@ -212,9 +225,17 @@ export function initializeVideoObserver() {
                 if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
                     if (!canPlayInlineVideo(video)) { video.pause(); return; }
                     if (!video.closest('.reel-card')) video.muted = true;
-                    video.play().catch((error) => {
-                        if (error.name !== "AbortError")
-                            showShareFeedback(video.closest('.reel-card') ? "Autoplay with sound was blocked. Tap the Reel to play." : "This video couldn't autoplay. Tap play to watch it.");
+                    video.play().catch(error => {
+                        if (error.name === 'AbortError') return;
+                        const reel = video.closest('.reel-card');
+                        if (reel && error.name === 'NotAllowedError' && !video.muted) {
+                            video.muted = true;
+                            const sound = reel.querySelector('[data-video-sound]');
+                            if (sound) updateSoundButton(sound, true, 'video');
+                            video.play().catch(() => {});
+                            return;
+                        }
+                        showShareFeedback(reel ? 'Tap the Reel to play.' : "This video couldn't autoplay. Tap play to watch it.");
                     });
 
                 }

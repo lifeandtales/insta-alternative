@@ -4,7 +4,7 @@ import { state } from '../core/state.js';
 import { mayInteract } from '../core/social.js';
 import { escapeHtml } from '../core/utils.js';
 import { showShareFeedback } from '../components/feedback.js';
-import { applyStoryComposition, storyComposition, compositionHistory, STORY_VIDEO_LIMIT_SECONDS } from './story-composition.js';
+import { applyStoryComposition, storyComposition, storyRepostSourceComposition, compositionHistory, STORY_VIDEO_LIMIT_SECONDS } from './story-composition.js';
 import { storyFontStyles, getStoryFontStyle } from './story-fonts.js';
 
 const mediaPointers=new Map();
@@ -127,14 +127,19 @@ function ensureHistory(){
 }
 function repaint(){
     if(!pending())return;
-    applyStoryComposition(preview(),{...pending(),edits:currentComposition()},{editing:true});
+    const story = pending(), edits = currentComposition(), stage = preview();
+    applyStoryComposition(stage, { ...story, edits }, { editing: true });
+    const repost = story.repostedMediaType === 'reel' && stage.querySelector(':scope > .story-repost-drag-frame');
+    if (repost) applyStoryComposition(repost, { ...story, edits: storyRepostSourceComposition(story, edits) }, { editing: true });
     preview().querySelectorAll('.story-composition-layer').forEach(layer=>layer.classList.toggle('story-layer-selected',layer.dataset.layerId===selectedLayer));
     document.querySelector('.story-undo').disabled=!activeHistory()?.canUndo();
     document.querySelector('.story-redo').disabled=!activeHistory()?.canRedo();
     document.querySelector('.story-draw-done').hidden=Boolean(toolSession)||(!drawMode && !moveMode);
     preview().classList.toggle('story-drawing-mode',Boolean(drawMode||moveMode));
     const sound=document.querySelector('.story-preview-sound'),muted=currentComposition().video.muted;
-    sound.hidden=pending().type!=='video';sound.textContent=muted?'🔇':'🔊';
+    sound.hidden=story.type!=='video';
+    sound.disabled=story.repostedMediaType==='reel' && story.repostSourceEdits?.video?.muted===true;
+    sound.textContent=muted?'🔇':'🔊';
     sound.setAttribute('aria-label',muted?'Unmute video sound':'Mute video sound');sound.setAttribute('aria-pressed',String(muted));
 }
 export function prepareStoryTools(){ensureHistory();repaint();}

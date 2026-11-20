@@ -2,6 +2,8 @@ import {
     closeVideoFullscreen,
     endVideoHold,
     handleVideoTap,
+    handleReelTap,
+    toggleInlinePlayback,
     startVideoHold,
     updateSoundButton,
     canPlayInlineVideo,
@@ -46,14 +48,34 @@ export function handleVideoClick(event) {
     }
     const playButton = event.target.closest('[data-reel-play]');
     if (playButton) {
-        if (playButton.closest('.reel-gated')) return true;
         const video = playButton.closest('.reel-media')?.querySelector('video');
-        if (video) handleVideoTap(video);
+        if (video && event.detail === 0) toggleInlinePlayback(video);
+        else if (video) handleReelTap(video);
         return true;
+    }
+    const reelFeed = event.target.closest('.reels-feed');
+    if (reelFeed && !event.target.closest('a, button, input, .post-user, .reel-content-warning, [data-reel-header]')) {
+        const bounds = reelFeed.getBoundingClientRect();
+        // Keep the heading area out of the gesture target even between cards.
+        if (event.clientY < bounds.top + 42) return false;
+        let card = event.target.closest('.reel-card');
+        if (!card) {
+            const middle = bounds.top + bounds.height / 2;
+            card = Array.from(reelFeed.children).find(item => {
+                const rect = item.getBoundingClientRect();
+                return rect.top <= middle && rect.bottom > middle;
+            });
+        }
+        const video = card?.querySelector('video');
+        if (video) {
+            event.preventDefault();
+            handleReelTap(video);
+            return true;
+        }
     }
     const tappedVideo = event.target.closest("video");
     if (tappedVideo?.closest(".likeable-media")) {
-        if (tappedVideo.closest('.reel-gated')) return true;
+        if (tappedVideo.closest('.reel-card')) return true;
         event.preventDefault();
         handleVideoTap(tappedVideo);
         return true;
@@ -74,15 +96,26 @@ export function handleMediaSoundClick(event) {
     }
     const postSoundButton = event.target.closest("[data-video-sound]");
     if (postSoundButton) {
-        const video = postSoundButton.closest(".likeable-media").querySelector("video");
+        const reel = postSoundButton.closest(".reel-card");
+        const video = (reel || postSoundButton.closest(".likeable-media"))?.querySelector("video");
         if (!video)
             return true;
         if (!canPlayInlineVideo(video)) return true;
         if (video.dataset.originalAudioMuted === 'true') return true;
         video.muted = !video.muted;
-        if (video.closest('.reel-card')) state.reelMuted = video.muted;
-        updateSoundButton(postSoundButton, video.muted, "video");
-        if (!video.muted && video.paused) video.play().catch(() => {});
+        if (reel) {
+            state.reelMuted = video.muted;
+            document.querySelectorAll('.reel-card').forEach(card => {
+                const other = card.querySelector('video');
+                if (!other || other.dataset.originalAudioMuted === 'true') return;
+                other.muted = state.reelMuted;
+                const control = card.querySelector('[data-video-sound]');
+                if (control) updateSoundButton(control, other.muted, 'video');
+            });
+        } else {
+            updateSoundButton(postSoundButton, video.muted, "video");
+            if (!video.muted && video.paused) video.play().catch(() => {});
+        }
         return true;
     }
     return false;

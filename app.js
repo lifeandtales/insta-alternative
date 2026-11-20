@@ -1,3 +1,4 @@
+import { renderPostCards } from './src/components/post-card.js';
 import { syncCloudGroupInvitationPreference } from './src/features/cloud-chat.js';
 import { enableAndroidPush } from './src/features/android-push.js';
 import { registerSignupValidation, resetSignupFeedback, pauseSignupValidation } from './src/features/signup-validation.js';
@@ -11,7 +12,7 @@ import { readCloudAvatar } from './src/storage/cloud-avatars.js';
 import { loadCloudFollowing } from './src/features/cloud-people.js';
 import { loadCloudImagePosts } from './src/storage/image-posts.js';
 import { loadCloudReels } from './src/storage/cloud-reels.js';
-import { registerHomePullToRefresh } from './src/features/home.js';
+import { getHomeFeedItems, registerHomePullToRefresh } from './src/features/home.js';
 import { currentUser, demoContentEnabled } from './src/data/sample-data.js';
 import { DEFAULT_AVATAR } from './src/core/social.js';
 import { registerStoryShortcutEvents } from './src/features/story-shortcuts.js';
@@ -60,7 +61,7 @@ import {
 import { handleExploreClick, registerExploreSearchEvents } from './src/features/explore.events.js';
 import { handlePostOptionsClick } from './src/features/media-options.events.js';
 import { handleLikeClick, handleLikersClick, registerMediaLikeEvents } from './src/features/likes.events.js';
-import { handleSaveClick, refreshSavedState } from './src/features/saved.events.js';
+import { syncVisibleSaveButtons, handleSaveClick, refreshSavedState } from './src/features/saved.events.js';
 import {
     handleCommentClick,
     registerCommentEvents,
@@ -134,19 +135,26 @@ async function loadAccountContent() {
     const following = Promise.allSettled([loadCloudFollowing()]);
     const [sessionResult] = await local;
     if (demoContentEnabled && sessionResult.status === 'rejected') return;
-    const [imageResult] = await Promise.allSettled([
-        following.then(([result]) => {
-            if (result.status === 'rejected') throw result.reason;
-            return loadCloudImagePosts();
-        }),
-        loadCloudSavedKeys(), loadCloudReels(),
-    ]);
+    const owner = state.signedInAccountId;
+    let feedReady = false;
+    void loadCloudReels().then(() => {
+        if (feedReady && owner === state.signedInAccountId && state.currentView === 'home') renderPostCards(getHomeFeedItems());
+    }).catch(() => {});
+    void loadCloudSavedKeys().then(() => {
+        if (owner === state.signedInAccountId) syncVisibleSaveButtons();
+    }).catch(() => {});
+    const [imageResult] = await Promise.allSettled([following.then(([result]) => {
+        if (result.status === 'rejected') throw result.reason;
+        return loadCloudImagePosts();
+    })]);
+    if (owner !== state.signedInAccountId) return;
     if (imageResult.status === 'rejected') showShareFeedback('Could not load your saved image posts. Pull down on Home to retry.');
     refreshChatAttachmentExpiry();
     processScheduledPosts();
     syncIncomingStoryMentions();
     syncIncomingPostMentions();
     setView(state.currentView);
+    feedReady = true;
     updateNotificationBadge();
 }
 
@@ -341,8 +349,8 @@ const clickHandlers = [
     handleVideoExitClick,
     handleFollowClick,
     handleMessageClick,
-    handleVideoClick,
     dismissOpenMenus,
+    handleVideoClick,
     handleStoryMenuClick,
     handleNavigationClick,
     handleProfileSectionClick,

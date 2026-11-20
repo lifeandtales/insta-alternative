@@ -1,6 +1,6 @@
 import { renderLiveCircles } from './live-broadcasts.js';
 import { renderStoryDrafts } from './story-drafts.js';
-import { canViewStory, isFollowing, mayInteract, canViewMedia, mediaNeedsWarning } from '../core/social.js';
+import { canViewStory, isFollowing, mayInteract, canViewMedia, mediaNeedsWarning, DEFAULT_AVATAR } from '../core/social.js';
 import { showShareFeedback } from '../components/feedback.js';
 import { state } from '../core/state.js';
 import { escapeHtml, toDateTimeLocalValue } from '../core/utils.js';
@@ -9,7 +9,7 @@ import { updateSoundButton } from '../media/video.js';
 import { persistActiveStories } from '../storage/browser-storage.js';
 import { cloudStoryAllowsReplies, deleteCloudStory, loadCloudStories, loadCloudStorySettings, loadCloudStoryLiked, loadCloudStoryViewCount, publishCloudStory, recordCloudStoryEngagement } from '../storage/cloud-stories.js';
 import { persistPreferences } from '../storage/preferences.js';
-import { applyStoryComposition, storyVideoRange } from './story-composition.js';
+import { applyStoryComposition, storyRepostSourceComposition, storyVideoRange } from './story-composition.js';
 import { syncStoryOptionButtons, openStoryExitDialog, closeStoryExitDialog } from './story-options.js';
 import { stopStoryCamera } from './story-camera.js';
 import { recordStoryMentions } from './notifications.js';
@@ -161,7 +161,9 @@ export function setStoryCreationStep(editing) {
     document.querySelector('.story-editor-step').hidden = !hasMedia;
     document.querySelector('.story-editor-settings-toggle').hidden = !hasMedia;
     document.querySelector('.story-create-dialog').classList.toggle('story-editing', hasMedia);
-    document.querySelector('.story-create-dialog').classList.toggle('story-repost-editing', isRepost);
+    const dialog = document.querySelector('.story-create-dialog');
+    dialog.classList.toggle('story-repost-editing', isRepost);
+    dialog.classList.toggle('story-reel-share', hasMedia && state.pendingStoryMedia.repostedMediaType === 'reel');
     document.querySelector('.story-create-backdrop').classList.toggle('story-editor-open', hasMedia);
     document.querySelector('.story-create-backdrop').classList.toggle('story-repost-editor-open', isRepost);
     if (!hasMedia) document.querySelector('.story-selected-preview video')?.pause();
@@ -405,7 +407,8 @@ export function createStoryRepostCredit(story) {
     const credit = document.createElement('div');
     credit.className = 'story-repost-credit';
     const avatar = document.createElement('img');
-    avatar.src = story.repostedFromAvatar || story.avatar || '';
+    avatar.src = story.repostedFromAvatar || story.avatar || DEFAULT_AVATAR;
+    avatar.addEventListener('error', () => { avatar.src = DEFAULT_AVATAR; }, { once: true });
     avatar.alt = '';
     const names = document.createElement('span');
     const name = document.createElement('strong');
@@ -634,7 +637,7 @@ export function showStoryAtIndex(index) {
         compositionStage.style.setProperty('--repost-rotation', `${story.repostRotation || 0}deg`);
         compositionStage.tabIndex = 0;
         compositionStage.setAttribute('role', 'button');
-        compositionStage.setAttribute('aria-label', `Shared Story by ${story.repostedFromUser}. Open the original.`);
+        compositionStage.setAttribute('aria-label', `Shared ${story.repostedMediaType || 'story'} by ${story.repostedFromUser}. Open the original.`);
         compositionStage.addEventListener('keydown', event => {
             if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); compositionStage.click(); }
         });
@@ -682,7 +685,7 @@ export function showStoryAtIndex(index) {
     }
     if (isRepost) stage.replaceChildren(compositionStage);
     if (isRepost) {
-        applyStoryComposition(compositionStage, { ...story, edits: story.repostSourceEdits || {} });
+        applyStoryComposition(compositionStage, { ...story, edits: storyRepostSourceComposition(story) });
         compositionStage.append(createStoryRepostCredit(story));
         applyStoryComposition(stage, story);
     } else applyStoryComposition(stage, story);

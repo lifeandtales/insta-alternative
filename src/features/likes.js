@@ -120,7 +120,9 @@ function renderLikeState(type, entity) {
             button.setAttribute("aria-label", `${entity.liked ? "Unlike" : "Like"} ${type}`);
         }
         else {
-            button.innerHTML = `♥ ${formatCount(entity.likes)}`;
+            const count = button.querySelector('[data-reel-like-count]');
+            if (count) count.textContent = formatCount(entity.likes);
+            button.setAttribute("aria-label", `${entity.liked ? "Unlike" : "Like"} ${type}`);
         }
     });
     document.querySelectorAll(`[data-action="show-likers"][data-entity-type="${type}"][data-entity-id="${entity.id}"]`).forEach((button) => {

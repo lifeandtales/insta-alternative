@@ -1,3 +1,4 @@
+import { openMediaFromHash } from '../core/media-links.js';
 import { openGroupCreator } from './group-creator.js';
 import { openChatSearch } from './chat-search.js';
 import { startInAppCall } from './in-app-calls.js';
@@ -1136,6 +1137,11 @@ export function handleMessageClick(event) {
         return true;
     }
     if (!event.target.closest('.chat-options-wrap')) closeChatOptions();
+    const forwarded = event.target.closest('[data-open-shared-media]');
+    if (forwarded) {
+        openMediaFromHash(forwarded.dataset.openSharedMedia);
+        return true;
+    }
     const conversationButton = event.target.closest('[data-open-conversation]');
     if (conversationButton) {
         heldTarget = null;

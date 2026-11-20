@@ -193,6 +193,7 @@ async function refreshViewData(view, owner, handle, activeChat) {
                 currentUser.avatar = person.avatar;
                 currentUser.name = person.name;
                 currentUser.bio = person.bio;
+                currentUser.isPrivate = person.isPrivate;
                 document.querySelectorAll('.profile-nav-button img, .profile-card img, .mini-avatar-wrap img, .desktop-profile-button img')
                     .forEach(image => { image.src = person.avatar; });
             }
@@ -232,16 +233,20 @@ async function refreshViewData(view, owner, handle, activeChat) {
         await Promise.all([loadCloudReels(), loadCloudSavedKeys()]);
         if (stillVisible()) renderReels();
     } else if (view === 'home' || view === 'explore') {
-        await loadCloudFollowing();
-        await Promise.all([loadCloudImagePosts(), loadCloudSavedKeys(),
-            view === 'home' ? loadCloudReels().catch(() => {}) : undefined,
-            view === 'home' ? loadCloudStories().catch(() => {}) : undefined,
-            view === 'home' ? loadLiveData().catch(() => {}) : undefined]);
-        if (stillVisible()) {
-            if (view === 'home') {
-                renderPostCards(getHomeFeedItems());
-                renderStories();
-            } else renderExplore();
+        const imagePosts = loadCloudFollowing().then(() => loadCloudImagePosts());
+        if (view === 'explore') {
+            await imagePosts;
+            if (stillVisible()) renderExplore();
+            return;
         }
+        const drawPosts = () => { if (stillVisible()) renderPostCards(getHomeFeedItems()); };
+        const drawStories = () => { if (stillVisible()) renderStories(); };
+        void loadCloudSavedKeys().then(() => { if (stillVisible()) syncVisibleSaveButtons(); }).catch(() => {});
+        let feedReady = false;
+        void loadCloudReels().then(() => { if (feedReady) drawPosts(); }).catch(() => {});
+        void Promise.allSettled([loadCloudStories(), loadLiveData()]).then(drawStories);
+        await imagePosts;
+        drawPosts();
+        feedReady = true;
     }
 }

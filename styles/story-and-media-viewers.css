@@ -1347,3 +1347,36 @@ button.caption-hashtag:focus-visible { outline:2px solid currentColor; outline-o
 .live-preview-placeholder { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; padding: 30px; color: #ded5eb; }
 .live-preview-placeholder > span { font-size: 4rem; color: #b383f1; }
 .live-preview-placeholder > p { font-size: .85rem; line-height: 1.5; max-width: 260px; }
+
+.story-reel-share .story-editor-step:not([hidden]) {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+}
+.story-reel-share :is(.story-editor-toolbar, .story-history-controls, .story-tools-open) {
+  top: calc(65px + env(safe-area-inset-top));
+}
+.story-reel-share .story-editor-toolbar { right: auto; }
+.story-reel-share .story-history-controls { left: 62px; }
+.story-reel-share .story-tools-open { right: 12px; }
+.story-reel-share .story-preview-actions {
+  grid-row: 2;
+  position: relative;
+  z-index: 4;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0 14px 8px;
+  pointer-events: none;
+}
+.story-reel-share .story-preview-actions button {
+  position: static;
+  width: 44px;
+  height: 44px;
+  pointer-events: auto;
+}
+.story-reel-share .story-editor-controls {
+  grid-row: 3;
+  position: relative;
+  max-height: min(43vh, 176px);
+}
+.story-reel-share .story-repost-drag-frame video { pointer-events: none; }

@@ -186,8 +186,10 @@ export async function buildStoryExport(story,stage,signal,onProgress=()=>{},audi
         const context=canvas.getContext('2d');if(!context)throw new Error('Image export is unavailable.');
         // Do not silently export an unfiltered source on a browser lacking Canvas filters.
         if(!('filter' in context)&&compositionMediaStyle(edits).filter!==compositionMediaStyle({}).filter)throw new Error('This browser cannot export these filters. Use a browser with Canvas filter support.');
+        const frame = stage || {width:geometry.width,height:geometry.height,mediaWidth:geometry.width,
+            mediaHeight:geometry.height,mediaLeft:0,mediaTop:0};
         let blob;
-        if(video)blob=await recordStory(canvas,source,story,geometry,stage,signal,onProgress,audioContext);
+        if(video)blob=await recordStory(canvas,source,story,geometry,frame,signal,onProgress,audioContext);
         else{
             paintFrame(context,source,story,geometry,stage);
             blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new Error('Image export failed. Try a smaller image.')),'image/png'));
