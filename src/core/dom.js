@@ -23,7 +23,7 @@ export const createUploadBackdrop = document.querySelector(".create-upload-backd
 export const viewSections = {
     home: [feed],
     notifications: [document.getElementById("notifications-page")],
-    explore: [document.getElementById("explore-grid"), exploreCommunityView],
+    explore: [document.getElementById("explore-grid"), exploreCommunityView, document.getElementById("explore-ranking-note")],
     reels: [document.getElementById("reels-feed")],
     messages: [document.getElementById("messages-list")],
     "shared-post": [document.getElementById("shared-post-page")],

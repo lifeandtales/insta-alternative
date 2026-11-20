@@ -17,25 +17,6 @@
 }
 
 @media (max-width: 860px) {
-  html.mobile-splash-pending,
-  html.mobile-splash-pending body {
-    overflow: hidden;
-    background: #929292;
-  }
-
-  html.mobile-splash-pending .app-shell {
-    visibility: hidden;
-  }
-
-  html.mobile-splash-pending .splash-screen {
-    position: fixed;
-    inset: 0;
-    z-index: 10;
-    display: grid;
-    place-items: center;
-    background: #929292;
-  }
-
   .app-shell {
     grid-template-columns: 1fr;
     padding: 0 14px;

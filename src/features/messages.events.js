@@ -1,4 +1,3 @@
-import { registerCommunityEvents } from './communities.js';
 import { startInAppCall } from './in-app-calls.js';
 import { findMessageRecipients, hideCloudMessage, hideCloudMessages, loadCloudChat, loadOlderCloudMessages, muteConnectedCalls, openCloudChat, sendCloudMedia, sendCloudText,
     setCloudChatPreference, setCloudMessageReaction, updateCloudChatTimer } from './cloud-chat.js';
@@ -1467,7 +1466,6 @@ export function registerMessageFormEvents() {
         syncVoicePlayer(audio);
     });
     registerChatWallpaperEvents();
-    registerCommunityEvents();
     window.addEventListener('pageshow', refreshChatAttachmentExpiry);
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) refreshChatAttachmentExpiry();

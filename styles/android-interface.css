@@ -1,0 +1,94 @@
+html.android-app,
+.android-app body {
+    background: #f8f5f1;
+}
+
+.android-app .app-shell .main-area {
+    background: #f8f5f1;
+    backdrop-filter: none;
+}
+
+.android-app .app-shell.view-home .main-area {
+    padding-inline: 16px;
+}
+
+.android-app .app-shell.view-home .home-brand-header {
+    justify-content: flex-start;
+    min-height: 62px;
+    padding-inline: 3px 52px;
+    margin-bottom: 0;
+}
+
+.android-app .app-shell.view-home .home-brand {
+    color: #32213e;
+    font-family: Georgia, serif;
+    font-size: 34px;
+    font-weight: 700;
+    letter-spacing: -1.8px;
+}
+
+.android-app .app-shell.view-home .home-brand-group .brand-mark {
+    background: #70429b;
+    box-shadow: none;
+}
+
+.android-app .app-shell.view-home .home-brand-header .home-notifications {
+    top: 9px;
+    background: #fffdfa;
+    box-shadow: none;
+    border: 1px solid #e9e1e6;
+}
+
+.android-app .app-shell.view-home .stories-list {
+    padding-block: 5px 14px;
+}
+
+.android-app .story-ring.has-story:not(.seen-story) {
+    background: linear-gradient(145deg, #7544aa, #b4669a 54%, #df9a79);
+}
+
+.android-app .app-shell.view-home .home-create-row {
+    margin-bottom: 16px;
+}
+
+.android-app .app-shell.view-home .home-create-row button {
+    padding-inline: 18px;
+    border-radius: 100vw;
+    background: #69408f;
+    box-shadow: none;
+}
+
+.android-app .app-shell.view-home .post-card {
+    background: #fffdfa;
+    border: 1px solid #ece4e3;
+    border-radius: 22px;
+    box-shadow: 0 3px 8px #472a3c0c;
+}
+
+.android-app .app-shell.view-home .post-card > .likeable-media {
+    height: auto;
+    aspect-ratio: 5 / 4;
+}
+
+.android-app .mobile-nav {
+    border-color: #e9e1e6;
+    background: #fffdfa;
+    backdrop-filter: none;
+    box-shadow: none;
+}
+
+.android-app .mobile-nav-item {
+    min-height: 48px;
+    border-radius: 17px;
+}
+
+.android-app .mobile-nav-item.active {
+    background: #f1e8f7;
+    color: #63388b;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .android-app .mobile-nav-item {
+        transition: background-color 140ms ease, color 140ms ease;
+    }
+}

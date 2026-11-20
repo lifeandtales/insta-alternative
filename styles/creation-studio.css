@@ -1,0 +1,168 @@
+:root {
+  --studio-paper: #fffdfa;
+  --studio-canvas: #f8f5f1;
+  --studio-ink: #30223b;
+  --studio-accent: #68428a;
+  --studio-tint: #f0e8f6;
+  --studio-line: #e8e0e7;
+}
+
+:is(.create-menu-dialog, .create-upload-dialog, .story-create-dialog:not(.story-editing)) {
+  color: var(--studio-ink);
+  background: var(--studio-paper);
+  border-color: var(--studio-line);
+  border-radius: 28px;
+}
+
+:is(.create-menu-dialog, .create-upload-dialog, .story-create-dialog:not(.story-editing)) > .share-dialog-header {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 48px;
+  gap: 8px;
+  align-items: center;
+  padding-inline: 12px;
+  background: var(--studio-paper);
+  border-color: var(--studio-line);
+}
+
+:is(.create-menu-dialog, .create-upload-dialog, .story-create-dialog:not(.story-editing)) > .share-dialog-header h2 {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+  font: 700 clamp(1.25rem, 5vw, 1.65rem)/1.2 Georgia, serif;
+  letter-spacing: -.035em;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+:is(.create-menu-dialog, .create-upload-dialog, .story-create-dialog:not(.story-editing))
+  > .share-dialog-header :is(.create-menu-close, .create-upload-close, .story-create-close) {
+  position: static;
+  grid-column: 3;
+  grid-row: 1;
+  width: 48px;
+  height: 48px;
+  transform: none;
+  border-radius: 50%;
+  background: var(--studio-tint);
+  color: var(--studio-ink);
+  font-size: 1.5rem;
+}
+
+.create-menu-options { grid-template-columns: 1fr; gap: 10px; padding: 16px 20px 22px; }
+.create-menu-option {
+  min-height: 78px;
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  align-content: center;
+  gap: 2px 14px;
+  padding: 12px 16px;
+  background: var(--studio-canvas);
+  border-color: var(--studio-line);
+}
+
+.create-menu-option > span,
+.studio-source-symbol {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  background: var(--studio-tint);
+  color: var(--studio-accent);
+  font-size: 1.3rem;
+}
+
+.create-menu-option > span { grid-row: span 2; }
+.create-menu-option strong { align-self: end; }
+.story-media-choices { display: grid; gap: 10px; }
+.studio-source small { display: block; margin-top: 4px; color: var(--muted); font-weight: 500; font-size: .8rem; line-height: 1.4; }
+.story-media-choices .studio-source,
+.create-picker-step .studio-source {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  min-height: 76px;
+  margin: 0;
+  padding: 12px 16px;
+  background: var(--studio-canvas);
+  border: 1px solid var(--studio-line);
+  border-radius: 18px;
+  color: var(--studio-ink);
+  text-align: start;
+  cursor: pointer;
+}
+.story-media-choices .story-open-camera,
+.create-picker-step .studio-source { background: var(--studio-tint); }
+.story-media-choices .story-picker-hint { margin: 3px 0; font-size: .78rem; line-height: 1.45; }
+.story-media-choices #story-upload {
+  width: 1px;
+  height: 1px;
+  position: absolute;
+  overflow: hidden;
+  opacity: 0;
+  padding: 0;
+}
+.story-media-choices:has(#story-upload:focus-visible) .story-upload-label {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 3px;
+}
+.story-media-choices .story-choose-drafts { min-height: 48px; }
+.create-picker-step .primary-btn,
+.create-editing :is(.create-next, .create-publish-button),
+.story-editing .story-editor-actions > .story-publish-selected {
+  background: var(--studio-accent);
+  box-shadow: none;
+}
+.create-editing .create-upload-preview { background: #221a2b; }
+.create-editing .create-media-editing,
+.create-editing .create-editor-fields { background: var(--studio-canvas); }
+.create-editing .create-editor-actions { grid-template-columns: 1fr; }
+.story-editing .story-editor-controls { border-radius: 22px 22px 0 0; }
+
+.android-app .messages-inbox-header h2,
+.android-app .view-explore .view-heading {
+  color: var(--studio-ink);
+  font: 700 clamp(1.4rem, 6vw, 1.85rem)/1.15 Georgia, serif;
+  letter-spacing: -.035em;
+}
+.android-app .messages-inbox-header { padding-block: 17px 12px; }
+.android-app .conversation-tile { background: var(--studio-paper); border-color: var(--studio-line); }
+.android-app .conversation-tile.unread { background: var(--studio-tint); }
+.android-app .conversation-time { font-size: .75rem; }
+.android-app .view-explore .search-wrap { border-color: var(--studio-line); background: var(--studio-paper); }
+.android-app .view-explore .media-grid { gap: 8px; }
+.android-app .view-explore .explore-tile { border-radius: 16px; }
+.android-app .view-reels .reel-caption { background: linear-gradient(transparent, #221a2bd9 33%, #17121cee); }
+.android-app .profile-section-tab.active { color: var(--studio-accent); background: var(--studio-tint); border-radius: 12px; }
+.android-app .profile-header { border-color: var(--studio-line); }
+.android-app .profile-media-tile { border-radius: 13px; overflow: hidden; }
+
+.android-app .app-shell.view-home .home-brand-header { padding-block: 8px; }
+.android-app .app-shell.view-home .stories-list { border-bottom: 1px solid var(--studio-line); }
+.android-app .app-shell.view-home .home-create-row { margin-top: 13px; }
+.android-app .view-explore .view-heading { margin-block: 2px 12px; }
+.explore-ranking-note { margin: -6px 0 13px; color: var(--muted); font-size: .8rem; }
+.android-app .view-explore .topbar { margin-bottom: 14px; }
+.android-app .view-explore .search-wrap { width: 100%; min-height: 48px; }
+.android-app .explore-community-button { font-weight: 700; }
+.android-app .view-messages .conversation-list { gap: 9px; }
+.android-app .chat-header { background: var(--studio-paper); border-color: var(--studio-line); }
+.android-app .chat-header-copy strong { color: var(--studio-ink); }
+.android-app .chat-header :is(.chat-back-button, .chat-call-button, .chat-options-button) { min-height: 48px; }
+.android-app .profile-header { border: 1px solid var(--studio-line); border-radius: 22px; background: var(--studio-paper); }
+.android-app .profile-name-row h3 { font-family: Georgia, serif; overflow-wrap: anywhere; }
+.android-app .profile-section-tabs { margin-top: 12px; }
+.android-app .profile-action { background: var(--studio-tint); color: var(--studio-accent); }
+.android-app .reel-actions :is(button, .save-btn) { min-height: 48px; }
+
+@media (max-width: 480px) {
+  .story-create-backdrop:not(.story-editor-open),
+  .create-menu-backdrop,
+  .create-upload-backdrop:not(.create-editor-open) {
+    place-items: end center;
+    padding: 12px 12px max(12px, env(safe-area-inset-bottom));
+  }
+  .create-menu-options { padding-inline: 14px; }
+}

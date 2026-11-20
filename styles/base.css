@@ -49,26 +49,6 @@ img {
   gap: 28px;
 }
 
-.splash-screen {
-  display: none;
-}
-
-html.auth-restoring .splash-screen {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-  display: grid;
-  place-items: center;
-  background: #929292;
-}
-
-.splash-logo {
-  color: #fff;
-  font-size: 3rem;
-  font-weight: 800;
-  letter-spacing: -0.08em;
-}
-
 .sidebar,
 .right-rail,
 .main-area {

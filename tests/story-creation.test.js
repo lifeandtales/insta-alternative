@@ -52,10 +52,10 @@ test('Story picker captures a photo or a microphone-backed video into the normal
     const app=await loadApp();
     const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
     const choices=html.match(/<div class="story-media-choices">([\s\S]*?)<\/div>/)?.[1]||'';
-    const camera=choices.indexOf('class="story-open-camera"'),files=choices.indexOf('class="story-upload-label"'),input=choices.indexOf('id="story-upload"');
+    const camera=choices.indexOf('class="story-open-camera '),files=choices.indexOf('class="story-upload-label '),input=choices.indexOf('id="story-upload"');
     assert.ok(camera>=0&&files>camera&&input>files);
-    assert.match(choices,/story-open-camera" type="button">Open camera/);
-    assert.match(choices,/story-upload-label" for="story-upload">Choose from files/);
+    assert.match(choices,/<button class="story-open-camera [^"]+" type="button">[^]*?<strong>Open camera<\/strong>/);
+    assert.match(choices,/<label class="story-upload-label [^"]+" for="story-upload">[^]*?<strong>Choose from files<\/strong>/);
     assert.match(html,/story-camera-panel" hidden[^]*<video class="story-camera-preview" autoplay playsinline muted/);
     assert.match(html,/story-camera-capture">Take photo/);
     assert.match(html,/story-camera-record">Record video/);

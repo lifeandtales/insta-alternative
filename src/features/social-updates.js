@@ -6,6 +6,7 @@ import { refreshVisibleExplorePeople } from './explore.js';
 import { loadCloudStories } from '../storage/cloud-stories.js';
 import { renderStories } from './stories.js';
 import { getSupabaseClient } from '../storage/supabase.js';
+import { handleHomeNotificationEvent, refreshHomeNotifications } from './notifications.js';
 
 let liveOwner;
 let channel;
@@ -19,6 +20,11 @@ export async function subscribeToSocialUpdates(owner) {
     if (channel) await client.removeChannel(channel);
     liveOwner = owner;
     const next = client.channel('connected-social-' + owner);
+    for (const event of ['INSERT', 'UPDATE']) {
+        next.on('postgres_changes', { event, schema: 'public', table: 'app_notifications', filter: 'recipient_id=eq.' + owner }, change => {
+            if (owner === state.signedInAccountId && !document.hidden) handleHomeNotificationEvent(change.new, event === 'INSERT');
+        });
+    }
     for (const table of ['profiles', 'account_follows', 'messages', 'image_posts', 'media_content', 'image_post_comments', 'conversation_preferences', 'message_reactions']) {
         for (const event of table === 'media_content' ? ['INSERT', 'UPDATE', 'DELETE'] : ['INSERT', 'UPDATE']) next.on('postgres_changes', { event, schema: 'public', table }, () => {
             if (owner !== state.signedInAccountId || document.hidden) return;
@@ -37,7 +43,11 @@ export async function subscribeToSocialUpdates(owner) {
             }, 180);
         });
     }
-    channel = next.subscribe();
+    channel = next.subscribe(status => {
+        if (status === 'SUBSCRIBED' && owner === state.signedInAccountId) {
+            void refreshHomeNotifications().catch(() => {});
+        }
+    });
     window.clearInterval?.(storyRefreshTimer);
     storyRefreshTimer = window.setInterval?.(() => {
         if (state.signedInAccountId !== owner || state.currentView !== 'home' || document.hidden) return;

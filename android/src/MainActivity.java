@@ -9,13 +9,11 @@ import android.content.ClipDescription;
 import android.os.ResultReceiver;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import android.view.Gravity;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputConnectionWrapper;
@@ -24,7 +22,6 @@ import android.util.Base64;
 import org.json.JSONObject;
 import java.io.InputStream;
 import java.io.ByteArrayOutputStream;
-import android.view.View;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -32,8 +29,6 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.FrameLayout;
-import android.widget.TextView;
 import android.widget.Toast;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -45,10 +40,8 @@ public class MainActivity extends Activity {
     private static final String STORAGE_HOST = "nbmxfsadqflsjlibxqor.supabase.co";
     private static final int PICK_FILES = 1;
     private static final int MEDIA_PERMISSION = 2;
-    private static final int SPLASH_COLOR = Color.rgb(146, 146, 146);
+    private static final int PAGE_BACKGROUND = Color.rgb(248, 245, 241);
     private WebView web;
-    private TextView startupSplash;
-    private final Runnable checkStartup = this::revealWebWhenReady;
     private ValueCallback<Uri[]> fileResult;
     private PermissionRequest mediaRequest;
 
@@ -108,7 +101,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        getWindow().setBackgroundDrawable(new ColorDrawable(SPLASH_COLOR));
+        getWindow().setBackgroundDrawable(new ColorDrawable(PAGE_BACKGROUND));
         web = new WebView(this) {
             @Override
             public InputConnection onCreateInputConnection(EditorInfo editor) {
@@ -182,13 +175,6 @@ public class MainActivity extends Activity {
             }
 
             @Override
-            public void onPageFinished(WebView view, String url) {
-                if (!isAssetOrigin(Uri.parse(url)) || startupSplash.getVisibility() != View.VISIBLE) return;
-                view.removeCallbacks(checkStartup);
-                view.post(checkStartup);
-            }
-
-            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 if (!request.isForMainFrame() || isAssetOrigin(uri)) return false;
@@ -247,31 +233,9 @@ public class MainActivity extends Activity {
             if (isChatDownload(uri)) queueChatDownload(uri);
         });
         configureWebView(web);
-        FrameLayout frame = new FrameLayout(this);
-        frame.addView(web);
-        startupSplash = new TextView(this);
-        startupSplash.setGravity(Gravity.CENTER);
-        startupSplash.setText("insta");
-        startupSplash.setTextColor(Color.WHITE);
-        startupSplash.setTextSize(48);
-        startupSplash.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        startupSplash.setBackgroundColor(SPLASH_COLOR);
-        startupSplash.setClickable(true);
-        frame.addView(startupSplash, new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-        setContentView(frame);
+        web.setBackgroundColor(PAGE_BACKGROUND);
+        setContentView(web);
         if (state == null || web.restoreState(state) == null) web.loadUrl("https://" + ASSET_HOST + "/");
-    }
-
-    private void revealWebWhenReady() {
-        if (isDestroyed() || startupSplash.getVisibility() != View.VISIBLE) return;
-        web.evaluateJavascript(
-            "document.readyState !== 'loading' && !document.documentElement.classList.contains('auth-restoring')",
-            ready -> {
-                if (isDestroyed()) return;
-                if ("true".equals(ready)) startupSplash.setVisibility(View.GONE);
-                else web.postDelayed(checkStartup, 50);
-            });
     }
 
     protected void configureWebView(WebView view) {}
@@ -364,7 +328,6 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         if (fileResult != null) fileResult.onReceiveValue(null);
         if (mediaRequest != null) mediaRequest.deny();
-        web.removeCallbacks(checkStartup);
         web.destroy();
         super.onDestroy();
     }

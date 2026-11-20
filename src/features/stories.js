@@ -160,7 +160,7 @@ export function setStoryCreationStep(editing) {
     document.querySelector('.story-create-backdrop').classList.toggle('story-repost-editor-open', isRepost);
     if (!hasMedia) document.querySelector('.story-selected-preview video')?.pause();
     if (!hasMedia) document.querySelectorAll('.story-selected-preview audio').forEach(audio=>audio.pause());
-    document.getElementById('story-create-title').textContent = hasMedia ? 'Edit your story' : 'Choose a photo or video';
+    document.getElementById('story-create-title').textContent = hasMedia ? 'Edit your story' : 'Add to your story';
 }
 
 export function closeStoryCreator() {

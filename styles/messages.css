@@ -1048,7 +1048,6 @@
 
 .chat-header-copy strong { font-size: 1rem; line-height: 1.3; }
 
-.messages-community-button { width: 76px; height: 76px; border-radius: 50%; background: var(--primary); color: white; font-size: .68rem; font-weight: 600; box-shadow: 0 4px 14px #7134a833; }
 .communities-page { width: min(100vw, 760px); height: 100dvh; max-height: 100dvh; max-width: 100vw; margin: auto; padding: 0; border: 0; background: var(--surface, #fff); color: var(--text); overflow-y: auto; overscroll-behavior: contain; }
 .communities-page::backdrop { background: #17102488; }
 .community-top { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: var(--surface, #fff); border-bottom: 1px solid var(--line); }
@@ -1096,7 +1095,7 @@
 .community-comments article { padding: 14px 0; border-bottom: 1px solid var(--line); }
 .community-comments p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .community-story-controls { display: flex; justify-content: space-between; }
-.communities-page button, .messages-community-button { touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.communities-page button { touch-action: manipulation; user-select: none; -webkit-user-select: none; }
 .communities-page button:disabled { opacity: .45; }
 
 .community-followed-nav { display: flex; gap: 12px; padding: 18px 3px 14px; overflow-x: auto; border-bottom: 1px solid var(--line); scrollbar-width: thin; }

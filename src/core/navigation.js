@@ -26,6 +26,26 @@ import { canViewMedia } from './social.js';
 const currentAppHistory = () => window.history.state && typeof window.history.state === 'object'
     ? window.history.state : {};
 
+const mobileTabs = ['home', 'messages', 'reels', 'explore', 'profile'];
+let pageSlide;
+
+function slideToView(previousView, view, fromHistory) {
+    if (!document.documentElement.classList.contains('android-app') || previousView === view) return;
+
+    pageSlide?.cancel();
+    if (document.hidden || appShell.hidden || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const previousTab = mobileTabs.indexOf(previousView);
+    const nextTab = mobileTabs.indexOf(view);
+    const backwards = fromHistory || (previousTab >= 0 && nextTab >= 0 && nextTab < previousTab)
+        || previousView === 'notifications' || previousView === 'shared-post';
+    const surface = appShell.querySelector('.main-area');
+    pageSlide = surface?.animate?.(
+        [{ transform: `translateX(${backwards ? -28 : 28}px)` }, { transform: 'translateX(0)' }],
+        { duration: 220, easing: 'cubic-bezier(.18,.84,.28,1)' }
+    );
+}
+
 function writeAppHistory(view, conversation = null, replace = false, groupProfile = null, postId = null) {
     const next = { ...currentAppHistory(), instaApp: { view, conversation, ...(groupProfile ? { groupProfile } : {}), ...(postId !== null ? { postId } : {}) } };
     window.history[replace ? 'replaceState' : 'pushState'](next, '', window.location.href);
@@ -104,6 +124,8 @@ export function setView(view, { fromHistory = false, refresh = true } = {}) {
     accessNotice.hidden = state.verificationStatus === 'approved' && !state.deletionRequestedAt;
     accessNotice.innerHTML = state.deletionRequestedAt ? 'Deletion request pending. <button type="button" data-settings-page="deletion">Review request</button>' : 'Verification pending · browsing only. <button type="button" data-settings-page="verification">Check status</button>';
     appShell.className = `app-shell view-${view}`;
+    const communityButton = document.querySelector('.explore-community-button');
+    if (communityButton) communityButton.hidden = view !== 'explore' || !state.signedInAccountId;
     document.querySelectorAll("[data-view]").forEach((button) => {
         const isActive = button.dataset.view === view;
         if (button.matches(".nav-item, .mobile-nav-item"))
@@ -138,6 +160,7 @@ export function setView(view, { fromHistory = false, refresh = true } = {}) {
         renderSharedPostPage();
     if (view === "profile")
         renderProfile();
+    slideToView(previousView, view, fromHistory);
     if (refresh && state.signedInAccountId && (view === 'profile' || previousView !== view)) {
         void refreshConnectedView(view).catch(() => {});
     }

@@ -9,11 +9,12 @@ import { currentUser } from '../data/sample-data.js';
 import { renderCommentSection } from '../features/comments.js';
 import { observePostVideos } from '../media/video.js';
 import { isMediaSaved } from '../storage/cloud-saved-items.js';
+import { actionIcon } from './action-icons.js';
 
 export function renderSaveButton(type, entity) {
     const saved = isMediaSaved(type, entity);
     return `<button class="save-btn ${saved ? "saved" : ""}" type="button" data-action="toggle-save" data-entity-type="${type}" data-entity-id="${entity.id}" aria-label="${saved ? "Remove from" : "Save to"} your collection" aria-pressed="${saved}" title="${saved ? "Remove from saved" : "Save"}">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.75h12v17l-6-4-6 4z" /></svg>
+    ${actionIcon('save')}
   </button>`;
 }
 
@@ -72,12 +73,12 @@ export function renderPostCards(items, target = feed) {
         <div class="post-meta">
           <div class="interactions">
             <div class="post-like-control">
-              <button class="like-btn ${post.liked ? "liked" : ""}" type="button" data-action="like" data-entity-type="${post.reel ? "reel" : "post"}" data-entity-id="${post.id}" aria-label="${post.liked ? "Unlike" : "Like"} ${post.reel ? "reel" : "post"}" aria-pressed="${post.liked}">♥</button>
+              <button class="like-btn ${post.liked ? "liked" : ""}" type="button" data-action="like" data-entity-type="${post.reel ? "reel" : "post"}" data-entity-id="${post.id}" aria-label="${post.liked ? "Unlike" : "Like"} ${post.reel ? "reel" : "post"}" aria-pressed="${Boolean(post.liked)}">${actionIcon('like')}</button>
               <button class="like-count-btn" type="button" data-action="show-likers" data-entity-type="${post.reel ? "reel" : "post"}" data-entity-id="${post.id}" aria-label="Show ${post.likes.toLocaleString()} people who liked this ${post.reel ? "reel" : "post"}">${formatCount(post.likes)}</button>
             </div>
-            <button class="comment-btn" type="button" data-action="comments" data-entity-type="${post.reel ? "reel" : "post"}" data-entity-id="${post.id}" aria-label="View ${post.comments} comments" aria-expanded="false">💬 ${post.comments}</button>
+            <button class="comment-btn" type="button" data-action="comments" data-entity-type="${post.reel ? "reel" : "post"}" data-entity-id="${post.id}" aria-label="View ${post.comments} comments" aria-expanded="false">${actionIcon('comment')}<span class="post-comment-count">${formatCount(post.comments)}</span></button>
             <button class="share-btn" type="button" data-action="share-post" data-entity-type="${post.reel ? "reel" : "post"}" data-entity-id="${post.id}" aria-label="Share ${escapeHtml(post.user)}'s ${post.reel ? "reel" : "post"}" title="Share with friends">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m0 0L7 8m5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" /></svg>
+              ${actionIcon('share')}
             </button>
             ${renderSaveButton(post.reel ? "reel" : "post", post)}
           </div>

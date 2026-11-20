@@ -57,6 +57,7 @@ test('tapping a Story mention opens a dismissible Visit profile action', async (
 
 test('Visit original story switches a repost viewer to the exact source Story', async () => {
     const app = await loadApp();
+    app.element('#welcome-screen').hidden = true;
     const { state } = app.exportsOf('src/core/state.js');
     const { currentUser } = app.exportsOf('src/data/sample-data.js');
     const source = state.stories.find(item => item.id === 'ari-story-mention-demo');

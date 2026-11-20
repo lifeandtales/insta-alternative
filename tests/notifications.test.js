@@ -49,7 +49,9 @@ test('notification types share one newest-first list and missing times sort last
     state.incomingFollowRequests=['@aribloom'];state.localApprovalNotices=[{recipient:currentUser.handle,createdAt:300}];
     state.localStoryNotifications=[{recipient:currentUser.handle,actor:'@aribloom',storyId:'older',createdAt:100},{recipient:currentUser.handle,actor:'@noahvale',storyId:'latest',createdAt:500}];
     const notifications=app.exportsOf('src/features/notifications.js'),items=notifications.availableLocalNotifications();
-    assert.equal(items[0].storyId,'latest');assert.equal(items[1].title,'Follow request approved');assert.equal(items[2].storyId,'older');assert.equal(items.at(-1).title,'Follow request');
+    assert.equal(items[0].storyId,'latest');assert.equal(items[1].title,'Follow request approved');assert.equal(items[2].storyId,'older');
+    notifications.openNotifications(app.element('.home-notifications'));
+    assert.match(app.element('.notifications-content').innerHTML, /data-story-notice="older"[\s\S]*Follow requests/);
 });
 
 test('notification ages switch from now to minutes, hours and days at the requested boundaries',async()=>{
@@ -99,13 +101,13 @@ test('likes group by exact content and unique people while mentions always remai
         notice('Ari','mention-a',600,{kind:'story-mention'}),notice('Noah','mention-a',650,{kind:'story-mention'}),notice('Ari','mention-b',700,{kind:'story-mention'})
     ];
     const items=notifications.availableLocalNotifications();
-    assert.equal(items.length,6);
+    assert.equal(items.length,7);
     const story=items.find(item=>item.storyId==='same');assert.equal(story.otherCount,4);assert.equal(story.actor,'Lena');assert.equal(story.createdAt,350);
     assert.equal(items.find(item=>item.storyId==='different').otherCount,0);
-    assert.equal(items.find(item=>item.kind==='post-like').otherCount,1);
+    assert.equal(items.filter(item=>item.kind==='post-like').length,2);
     assert.equal(items.filter(item=>item.kind==='story-mention').length,3);
-    notifications.updateNotificationBadge();assert.equal(app.element('.home-notifications .notification-badge').textContent,'6');
-    notifications.openNotifications(app.element('.home-notifications'));assert.match(app.element('.notifications-content').innerHTML,/\+4 others/);
+    notifications.updateNotificationBadge();assert.equal(app.element('.home-notifications .notification-badge').textContent,'7');
+    notifications.openNotifications(app.element('.home-notifications'));assert.match(app.element('.notifications-content').innerHTML,/Lena and 4 others liked your story/);
     assert.equal(app.element('.home-notifications .notification-badge').hidden,true);
 });
 
@@ -118,7 +120,7 @@ test('a new liker updates the existing card and unread count without duplicating
     assert.equal(app.element('.home-notifications .notification-badge').textContent,'1');
 });
 
-test('muting a chat hides its alert while preserving unread messages', async () => {
+test('unread chats stay in Messages even when a conversation is unmuted', async () => {
     const app = await loadApp();
     const { currentUser, conversations } = app.exportsOf('src/data/sample-data.js');
     const { availableLocalNotifications } = app.exportsOf('src/features/notifications.js');
@@ -131,5 +133,22 @@ test('muting a chat hides its alert while preserving unread messages', async () 
     assert.equal(hasAlert(), false);
     assert.equal(chat.unreadCount, 4);
     chat.muted = false;
-    assert.equal(hasAlert(), true);
+    assert.equal(hasAlert(), false);
+    assert.equal(chat.unreadCount, 4);
+});
+
+test('50 distinct likes collapse into a single post alert without mixing post and Reel identifiers', async () => {
+    const app = await loadApp();
+    const { groupLikeNotifications } = app.exportsOf('src/features/notifications.js');
+    const notices = Array.from({ length: 50 }, (_, index) => ({
+        recipient: 'owner', actor: 'viewer' + index, kind: 'post-like', entityType: 'post',
+        postId: 19, createdAt: 100 + index, read: index !== 49,
+    }));
+    notices.push({ ...notices[0] }, { ...notices[0], entityType: 'reel' });
+    const result = groupLikeNotifications(notices);
+    assert.equal(result.length, 2);
+    assert.equal(result[0].actor, 'viewer49');
+    assert.equal(result[0].otherCount, 49);
+    assert.equal(result[0].read, false);
+    assert.equal(result[1].entityType, 'reel');
 });

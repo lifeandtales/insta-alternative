@@ -5,6 +5,7 @@ import { currentUser, posts } from '../data/sample-data.js';
 import { mediaEdits } from '../features/post-media.js';
 import { getSupabaseClient } from './supabase.js';
 import { loadVideoEngagement } from './video-engagement.js';
+import { hydrateImageComments, imageCommentProjection } from './cloud-image-comments.js';
 
 const bucketName = 'post-images';
 const tableName = 'image_posts';
@@ -84,14 +85,18 @@ export async function loadCloudImagePosts(targetId = null, taggedHandle = null) 
     const author = 'author:profiles!image_posts_owner_id_fkey!inner(username,display_name,avatar_path)';
     const rows = '*, ' + author;
     const query = columns => client.from(tableName).select(columns);
-    const load = (columns, withLikes = false) => {
-        const request = (taggedHandle ? query(columns).contains('tags', [taggedHandle]) : query(columns).in('owner_id', scope))
+    const load = (columns, withLikes = false, withPreviews = false) => {
+        let request = (taggedHandle ? query(columns).contains('tags', [taggedHandle]) : query(columns).in('owner_id', scope))
             .order('created_at', { ascending: false }).limit(100);
+        if (withPreviews) request = request.order('created_at', { referencedTable: 'preview_comments', ascending: false })
+            .order('id', { referencedTable: 'preview_comments' }).limit(2, { referencedTable: 'preview_comments' });
         return withLikes ? request.eq('viewer_like.user_id', ownerId) : request;
     };
     const scope = targetId ? [targetId] : [ownerId, ...(state.cloudFollowingIds || [])];
     const withComments = rows + ', cloud_comments:image_post_comments(count)';
-    let result = await load(withComments + ', cloud_likes:image_post_likes(count), viewer_like:image_post_likes(user_id)', true);
+    const withLikes = withComments + ', cloud_likes:image_post_likes(count), viewer_like:image_post_likes(user_id)';
+    let result = await load(withLikes + ', preview_comments:image_post_comments(' + imageCommentProjection + ')', true, true);
+    if (result.error?.code === 'PGRST200') result = await load(withLikes, true);
     if (result.error?.code === 'PGRST200') result = await load(withComments);
     if (result.error?.code === 'PGRST200') result = await load(rows);
     const { data, error } = result;
@@ -120,7 +125,7 @@ export async function hydrateCloudImagePosts(client, data, ownerId) {
     if (signed.error) throw signed.error;
     const urls = new Map(signed.data.map(item => [item.path, item.signedUrl]));
     if (state.signedInAccountId !== ownerId) return [];
-    const avatars = await avatarLookup(client, data.map(row => row.author));
+    const avatars = await avatarLookup(client, data.flatMap(row => [row.author, ...(row.preview_comments || []).map(comment => comment.author)]));
     if (state.signedInAccountId !== ownerId) return [];
     const cloudPosts = [];
     const totals = new Map(engagement.posts.map(item => [`${item.owner}:${item.id}`, item]));
@@ -133,6 +138,7 @@ export async function hydrateCloudImagePosts(client, data, ownerId) {
         }));
         if (mediaItems.some(item => !item.url)) continue;
         const existing = posts.find(post => post.id === id && post.cloudImagePaths);
+        const commentPreviews = Array.isArray(row.preview_comments) ? hydrateImageComments(row.preview_comments, avatars, existing?.commentItems) : undefined;
         const viewTotal = totals.get(`${row.owner_id}:${row.client_id}`);
         const cover = mediaItems[row.cover_index] || mediaItems[0];
         const firstVideo = mediaItems.find(item => item.type === 'video');
@@ -149,7 +155,9 @@ export async function hydrateCloudImagePosts(client, data, ownerId) {
             mediaType: firstVideo ? 'video' : 'photo', videoUrl: firstVideo?.url, public: row.is_public,
             views: viewTotal?.views ?? existing?.views ?? 0, viewed: viewTotal?.viewed ?? false,
             mine, reel: false, followed: !mine && Boolean(state.cloudFollowingIds?.has(row.owner_id)),
-            likes: row.cloud_likes?.[0]?.count ?? 0, liked: Boolean(row.viewer_like?.length), comments: row.cloud_comments?.[0]?.count ?? existing?.comments ?? 0, commentItems: existing?.commentItems ?? [],
+            likes: row.cloud_likes?.[0]?.count ?? 0, liked: Boolean(row.viewer_like?.length), comments: row.cloud_comments?.[0]?.count ?? existing?.comments ?? 0,
+            commentItems: existing?.commentItems?.length ? existing.commentItems : commentPreviews || [],
+            commentPreviews,
         });
     }
     return cloudPosts;

@@ -2,6 +2,7 @@ import { enableAndroidPush } from './src/features/android-push.js';
 import { registerSignupValidation, resetSignupFeedback, pauseSignupValidation } from './src/features/signup-validation.js';
 import { readAuthEmail, checkSignupEmailResponse } from './src/features/auth-email.js';
 import { registerLiveEvents } from './src/features/live-broadcasts.js';
+import { registerCommunityEvents } from './src/features/communities.js';
 import { registerInAppCallControls } from './src/features/in-app-calls.js';
 import { loadCloudSavedKeys, subscribeToSavedChanges } from './src/storage/cloud-saved-items.js';
 import { subscribeToSocialUpdates } from './src/features/social-updates.js';
@@ -67,8 +68,8 @@ import { handleSharingClick } from './src/features/sharing.events.js';
 import { loadPreferences, persistPreferences } from './src/storage/preferences.js';
 import { registerDeletionLock, syncDeletionLock } from './src/core/account-lock.js';
 import { openMediaFromHash } from './src/core/media-links.js';
-import { registerNotificationEvents, updateNotificationBadge, syncIncomingPostMentions, syncIncomingStoryMentions } from './src/features/notifications.js';
-import { getSupabaseClient, setSupabaseSessionPersistence, startTemporarySupabaseSession } from './src/storage/supabase.js';
+import { registerNotificationEvents, updateNotificationBadge, syncIncomingPostMentions, syncIncomingStoryMentions, refreshHomeNotifications } from './src/features/notifications.js';
+import { getSupabaseClient, hasStoredSupabaseSession, setSupabaseSessionPersistence, startTemporarySupabaseSession } from './src/storage/supabase.js';
 import { ensureSupabaseProfile, profileDetails, signOutAccount } from './src/features/account-auth.js';
 import { registerStoryToolEvents } from './src/features/story-tools.js';
 import { registerStoryOptionEvents } from './src/features/story-options.js';
@@ -156,6 +157,7 @@ async function enterAccount(user, profile) {
     renderAccountIdentity();
     void enableAndroidPush({ sync: true }).catch(() => {});
     await loadAccountContent();
+    void refreshHomeNotifications().catch(() => {});
     void subscribeToSocialUpdates(user.id).catch(() => {});
     void subscribeToSavedChanges(user.id, refreshSavedState).catch(() => {});
     for (const form of welcomeForms) form.reset();
@@ -362,6 +364,7 @@ registerStoryShortcutEvents();
 registerCommentEvents();
 registerKeyboardEvents();
 registerMessageFormEvents();
+registerCommunityEvents();
 registerInAppCallControls();
 registerExploreSearchEvents();
 registerCommentComposerEvents();
@@ -373,11 +376,6 @@ registerStoryExportEvents();
 registerStoryOptionEvents();
 registerMediaUploadEvents();
 registerMediaLikeEvents();
-if (document.documentElement.classList.contains("mobile-splash-pending")) {
-    window.setTimeout(() => {
-        document.documentElement.classList.remove("mobile-splash-pending");
-    }, 1000);
-}
 const refreshShell = document.querySelector('.app-shell');
 registerHomePullToRefresh(refreshShell, document.getElementById('home-refresh-status'), async view => {
     try {
@@ -421,14 +419,20 @@ if (typeof window.setInterval === 'function') {
 }
 setView("home");
 if (demoContentEnabled) {
-    if (document.documentElement.classList.contains('auth-restoring')) welcomeScreen.hidden = false;
-    document.documentElement.classList.remove('auth-restoring');
+    if (document.documentElement.classList.contains('android-app')) {
+        welcomeScreen.hidden = true;
+        document.querySelector('.app-shell').hidden = false;
+        document.querySelector('.mobile-nav').hidden = false;
+    } else {
+        welcomeScreen.hidden = false;
+    }
     void loadAccountContent().then(() => openMediaFromHash());
 } else {
+    if (!hasStoredSupabaseSession()) welcomeScreen.hidden = false;
     void restoreAccount().catch(() => {
         welcomeScreen.hidden = false;
         showWelcomeForm('login', 'Sign in to connect to your account.');
-    }).finally(() => document.documentElement.classList.remove('auth-restoring', 'mobile-splash-pending'));
+    });
 }
 window.addEventListener?.('hashchange', () => openMediaFromHash());
 let localSaveTimer;

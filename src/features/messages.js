@@ -187,7 +187,7 @@ export function renderMessages({ preserveComposer = false, preserveHistoryAnchor
         `;
         }).join("")}
       </div>
-      ${state.signedInAccountId ? '<div class="messages-compose-footer"><button class="messages-community-button" type="button" data-open-communities aria-label="Communities">Community</button><button class="messages-compose-button" type="button" data-new-direct-message aria-label="New message" title="New message">＋</button></div>' : ''}
+      ${state.signedInAccountId ? '<div class="messages-compose-footer"><button class="messages-compose-button" type="button" data-new-direct-message aria-label="New message" title="New message">＋</button></div>' : ''}
       ${state.signedInAccountId ? (conversations.some(item => !item.cloudId || item.cloudHasMessages) ? '' : '<p class="messages-local-note">No messages yet.</p>') : '<p class="messages-local-note">Messages are saved on this device. Delivery and connected calls will be added later.</p>'}
     `;
         return;

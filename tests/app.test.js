@@ -152,7 +152,8 @@ test('Explore ranks public photo/video posts by views and labels hourly updates'
     const {state} = app.exportsOf('src/core/state.js');
     setView('explore');
     assert.deepEqual(Array.from(state.activeExplorePosts, post => post.id), [3, 5, 8, 2, 1, 4, 7]);
-    assert.match(app.element('#view-heading').textContent, /ranked by views.*updates hourly/);
+    assert.equal(app.element('#view-heading').textContent, 'Trending');
+    assert.equal(app.element('#explore-ranking-note').hidden, false);
     assert.ok(!state.activeExplorePosts.some(post => post.reel || !post.public));
     assert.ok(app.element('#explore-grid').innerHTML.includes('explore-view-count'));
 });

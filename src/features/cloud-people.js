@@ -55,7 +55,7 @@ export async function toggleCloudFollow(person) {
 export async function loadCloudFollowRequests() {
     const client = await getSupabaseClient();
     const { data, error } = await client.from('account_follows')
-        .select('follower_id, requester:profiles!account_follows_follower_id_fkey!inner(username,display_name)')
+        .select('follower_id, created_at, requester:profiles!account_follows_follower_id_fkey!inner(username,display_name)')
         .eq('followed_id', state.signedInAccountId).eq('status', 'requested')
         .order('created_at', { ascending: false }).limit(50);
     if (error) throw error;

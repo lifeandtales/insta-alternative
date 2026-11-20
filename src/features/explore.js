@@ -45,8 +45,10 @@ function scheduleHourlyRankingRefresh() {
 
 export function renderExplore() {
     const exploreGrid = document.getElementById("explore-grid");
+    const rankingNote = document.getElementById('explore-ranking-note');
     const hashtag = state.activeExploreFilter?.type === 'hashtag' ? state.activeExploreFilter.value : null;
     exploreCommunityView.classList.toggle('hashtag-results-page', Boolean(hashtag));
+    rankingNote.hidden = Boolean(state.activeExploreFilter || state.activeCommunityId);
     if (hashtag) {
         renderHashtagPage(hashtag);
         renderExploreSearchResults();
@@ -107,7 +109,7 @@ export function renderExplore() {
         viewHeading.textContent = state.activeExploreFilter ? state.activeExploreFilter.type === "hashtag"
             ? `#${state.activeExploreFilter.value} · ${publicPosts.length} public ${publicPosts.length === 1 ? "post" : "posts"}`
             : `${state.activeExploreFilter.value} · ${publicPosts.length} public ${publicPosts.length === 1 ? "post" : "posts"}`
-            : "Trending · ranked by views · updates hourly";
+            : "Trending";
     }
     observePostVideos(exploreGrid);
     renderExploreSearchResults();

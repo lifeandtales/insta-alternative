@@ -1,19 +1,26 @@
 <!DOCTYPE html>
-<html lang="en" class="auth-restoring">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>insta</title>
     <style>#welcome-screen[hidden] { display: none !important; }</style>
     <script>
-      if (window.matchMedia("(max-width: 860px)").matches) {
-        document.documentElement.classList.add("mobile-splash-pending");
+      const previewParams = new URLSearchParams(window.location.search);
+      const androidPreview = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname)
+        && previewParams.get("demo-fixtures") === "1"
+        && previewParams.get("preview") === "android";
+      if (window.location.origin === "https://appassets.androidplatform.net" || androidPreview) {
+        document.documentElement.classList.add("android-app");
       }
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
-    <link rel="stylesheet" href="styles.css?v=319" />
+    <link rel="stylesheet" href="styles.css?v=324" />
+    <link rel="stylesheet" href="styles/android-interface.css?v=323" />
+    <link rel="stylesheet" href="styles/creation-studio.css?v=323" />
+    <link rel="stylesheet" href="styles/home-notifications.css?v=323" />
   </head>
   <body>
     <main id="deletion-lock" class="welcome-screen" hidden aria-labelledby="deletion-lock-title">
@@ -111,9 +118,6 @@
         </aside>
       </div>
     </main>
-    <div class="splash-screen" role="img" aria-label="insta">
-      <span class="splash-logo">insta</span>
-    </div>
     <div class="app-shell" hidden>
       <aside class="sidebar">
         <div class="brand-block">
@@ -154,10 +158,12 @@
 
         <div id="account-access-notice" class="account-access-notice" role="status" hidden></div>
         <h2 class="view-heading" id="view-heading" hidden></h2>
+        <p id="explore-ranking-note" class="explore-ranking-note" hidden>Ranked by views · updates hourly</p>
         <header class="home-brand-header"><span class="home-brand-group"><span class="brand-mark" aria-hidden="true">i</span><span class="home-brand" aria-label="insta">insta</span></span>
         <button class="home-notifications" type="button" aria-label="Notifications" title="Notifications" aria-controls="notifications-page" aria-expanded="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
           <span class="notification-badge" aria-hidden="true" hidden></span>
+          <span class="notification-pulse" aria-hidden="true" hidden></span>
         </button></header>
 
         <section class="home-stories" aria-label="Stories">
@@ -202,6 +208,7 @@
       </aside>
     </div>
 
+    <button class="explore-community-button" type="button" data-open-communities aria-label="Communities" hidden>Community</button>
     <nav class="mobile-nav" aria-label="Main navigation" hidden>
       <button class="mobile-nav-item active" type="button" data-view="home" aria-label="Home" aria-current="page">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" /></svg>
@@ -378,9 +385,9 @@
         <div class="story-create-content">
           <div class="story-media-step">
           <div class="story-media-choices">
-          <button class="story-open-camera" type="button">Open camera</button>
-          <button type="button" class="story-go-live" data-go-live>Go Live</button>
-          <label class="story-upload-label" for="story-upload">Choose from files</label>
+          <button class="story-open-camera studio-source" type="button"><span class="studio-source-symbol" aria-hidden="true">◉</span><span><strong>Open camera</strong><small>Take a photo or record a video</small></span></button>
+          <button type="button" class="story-go-live studio-source" data-go-live><span class="studio-source-symbol" aria-hidden="true">◌</span><span><strong>Go Live</strong><small>Open the live session controls</small></span></button>
+          <label class="story-upload-label studio-source" for="story-upload"><span class="studio-source-symbol" aria-hidden="true">▧</span><span><strong>Choose from files</strong><small>Use a photo or video from your device</small></span></label>
           <input id="story-upload" type="file" accept=".jpg,.jpeg,.png,.gif,.webp,.avif,.heic,.heif,.bmp,.mp4,.webm,.mov,.m4v,.3gp,.ogv,image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif,image/bmp,video/mp4,video/webm,video/quicktime,video/x-m4v,video/3gpp,video/ogg" />
           <p class="story-picker-hint">Your device will ask you to choose photos or videos. insta can access only the item you select. Video Stories use only the first 4 minutes.</p>
           <button type="button" class="story-choose-drafts" aria-expanded="false" aria-controls="story-draft-picker">Choose from drafts</button>
@@ -481,6 +488,9 @@
           <button class="create-menu-option" type="button" data-create-type="post">
             <span aria-hidden="true">▧</span><strong>Post</strong><small>Share a photo or video</small>
           </button>
+          <button class="create-menu-option" type="button" data-create-type="story">
+            <span aria-hidden="true">◉</span><strong>Story</strong><small>Share a moment for 24 hours</small>
+          </button>
           <button class="create-menu-option" type="button" data-create-type="reel">
             <span aria-hidden="true">▶</span><strong>Reel</strong><small>Share a video</small>
           </button>
@@ -495,7 +505,7 @@
         </header>
         <div class="create-upload-content">
           <div class="create-picker-step">
-            <label class="create-upload-label" for="post-upload">Choose from gallery<input id="post-upload" type="file" multiple accept="image/*,video/*" /></label>
+            <label class="create-upload-label studio-source" for="post-upload"><span class="studio-source-symbol" aria-hidden="true">▧</span><span><strong>Choose from gallery</strong><small>Select a photo or video to start editing</small></span><input id="post-upload" type="file" multiple accept="image/*,video/*" /></label>
             <p class="create-file-selection" role="status"></p>
             <button type="button" class="primary-btn create-start-editing" disabled>Start editing</button>
           </div>
@@ -652,16 +662,16 @@
   "imports": {
     "./src/components/caption.js": "./src/components/caption.js?v=319",
     "./src/components/feedback.js": "./src/components/feedback.js?v=319",
-    "./src/components/post-card.js": "./src/components/post-card.js?v=320",
+    "./src/components/post-card.js": "./src/components/post-card.js?v=323",
     "./src/core/account-lock.js": "./src/core/account-lock.js?v=319",
-    "./src/core/dom.js": "./src/core/dom.js?v=319",
+    "./src/core/dom.js": "./src/core/dom.js?v=323",
     "./src/core/events.js": "./src/core/events.js?v=319",
     "./src/core/hashtags.js": "./src/core/hashtags.js?v=319",
     "./src/core/live-config.js": "./src/core/live-config.js?v=319",
     "./src/core/local-preview.js": "./src/core/local-preview.js?v=319",
     "./src/core/media-links.js": "./src/core/media-links.js?v=319",
     "./src/core/navigation.events.js": "./src/core/navigation.events.js?v=319",
-    "./src/core/navigation.js": "./src/core/navigation.js?v=320",
+    "./src/core/navigation.js": "./src/core/navigation.js?v=323",
     "./src/core/profile-links.js": "./src/core/profile-links.js?v=319",
     "./src/core/social.js": "./src/core/social.js?v=319",
     "./src/core/state.js": "./src/core/state.js?v=320",
@@ -672,20 +682,22 @@
     "./src/features/account-auth.js": "./src/features/account-auth.js?v=319",
     "./src/features/account-model.js": "./src/features/account-model.js?v=319",
     "./src/features/account-settings.js": "./src/features/account-settings.js?v=319",
+    "./src/features/admin-dashboard.js": "./src/features/admin-dashboard.js?v=318",
+    "./src/features/admin-users.js": "./src/features/admin-users.js?v=318",
     "./src/features/android-push.js": "./src/features/android-push.js?v=319",
     "./src/features/auth-email.js": "./src/features/auth-email.js?v=319",
     "./src/features/caption-suggestions.js": "./src/features/caption-suggestions.js?v=319",
     "./src/features/chat-attachment-expiry.js": "./src/features/chat-attachment-expiry.js?v=319",
     "./src/features/chat-wallpaper.js": "./src/features/chat-wallpaper.js?v=319",
     "./src/features/cloud-chat.js": "./src/features/cloud-chat.js?v=319",
-    "./src/features/cloud-people.js": "./src/features/cloud-people.js?v=319",
-    "./src/features/comments.events.js": "./src/features/comments.events.js?v=319",
-    "./src/features/comments.js": "./src/features/comments.js?v=319",
+    "./src/features/cloud-people.js": "./src/features/cloud-people.js?v=323",
+    "./src/features/comments.events.js": "./src/features/comments.events.js?v=323",
+    "./src/features/comments.js": "./src/features/comments.js?v=323",
     "./src/features/communities.js": "./src/features/communities.js?v=319",
-    "./src/features/create.events.js": "./src/features/create.events.js?v=319",
+    "./src/features/create.events.js": "./src/features/create.events.js?v=323",
     "./src/features/create.js": "./src/features/create.js?v=320",
-    "./src/features/explore.events.js": "./src/features/explore.events.js?v=319",
-    "./src/features/explore.js": "./src/features/explore.js?v=320",
+    "./src/features/explore.events.js": "./src/features/explore.events.js?v=323",
+    "./src/features/explore.js": "./src/features/explore.js?v=323",
     "./src/features/follows.events.js": "./src/features/follows.events.js?v=319",
     "./src/features/follows.js": "./src/features/follows.js?v=319",
     "./src/features/group-photo.js": "./src/features/group-photo.js?v=319",
@@ -695,14 +707,14 @@
     "./src/features/home.js": "./src/features/home.js?v=319",
     "./src/features/in-app-calls.js": "./src/features/in-app-calls.js?v=319",
     "./src/features/likes.events.js": "./src/features/likes.events.js?v=319",
-    "./src/features/likes.js": "./src/features/likes.js?v=320",
+    "./src/features/likes.js": "./src/features/likes.js?v=323",
     "./src/features/live-broadcasts.js": "./src/features/live-broadcasts.js?v=319",
     "./src/features/media-options.events.js": "./src/features/media-options.events.js?v=319",
     "./src/features/media-options.js": "./src/features/media-options.js?v=319",
     "./src/features/message-access.js": "./src/features/message-access.js?v=319",
-    "./src/features/messages.events.js": "./src/features/messages.events.js?v=319",
-    "./src/features/messages.js": "./src/features/messages.js?v=319",
-    "./src/features/notifications.js": "./src/features/notifications.js?v=319",
+    "./src/features/messages.events.js": "./src/features/messages.events.js?v=323",
+    "./src/features/messages.js": "./src/features/messages.js?v=323",
+    "./src/features/notifications.js": "./src/features/notifications.js?v=323",
     "./src/features/post-media.js": "./src/features/post-media.js?v=319",
     "./src/features/profile-scanner.js": "./src/features/profile-scanner.js?v=319",
     "./src/features/profile.events.js": "./src/features/profile.events.js?v=320",
@@ -713,9 +725,9 @@
     "./src/features/sharing.events.js": "./src/features/sharing.events.js?v=319",
     "./src/features/sharing.js": "./src/features/sharing.js?v=319",
     "./src/features/signup-validation.js": "./src/features/signup-validation.js?v=319",
-    "./src/features/social-updates.js": "./src/features/social-updates.js?v=319",
+    "./src/features/social-updates.js": "./src/features/social-updates.js?v=323",
     "./src/features/stories.events.js": "./src/features/stories.events.js?v=319",
-    "./src/features/stories.js": "./src/features/stories.js?v=319",
+    "./src/features/stories.js": "./src/features/stories.js?v=323",
     "./src/features/story-camera.js": "./src/features/story-camera.js?v=319",
     "./src/features/story-composition.js": "./src/features/story-composition.js?v=319",
     "./src/features/story-drafts.js": "./src/features/story-drafts.js?v=319",
@@ -737,22 +749,22 @@
     "./src/storage/browser-storage.js": "./src/storage/browser-storage.js?v=319",
     "./src/storage/cloud-avatars.js": "./src/storage/cloud-avatars.js?v=319",
     "./src/storage/cloud-highlights.js": "./src/storage/cloud-highlights.js?v=319",
-    "./src/storage/cloud-image-comments.js": "./src/storage/cloud-image-comments.js?v=319",
+    "./src/storage/cloud-image-comments.js": "./src/storage/cloud-image-comments.js?v=323",
     "./src/storage/cloud-image-likes.js": "./src/storage/cloud-image-likes.js?v=319",
     "./src/storage/cloud-reels.js": "./src/storage/cloud-reels.js?v=320",
     "./src/storage/cloud-saved-items.js": "./src/storage/cloud-saved-items.js?v=320",
     "./src/storage/cloud-stories.js": "./src/storage/cloud-stories.js?v=319",
-    "./src/storage/image-posts.js": "./src/storage/image-posts.js?v=320",
+    "./src/storage/image-posts.js": "./src/storage/image-posts.js?v=323",
     "./src/storage/live-broadcasts.js": "./src/storage/live-broadcasts.js?v=319",
     "./src/storage/local-session.js": "./src/storage/local-session.js?v=319",
     "./src/storage/preferences.js": "./src/storage/preferences.js?v=319",
     "./src/storage/remote-media-id.js": "./src/storage/remote-media-id.js?v=319",
-    "./src/storage/supabase.js": "./src/storage/supabase.js?v=319",
+    "./src/storage/supabase.js": "./src/storage/supabase.js?v=324",
     "./src/vendor/jsqr.js": "./src/vendor/jsqr.js?v=319",
     "./src/vendor/qrcode.js": "./src/vendor/qrcode.js?v=319"
   }
 }
     </script>
-    <script type="module" src="app.js?v=320"></script>
+    <script type="module" src="app.js?v=324"></script>
   </body>
 </html>

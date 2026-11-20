@@ -17,6 +17,14 @@ function currentAuthStorage() {
     return window.sessionStorage.getItem(sessionChoiceKey) === 'yes' ? window.sessionStorage : localStorage;
 }
 
+export function hasStoredSupabaseSession() {
+    try {
+        return Boolean(authStorage.getItem(storageKey));
+    } catch {
+        return false;
+    }
+}
+
 export function startTemporarySupabaseSession() {
     window.sessionStorage.setItem(sessionChoiceKey, 'yes');
 }

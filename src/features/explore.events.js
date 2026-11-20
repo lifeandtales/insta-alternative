@@ -33,7 +33,7 @@ export function handleExploreClick(event) {
         exploreSearchInput.setAttribute("aria-expanded", "false");
         return true;
     }
-    if (event.target.closest("[data-community-back]")) {
+    if (event.target.closest("#community-view [data-community-back]")) {
         state.activeCommunityId = null;
         state.activeExploreFilter = null;
         renderExplore();

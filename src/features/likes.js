@@ -118,7 +118,6 @@ function renderLikeState(type, entity) {
         button.setAttribute("aria-pressed", String(entity.liked));
         if (button.closest(".post-card")) {
             button.setAttribute("aria-label", `${entity.liked ? "Unlike" : "Like"} ${type}`);
-            button.textContent = "♥";
         }
         else {
             button.innerHTML = `♥ ${formatCount(entity.likes)}`;

@@ -4,6 +4,7 @@ import { showShareFeedback } from '../components/feedback.js';
 import { createMenuBackdrop, createUploadBackdrop } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { mayInteract } from '../core/social.js';
+import { openStoryCreator } from './stories.js';
 import {
     updateCreateScheduleMinimum, removeCreateMedia, syncCreateMediaSelection, dismissCreateExit, syncCreateCaptionPreview, finalizeCreateMedia, setCreateDetails, renderCreatePreview, saveCreateDraft, resumeCreateDraft, startCreateEditing, renderCreateTags, searchCreateTagAccounts,
     closeCreateMenu,
@@ -67,8 +68,15 @@ export function handleCreateUploadClick(event) {
     if (event.target.closest('.create-discard')) { closeCreateUpload(true); return true; }
     const createTypeButton = event.target.closest("[data-create-type]");
     if (createTypeButton) {
-        createMenuBackdrop.hidden = true;
-        openCreateUpload(createTypeButton.dataset.createType);
+        const type = createTypeButton.dataset.createType;
+        if (type === 'story') {
+            closeCreateMenu();
+            document.querySelector(state.createOriginView === 'profile' ? '.profile-create-button' : '.create-button')?.focus();
+            openStoryCreator();
+        } else {
+            createMenuBackdrop.hidden = true;
+            openCreateUpload(type);
+        }
         return true;
     }
     if (event.target.closest(".create-menu-close") || event.target === createMenuBackdrop) {

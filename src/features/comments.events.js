@@ -26,12 +26,13 @@ export function handleCommentClick(event) {
         }
         return true;
     }
-    const commentsButton = event.target.closest('[data-action="comments"]');
+    const commentsButton = event.target.closest('[data-action="comment-preview"]') ||
+        event.target.closest('[data-action="comments"]');
     if (commentsButton) {
         const type = commentsButton.dataset.entityType;
         const entity = findEntity(type, Number(commentsButton.dataset.entityId));
         if (entity && canViewMedia(entity))
-            openComments(type, entity, commentsButton);
+            openComments(type, entity, commentsButton, commentsButton.dataset.commentTarget);
         return true;
     }
     const commentLikeButton = event.target.closest('[data-action="like-comment"]');
