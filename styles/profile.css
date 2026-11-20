@@ -492,3 +492,20 @@
   .profile-section-tab { min-width: 0; gap: 4px; padding-inline: 2px; font-size: .76rem; }
   .profile-section-tab span { min-width: 0; padding-inline: 4px; }
 }
+
+.profile-reel-recovery {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--line, #d5ccd9);
+  border-radius: 14px;
+}
+
+.profile-reel-recovery p {
+  flex: 1 1 180px;
+  margin: 0;
+}

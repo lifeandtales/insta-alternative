@@ -11,6 +11,7 @@ export { profileUrl } from '../core/profile-links.js';
 import { persistPreferences } from '../storage/preferences.js';
 import { showHomePanel, closeHomePanel, openReportPanel } from './home-controls.js';
 
+import { publishStoredReels } from './create.js';
 import { persistSession } from '../storage/local-session.js';
 import { showShareFeedback } from '../components/feedback.js';
 import {
@@ -39,6 +40,24 @@ import {
 
 const profileReturnStack = [];
 export function handleProfileSectionClick(event) {
+    const publishReels = event.target.closest('[data-publish-stored-reels]');
+    if (publishReels) {
+        if (publishReels.disabled) return true;
+        const owner = state.signedInAccountId;
+        publishReels.disabled = true;
+        publishReels.textContent = 'Uploading Reels…';
+        void publishStoredReels().then(({ published, failed, failure }) => {
+            if (owner !== state.signedInAccountId) return;
+            if (state.currentView === 'profile' && state.profileHandle === currentUser.handle) renderProfile();
+            if (published && failed) showShareFeedback(`${published} published online. ${failed} still on this device. Tap Publish online to retry.`);
+            else if (published) showShareFeedback(`${published} ${published === 1 ? 'Reel' : 'Reels'} published online.`);
+            else if (failed) showShareFeedback(failure?.message || 'Could not publish Reels. Tap Publish online to retry.');
+        }).finally(() => {
+            publishReels.disabled = false;
+            publishReels.textContent = 'Publish online';
+        });
+        return true;
+    }
     const message = event.target.closest('[data-cloud-message]');
     if (message) {
         const person = cloudPerson(message.dataset.cloudMessage);

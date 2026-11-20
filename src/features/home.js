@@ -5,7 +5,7 @@ import { currentUser } from '../data/sample-data.js';
 import { accountIsPublic, canViewMedia, isFollowing, mediaKey } from '../core/social.js';
 
 export function getHomeFeedItems() {
-    const visible = [...posts, ...reels].filter(item => canViewMedia(item) &&
+    const visible = [...posts, ...reels].filter(item => (!state.signedInAccountId || !item.reel || item.cloudOwnerId) && canViewMedia(item) &&
         !state.hiddenPostKeys.has(mediaKey(item.reel ? 'reel' : 'post', item.id)) &&
         !state.mutedPostHandles.has(item.handle));
     const hasFollowing = Boolean(state.cloudFollowingIds?.size) || [...state.followedAccountHandles].some(handle => handle !== currentUser.handle) ||

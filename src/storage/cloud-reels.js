@@ -11,7 +11,9 @@ export const cloudReelProjection = 'id,owner_id,caption,audience,publish_at,meta
 
 export async function publishCloudReel(reel, id) {
     const owner = state.signedInAccountId;
+    if (!owner) throw new Error('Sign in to publish your Reel online.');
     const client = await getSupabaseClient();
+    if (owner !== state.signedInAccountId) throw new Error('Your account changed. Try again.');
     const bucket = client.storage.from('app-media');
     const prefix = `${owner}/${id}/`;
     const paths = [];
@@ -22,9 +24,10 @@ export async function publishCloudReel(reel, id) {
             if (!response.ok) throw new Error('Could not read the selected media.');
             const blob = await response.blob();
             if (!blob.type.startsWith(kind + '/')) throw new Error('Select supported media.');
+            if (kind === 'video' && blob.size > 50_000_000) throw new Error('This Reel exceeds the 50 MB upload limit.');
             const path = prefix + name;
             const { error } = await bucket.upload(path, blob, { contentType: blob.type });
-            if (error && String(error.statusCode) !== '409') throw error;
+            if (error && String(error.statusCode || error.status) !== '409') throw error;
             if (!error) paths.push(path);
             return blob.type;
         };
@@ -78,7 +81,11 @@ export async function loadCloudReels(targetId = null) {
     if (error) throw error;
     const fresh = await hydrateCloudReels(client, data, accountId);
     if (state.signedInAccountId !== accountId) return;
-    reels.splice(0, reels.length, ...reels.filter(reel => !reel.cloudOwnerId || (targetId && reel.cloudOwnerId !== targetId)), ...fresh);
+    const publishedIds = new Set(fresh.map(reel => reel.cloudContentId));
+    const retained = reels.filter(reel => reel.cloudOwnerId
+        ? targetId && reel.cloudOwnerId !== targetId
+        : !publishedIds.has(reel.pendingCloudId));
+    reels.splice(0, reels.length, ...retained, ...fresh);
 }
 
 

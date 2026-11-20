@@ -4,8 +4,8 @@ import { communities, currentUser } from '../data/sample-data.js';
 import { renderProfile } from '../features/profile.js';
 import { renderStories } from '../features/stories.js';
 
-export function accountStorageKey(key) {
-    return state.signedInAccountId ? `${key}:${state.signedInAccountId}` : key;
+export function accountStorageKey(key, accountId = state.signedInAccountId) {
+    return accountId ? `${key}:${accountId}` : key;
 }
 
 export function getSavedItemKey(type, id) {
@@ -62,13 +62,13 @@ export function persistJoinedCommunities() {
     }
 }
 
-export function openInstaDatabase() {
+export function openInstaDatabase(accountId = state.signedInAccountId) {
     return new Promise((resolve, reject) => {
         if (!window.indexedDB) {
             reject(new Error("IndexedDB is not available in this browser."));
             return;
         }
-        const request = window.indexedDB.open(accountStorageKey("insta-browser-data"), 1);
+        const request = window.indexedDB.open(accountStorageKey("insta-browser-data", accountId), 1);
         request.onupgradeneeded = () => {
             if (!request.result.objectStoreNames.contains("app-data")) {
                 request.result.createObjectStore("app-data");
@@ -125,8 +125,8 @@ export function restoreStoryMedia(story) {
     return unpack(story);
 }
 
-export async function storeInstaData(key, value) {
-    const database = await openInstaDatabase();
+export async function storeInstaData(key, value, accountId = state.signedInAccountId) {
+    const database = await openInstaDatabase(accountId);
     try {
         const transaction = database.transaction("app-data", "readwrite");
         const completed = waitForTransaction(transaction);

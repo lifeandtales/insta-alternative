@@ -17,7 +17,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
-    <link rel="stylesheet" href="styles.css?v=337" />
+    <link rel="stylesheet" href="styles.css?v=339" />
     <link rel="stylesheet" href="styles/android-interface.css?v=328" />
     <link rel="stylesheet" href="styles/creation-studio.css?v=323" />
     <link rel="stylesheet" href="styles/home-notifications.css?v=323" />
@@ -544,7 +544,7 @@
               <label for="create-location">Location</label><input id="create-location" maxlength="100" />
               <button type="button" class="create-detail-toggle" data-create-detail="music" aria-expanded="false" aria-controls="create-music-panel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l12-2v13M9 8l12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Music</button>
               <div id="create-music-panel" class="create-detail-panel" hidden><p>Music catalog is not connected yet. Licensed music selection will be added later.</p></div>
-              <button type="button" class="create-detail-toggle" data-create-detail="schedule" aria-expanded="false" aria-controls="create-schedule-panel"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-10 3v3h3"/></svg>Schedule post</button>
+              <button type="button" class="create-detail-toggle" data-create-detail="schedule" aria-expanded="false" aria-controls="create-schedule-panel"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-10 3v3h3"/></svg><span class="create-schedule-label">Schedule post</span></button>
               <div id="create-schedule-panel" class="create-detail-panel" hidden><label for="create-schedule">Date and time</label><input id="create-schedule" type="datetime-local" /><small class="create-schedule-note">Local preview: scheduled posts publish when this app is open, or the next time you open it.</small></div>
               <p class="create-upload-hint" role="status" hidden></p>
               <div class="create-editor-actions"><button class="primary-btn create-publish-button" type="button" disabled>Share post</button></div>
@@ -717,7 +717,7 @@
     "./src/features/comments.js": "./src/features/comments.js?v=326",
     "./src/features/communities.js": "./src/features/communities.js?v=319",
     "./src/features/create.events.js": "./src/features/create.events.js?v=323",
-    "./src/features/create.js": "./src/features/create.js?v=320",
+    "./src/features/create.js": "./src/features/create.js?v=339",
     "./src/features/explore.events.js": "./src/features/explore.events.js?v=323",
     "./src/features/explore.js": "./src/features/explore.js?v=336",
     "./src/features/follows.events.js": "./src/features/follows.events.js?v=319",
@@ -726,7 +726,7 @@
     "./src/features/highlights.events.js": "./src/features/highlights.events.js?v=319",
     "./src/features/highlights.js": "./src/features/highlights.js?v=319",
     "./src/features/home-controls.js": "./src/features/home-controls.js?v=319",
-    "./src/features/home.js": "./src/features/home.js?v=319",
+    "./src/features/home.js": "./src/features/home.js?v=339",
     "./src/features/group-calls.js": "./src/features/group-calls.js?v=334",
     "./src/features/group-creator.js": "./src/features/group-creator.js?v=334",
     "./src/features/in-app-calls.js": "./src/features/in-app-calls.js?v=334",
@@ -742,10 +742,10 @@
     "./src/features/notifications.js": "./src/features/notifications.js?v=323",
     "./src/features/post-media.js": "./src/features/post-media.js?v=329",
     "./src/features/profile-scanner.js": "./src/features/profile-scanner.js?v=319",
-    "./src/features/profile.events.js": "./src/features/profile.events.js?v=327",
-    "./src/features/profile.js": "./src/features/profile.js?v=327",
+    "./src/features/profile.events.js": "./src/features/profile.events.js?v=339",
+    "./src/features/profile.js": "./src/features/profile.js?v=339",
     "./src/features/reel-cover.js": "./src/features/reel-cover.js?v=319",
-    "./src/features/reels.js": "./src/features/reels.js?v=337",
+    "./src/features/reels.js": "./src/features/reels.js?v=339",
     "./src/features/saved.events.js": "./src/features/saved.events.js?v=319",
     "./src/features/sharing.events.js": "./src/features/sharing.events.js?v=335",
     "./src/features/sharing.js": "./src/features/sharing.js?v=335",
@@ -772,18 +772,18 @@
     "./src/media/post-photos.js": "./src/media/post-photos.js?v=329",
     "./src/media/video.events.js": "./src/media/video.events.js?v=335",
     "./src/media/video.js": "./src/media/video.js?v=335",
-    "./src/storage/browser-storage.js": "./src/storage/browser-storage.js?v=319",
+    "./src/storage/browser-storage.js": "./src/storage/browser-storage.js?v=339",
     "./src/storage/cloud-avatars.js": "./src/storage/cloud-avatars.js?v=319",
     "./src/storage/cloud-highlights.js": "./src/storage/cloud-highlights.js?v=319",
     "./src/storage/cloud-reposts.js": "./src/storage/cloud-reposts.js?v=327",
     "./src/storage/cloud-comments.js": "./src/storage/cloud-comments.js?v=326",
     "./src/storage/cloud-image-likes.js": "./src/storage/cloud-image-likes.js?v=319",
-    "./src/storage/cloud-reels.js": "./src/storage/cloud-reels.js?v=338",
+    "./src/storage/cloud-reels.js": "./src/storage/cloud-reels.js?v=339",
     "./src/storage/cloud-saved-items.js": "./src/storage/cloud-saved-items.js?v=326",
     "./src/storage/cloud-stories.js": "./src/storage/cloud-stories.js?v=335",
     "./src/storage/image-posts.js": "./src/storage/image-posts.js?v=327",
     "./src/storage/live-broadcasts.js": "./src/storage/live-broadcasts.js?v=319",
-    "./src/storage/local-session.js": "./src/storage/local-session.js?v=319",
+    "./src/storage/local-session.js": "./src/storage/local-session.js?v=339",
     "./src/storage/preferences.js": "./src/storage/preferences.js?v=319",
     "./src/storage/remote-media-id.js": "./src/storage/remote-media-id.js?v=319",
     "./src/storage/supabase.js": "./src/storage/supabase.js?v=324",

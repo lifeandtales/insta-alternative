@@ -123,6 +123,7 @@ export function dismissCreateExit() {
     if(dialog.open)dialog.close();dialog.hidden=true;
 }
 export function closeCreateUpload(discard = false) {
+    if (publishingMedia) return;
     if (!discard && state.createMediaItems.length && !document.querySelector('.create-editor-step').hidden) {
         hideCaptionSuggestions();
         const dialog=document.querySelector('.create-exit-dialog');dialog.hidden=false;
@@ -146,6 +147,66 @@ export function closeCreateUpload(discard = false) {
 let publishingMedia = false;
 const postPublishIds = new WeakMap();
 const reelPublishIds = new WeakMap();
+const storedReelUploads = new Set();
+
+async function requireReelPublishing() {
+    if (!state.signedInAccountId) throw new Error('Sign in to publish your Reel online.');
+    if (!await supportsCloudVideo()) throw new Error('Online Reel publishing is unavailable. Your video is ready to retry.');
+}
+
+export function getStoredReels() {
+    if (!state.signedInAccountId || !mayInteract()) return [];
+    return reels.filter(reel => reel.mine && reel.handle === currentUser.handle && !reel.cloudOwnerId &&
+        /^(blob:|data:video\/)/.test(reel.video || ''));
+}
+
+export async function publishStoredReels(items = getStoredReels()) {
+    const owner = state.signedInAccountId;
+    const available = new Set(getStoredReels());
+    const pending = items.filter(reel => available.has(reel) && !storedReelUploads.has(reel.id));
+    if (!pending.length) return { published: 0, failed: 0 };
+    pending.forEach(reel => storedReelUploads.add(reel.id));
+    let published = 0;
+    let failure;
+    try {
+        await requireReelPublishing();
+        for (const reel of pending) {
+            if (owner !== state.signedInAccountId || reel.handle !== currentUser.handle) break;
+            try {
+                // Keep the server ID before sending so an interrupted upload can be retried.
+                reel.pendingCloudId ||= crypto.randomUUID();
+                await persistSession();
+                if (owner !== state.signedInAccountId || reel.handle !== currentUser.handle) break;
+                const candidate = {
+                    ...reel,
+                    public: reel.public !== false && !currentUser.isPrivate,
+                    cover: reel.cover || reel.poster,
+                    mediaItems: reel.mediaItems?.length ? reel.mediaItems : [{ originalAudioMuted: reel.originalAudioMuted }],
+                };
+                await publishCloudReel(candidate, reel.pendingCloudId);
+                published++;
+                if (owner !== state.signedInAccountId) break;
+                const local = reels.find(item => item.id === reel.id && item.handle === reel.handle && !item.cloudOwnerId);
+                if (local) {
+                    if (reels.some(item => item.cloudContentId === candidate.cloudContentId)) reels.splice(reels.indexOf(local), 1);
+                    else {
+                        Object.assign(local, candidate);
+                        delete local.pendingCloudId;
+                    }
+                }
+                recordPostMentions(candidate);
+                await persistSession().catch(() => {});
+            } catch (error) {
+                failure ||= error;
+            }
+        }
+    } catch (error) {
+        failure = error;
+    } finally {
+        pending.forEach(reel => storedReelUploads.delete(reel.id));
+    }
+    return { published, failed: pending.length - published, failure };
+}
 
 export async function publishCreatedMedia() {
     if (publishingMedia) return;
@@ -175,7 +236,7 @@ async function publishPreparedMedia() {
     const createdAt = Date.now();
     let cloudPublished = false;
     let uploadVideo = false;
-    if (!scheduledAt && state.signedInAccountId && state.createFinalizedItems.some(item => item.type === 'video')) {
+    if (state.createMediaType !== 'reel' && !scheduledAt && state.signedInAccountId && state.createFinalizedItems.some(item => item.type === 'video')) {
         try { uploadVideo = await supportsCloudVideo(); }
         catch (error) { showShareFeedback(error.message || 'Could not connect to video publishing. Try again.'); return; }
     }
@@ -203,18 +264,35 @@ async function publishPreparedMedia() {
             reel: true,
             mine: true
         };
-        if (uploadVideo) {
-            const finalized = state.createFinalizedItems;
-            const attempt = reelPublishIds.get(finalized) || { id: crypto.randomUUID(), clientId: reel.id };
-            reelPublishIds.set(finalized, attempt);
-            reel.id = attempt.clientId;
-            const button = document.querySelector('.create-publish-button');
-            button.disabled = true;
-            try { await publishCloudReel(reel, attempt.id); cloudPublished = true; }
-            catch (error) { showShareFeedback(error.message || 'Could not publish this Reel. Try again.'); return; }
-            finally { button.disabled = false; }
+        const button = document.querySelector('.create-publish-button');
+        const hint = document.querySelector('.create-upload-hint');
+        const label = button.textContent;
+        const owner = state.signedInAccountId;
+        button.disabled = true;
+        button.textContent = scheduledAt ? 'Saving schedule…' : 'Uploading Reel…';
+        hint.textContent = button.textContent;
+        hint.hidden = false;
+        try {
+            await requireReelPublishing();
+            if (owner !== state.signedInAccountId) throw new Error('Your account changed. Try again.');
+            if (!scheduledAt) {
+                const finalized = state.createFinalizedItems;
+                const attempt = reelPublishIds.get(finalized) || { id: crypto.randomUUID(), clientId: reel.id };
+                reelPublishIds.set(finalized, attempt);
+                reel.id = attempt.clientId;
+                await publishCloudReel(reel, attempt.id);
+                cloudPublished = true;
+            }
+            hint.hidden = true;
+        } catch (error) {
+            hint.textContent = error.message || 'Could not publish this Reel. Try again.';
+            return;
+        } finally {
+            button.disabled = false;
+            button.textContent = label;
         }
-        if (scheduledAt) (state.scheduledPosts ??= []).push({type:'reel',item:reel,scheduledAt});
+        if (owner !== state.signedInAccountId) return;
+        if (scheduledAt) (state.scheduledPosts ??= []).push({type:'reel',item:reel,scheduledAt,online:true});
         else {
             if (!reels.some(item => item.id === reel.id)) reels.unshift(reel);
             recordPostMentions(reel);
@@ -269,9 +347,16 @@ async function publishPreparedMedia() {
             recordPostMentions(post);
         }
     }
-    state.draftItems = state.draftItems.filter(item => item.id !== state.activeDraftId);
+    const previousDrafts = state.draftItems;
+    state.draftItems = previousDrafts.filter(item => item.id !== state.activeDraftId);
     try { await persistSession(); }
     catch {
+        if (scheduledAt && state.createMediaType === 'reel') {
+            state.scheduledPosts = state.scheduledPosts.filter(entry => entry.item.id !== createdAt || entry.type !== 'reel');
+            state.draftItems = previousDrafts;
+            showShareFeedback('Could not save the Reel schedule. Try again.');
+            return;
+        }
         if (!cloudPublished) {
             showShareFeedback('Published on this screen, but storage failed. Keep this page open.');
             return;
@@ -292,7 +377,9 @@ async function publishPreparedMedia() {
         setView("home");
     }
     state.createOriginView = "";
-    showShareFeedback(scheduledAt ? `Your ${publishedType} is scheduled on this device.` : `Your ${publishedType} was shared to your profile.`);
+    showShareFeedback(publishedType === 'reel'
+        ? (scheduledAt ? 'Reel scheduled to publish online when the app is open.' : 'Your Reel was published online.')
+        : (scheduledAt ? 'Your post is scheduled on this device.' : 'Your post was shared to your profile.'));
 }
 
 export function getSupportedStoryFileType(file) {
@@ -342,9 +429,16 @@ export function updateCreateScheduleMinimum() {
     document.getElementById('create-schedule').min=new Date(next.getTime()-next.getTimezoneOffset()*60000).toISOString().slice(0,16);
 }
 export function setCreateDetails(details) {
-    if (!state.createMediaItems.length) return false;
+    if (!state.createMediaItems.length || publishingMedia) return false;
     state.createDetailsOpen = Boolean(details);
-    if(details)updateCreateScheduleMinimum();
+    if(details) {
+        updateCreateScheduleMinimum();
+        const isReel = state.createMediaType === 'reel';
+        document.querySelector('.create-schedule-label').textContent = isReel ? 'Schedule Reel' : 'Schedule post';
+        document.querySelector('.create-schedule-note').textContent = isReel
+            ? 'Publishes online at the scheduled time if the app is open, or the next time you open it.'
+            : 'Scheduled posts publish when this app is open, or the next time you open it.';
+    }
     else suspendReelCover();
     document.querySelector('.create-reel-cover').hidden=!details||state.createMediaType!=='reel';
     state.createFinalizedItems = details ? state.createMediaItems.map(item => ({...item})) : null;
@@ -526,12 +620,27 @@ async function createSquareCover(item) {
 let scheduledPostTimer = null;
 export function processScheduledPosts(now = Date.now()) {
     const due = (state.scheduledPosts || []).filter(entry => entry.scheduledAt <= now);
+    const onlineReels = [];
     for (const entry of due) {
         const target = entry.type === 'reel' ? reels : posts;
-        if (!target.some(item => item.id === entry.item.id)) { const published={...entry.item,createdAt:now};target.unshift(published);recordPostMentions(published); }
+        if (target.some(item => item.id === entry.item.id)) continue;
+        const item = { ...entry.item, createdAt: now };
+        target.unshift(item);
+        if (entry.type === 'post') recordPostMentions(item);
+        else if (entry.online) onlineReels.push(item);
     }
     state.scheduledPosts = (state.scheduledPosts || []).filter(entry => entry.scheduledAt > now);
-    if (due.length) { persistSession().catch(()=>showShareFeedback('Scheduled post published, but saving failed.')); setView(state.currentView); }
+    if (due.length) {
+        const owner = state.signedInAccountId;
+        void persistSession().then(async () => {
+            if (!onlineReels.length || owner !== state.signedInAccountId) return;
+            const result = await publishStoredReels(onlineReels);
+            if (owner !== state.signedInAccountId) return;
+            setView(state.currentView, { refresh: false });
+            if (result.failed) showShareFeedback('A scheduled Reel could not publish. Retry in Profile → Reels.');
+        }).catch(() => showShareFeedback('Could not save scheduled media. Keep this page open.'));
+        setView(state.currentView);
+    }
     armScheduledPosts();
     return due.length;
 }

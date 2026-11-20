@@ -31,13 +31,122 @@ test('Reel cover appears only after Next, requires confirmation, and keeps its s
 });
 
 
-test('publishing a Reel uses the confirmed thumbnail as its cover and poster',async()=>{
-    const app=await loadApp(),{state}=app.exportsOf('src/core/state.js'),{reels}=app.exportsOf('src/data/sample-data.js'),create=app.exportsOf('src/features/create.js'),cover=app.exportsOf('src/features/reel-cover.js');
-    create.openCreateUpload('reel');const item={type:'video',url:'test.mp4',ratio:'9/16',layout:'reel',naturalRatio:9/16};state.createMediaItems=[item];state.createMediaFile={type:'video/mp4'};state.createMediaUrl=item.url;create.startCreateEditing();create.setCreateDetails(true);
-    const data='data:image/jpeg;base64,confirmed';state.createReelThumbnail={signature:cover.reelCoverSignature(item),data};
-    await create.publishCreatedMedia();assert.equal(reels[0].cover,data);assert.equal(reels[0].poster,data);assert.equal(reels[0].video,'test.mp4');
+function mockReelCloud(app, rpc) {
+    const uploads = [];
+    const stored = [];
+    const createElement = app.document.createElement;
+    app.document.createElement = tag => Object.assign(createElement(tag), { remove() {} });
+    app.document.head = { append: script => script.onload() };
+    app.context.crypto = { randomUUID: () => 'e2540ba5-4595-44a1-bd16-0ca6fe7cdf75' };
+    app.context.fetch = fetch;
+    app.context.window.supabase = { createClient: () => ({
+        rpc,
+        storage: { from: () => ({
+            upload: async (path, blob) => { uploads.push({ path, type: blob.type }); return {}; },
+            remove: async () => ({}),
+        }) },
+    }) };
+    app.context.window.indexedDB = {
+        open(name) {
+            const request = { result: {
+                close() {},
+                transaction() {
+                    const transaction = { objectStore: () => ({ put(value, key) {
+                        stored.push({ name, key, value: structuredClone(value) });
+                        queueMicrotask(() => transaction.oncomplete());
+                    } }) };
+                    return transaction;
+                },
+            } };
+            queueMicrotask(() => request.onsuccess());
+            return request;
+        },
+    };
+    return { uploads, stored };
+}
+
+test('Reel publishing retains the editor on missing backend and shares the selected cover only after cloud confirmation', async () => {
+    const app = await loadApp();
+    const { state } = app.exportsOf('src/core/state.js');
+    const { reels } = app.exportsOf('src/data/sample-data.js');
+    const create = app.exportsOf('src/features/create.js');
+    const { reelCoverSignature } = app.exportsOf('src/features/reel-cover.js');
+    const video = 'data:video/mp4;base64,AAAA';
+    const cover = 'data:image/jpeg;base64,AAAA';
+    state.signedInAccountId = 'owner';
+    let ready = false;
+    let confirmPublish;
+    const { uploads } = mockReelCloud(app, async (name, payload) => {
+        if (name === 'video_engagement') return ready ? {} : { error: { code: 'PGRST202' } };
+        assert.equal(name, 'publish_video_reel');
+        assert.equal(payload.video_mime, 'video/mp4');
+        assert.equal(payload.cover_mime, 'image/jpeg');
+        return new Promise(resolve => { confirmPublish = resolve; });
+    });
+    create.openCreateUpload('reel');
+    const item = { type: 'video', url: video, ratio: '9/16', layout: 'reel', naturalRatio: 9 / 16 };
+    state.createMediaItems = [item];
+    state.createMediaFile = { type: 'video/mp4' };
+    state.createMediaUrl = video;
+    create.startCreateEditing();
+    create.setCreateDetails(true);
+    state.createReelThumbnail = { signature: reelCoverSignature(item), data: cover };
+    const previousCount = reels.length;
+
+    await create.publishCreatedMedia();
+    assert.match(app.element('.create-upload-hint').textContent, /publishing is unavailable/);
+    assert.equal(app.element('.create-upload-backdrop').hidden, false);
+    assert.equal(reels.length, previousCount);
+    assert.equal(uploads.length, 0);
+
+    ready = true;
+    const publishing = create.publishCreatedMedia();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.match(app.element('.create-publish-button').textContent, /Uploading Reel/);
+    assert.equal(reels.length, previousCount);
+    assert.deepEqual(uploads.map(upload => upload.type), ['video/mp4', 'image/jpeg']);
+    confirmPublish({});
+    await publishing;
+    assert.equal(reels[0].cloudOwnerId, 'owner');
+    assert.equal(reels[0].cover, cover);
+    assert.equal(reels[0].poster, cover);
+    assert.equal(reels[0].video, video);
+    assert.match(app.element('#share-feedback').textContent, /published online/);
 });
 
+test('stored Reels remain retryable, keep their cloud ID and publish only for their owner with current privacy', async () => {
+    const app = await loadApp();
+    const { state } = app.exportsOf('src/core/state.js');
+    const { reels, currentUser } = app.exportsOf('src/data/sample-data.js');
+    const { getStoredReels, publishStoredReels } = app.exportsOf('src/features/create.js');
+    const targets = [];
+    const { stored } = mockReelCloud(app, async (name, payload) => {
+        if (name === 'video_engagement') return {};
+        targets.push(payload);
+        return targets.length === 1 ? { error: { message: 'Request interrupted' } } : {};
+    });
+    state.signedInAccountId = 'owner';
+    currentUser.isPrivate = true;
+    const reel = {
+        id: 201, handle: currentUser.handle, mine: true, public: true, reel: true,
+        video: 'data:video/mp4;base64,AAAA', poster: 'data:image/jpeg;base64,AAAA',
+    };
+    reels.push(reel, { ...reel, id: 202, handle: '@anotheraccount' });
+    assert.deepEqual(Array.from(getStoredReels(), item => item.id), [201]);
+
+    const interrupted = await publishStoredReels();
+    assert.equal(interrupted.failed, 1);
+    assert.ok(!reel.cloudOwnerId);
+    assert.equal(stored[0].name, 'insta-browser-data:owner');
+    assert.equal(stored[0].value.reels.find(item => item.id === 201).pendingCloudId, targets[0].target);
+
+    const retry = await publishStoredReels();
+    assert.equal(retry.published, 1);
+    assert.equal(reel.cloudOwnerId, 'owner');
+    assert.equal(targets[1].target, targets[0].target);
+    assert.equal(targets[1].reel_audience, 'followers');
+    assert.equal(getStoredReels().length, 0);
+});
 
 test('nearby samples show six earlier and six later moments without scanning the whole clip',async()=>{
     const app=await loadApp(),{nearbyFrameTimes}=app.exportsOf('src/features/reel-cover.js');const times=nearbyFrameTimes(30,60);

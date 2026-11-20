@@ -17,6 +17,7 @@ import { findEntity } from '../data/entities.js';
 import { currentUser, posts, reels } from '../data/sample-data.js';
 import { getSearchableAccounts } from './explore.js';
 import { isAccountFollowed } from './follows.js';
+import { getStoredReels } from './create.js';
 import { renderProfileHighlights } from './highlights.js';
 import { getSavedItemKey, persistSavedItems } from '../storage/browser-storage.js';
 import { canViewMedia, canViewAccount, getAccount, visibleAvatar, mediaNeedsWarning, mayInteract } from '../core/social.js';
@@ -170,6 +171,7 @@ export function renderProfile() {
     const taggedPosts = accessible ? profileTaggedPosts() : [];
     const taggedReels = reels.filter((reel) => accessible && canViewMedia(reel) && (reel.taggedUsers || []).some(handle => normalizeHandle(handle) === normalizeHandle(state.profileHandle)));
     const isOwnProfile = state.profileHandle === currentUser.handle;
+    const storedReels = isOwnProfile ? getStoredReels().length : 0;
     if(state.activeProfileSection==='drafts')state.activeProfileSection='posts';
     const count = user.postCount ?? (accessible ? ownPosts.length : '—');
     const savedCollection = getSavedCollection();
@@ -229,6 +231,10 @@ export function renderProfile() {
       </div>
     </section>
     <section class="profile-section-content" data-profile-content="reels" ${state.activeProfileSection === "reels" ? "" : "hidden"}>
+      ${storedReels ? `<div class="profile-reel-recovery">
+        <p>${storedReels} ${storedReels === 1 ? 'Reel is' : 'Reels are'} saved on this device and waiting to publish.</p>
+        <button class="primary-btn" type="button" data-publish-stored-reels>Publish online</button>
+      </div>` : ''}
       <div class="media-grid profile-media-grid">
         ${ownReels.length ? ownReels.map((reel) => `<article class="profile-media-tile" data-profile-media-type="reel" data-profile-media-id="${reel.id}" tabindex="0" role="button" aria-label="View ${escapeHtml(reel.user)}'s reel">${renderProfileMedia("reel", reel)}</article>`).join("") : '<p class="empty-profile-posts">No reels yet.</p>'}
       </div>

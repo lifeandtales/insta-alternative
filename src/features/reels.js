@@ -42,7 +42,7 @@ function authorizedReel(reel) {
 // Trending has 70% influence; recency has 30%. Scores normalize views,
 // watch-time per view, and likes against the current public Reel set.
 export function rankRecommendedReels(items = reels, now = Date.now()) {
-  const eligible = items.filter(reel => publicReel(reel) && canViewMedia(reel));
+  const eligible = items.filter(reel => (!state.signedInAccountId || reel.cloudOwnerId) && publicReel(reel) && canViewMedia(reel));
   if (!eligible.length) return [];
   const maxViews = Math.max(1, ...eligible.map(reel => Number(reel.views) || 0));
   const maxWatch = Math.max(1, ...eligible.map(reel => (Number(reel.watchTimeSeconds) || (Number(reel.views) || 0) * 4) / Math.max(1, Number(reel.views) || 0)));

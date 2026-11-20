@@ -34,15 +34,17 @@ export function unexpiredDrafts(items, now = Date.now()) {
     return items.filter(item => Number.isFinite(item.savedAt) && now - item.savedAt < WEEK);
 }
 export function persistSession() {
+    const accountId = state.signedInAccountId ?? null;
     const snapshot = { posts: posts.filter(item => !item.cloudOwnerId || item.mine), reels: reels.filter(item => !item.cloudOwnerId), conversations: conversations.filter(item => !item.cloudId), deletedChatMentionIds: [...state.deletedChatMentionIds], scheduledPosts: state.scheduledPosts || [], drafts: unexpiredDrafts(state.draftItems), reports: state.localReports || [], notificationPreviews: (state.localStoryNotifications||[]).filter(notice=>notice.storyPreview).map(({storyId,postId,recipient,storyPreview})=>({storyId,postId,recipient,storyPreview})) };
     // Pack before the editor releases any object URLs; serialize database writes in order.
     const packed = pack(snapshot);
-    writeQueue = writeQueue.catch(() => {}).then(async () => storeInstaData(KEY, await packed));
+    writeQueue = writeQueue.catch(() => {}).then(async () => storeInstaData(KEY, await packed, accountId));
     return writeQueue;
 }
 export async function loadSession() {
+    const accountId = state.signedInAccountId;
     await writeQueue.catch(() => {});
-    const db = await openInstaDatabase();
+    const db = await openInstaDatabase(accountId);
     let saved;
     try {
         const tx = db.transaction('app-data', 'readonly');
@@ -50,7 +52,7 @@ export async function loadSession() {
         saved = await waitForRequest(tx.objectStore('app-data').get(KEY));
         await completed;
     } finally { db.close(); }
-    if (!saved) return;
+    if (!saved || accountId !== state.signedInAccountId) return;
     const restored = unpack(saved);
     const demoContentRemoved = removeDemoContent(restored);
     for (const [target, key] of [[posts, 'posts'], [reels, 'reels'], [conversations, 'conversations']]) {
