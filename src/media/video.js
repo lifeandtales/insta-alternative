@@ -6,6 +6,7 @@ import { openProfileMedia } from '../features/profile.js';
 import { reels as reelItems } from '../data/sample-data.js';
 import { findEntity } from '../data/entities.js';
 import { canViewMedia, mediaNeedsWarning } from '../core/social.js';
+import { observeQualifiedVideoView } from './video-views.js';
 
 export function canPlayInlineVideo(video) {
     if (state.deletionRequestedAt || !video || video.closest('.reel-gated')) return false;
@@ -18,6 +19,7 @@ export function canPlayInlineVideo(video) {
 
 export function observePostVideos(container) {
     container.querySelectorAll(".likeable-media video").forEach((video) => {
+        observeQualifiedVideoView(video, canPlayInlineVideo);
         if (video.dataset.originalAudioMuted === 'true' && !video.dataset.originalMuteBound) {
             video.dataset.originalMuteBound = 'true'; video.muted = true;
             video.addEventListener('volumechange', () => { if (!video.muted) video.muted = true; });
@@ -36,8 +38,6 @@ export function observePostVideos(container) {
             video.addEventListener('playing', () => {
                 updatePlaybackControl(); lastMediaTime = video.currentTime;
                 document.querySelectorAll('.reel-card video').forEach(other => { if (other !== video) other.pause(); });
-                const id = Number(card.dataset.reelId), item = reelItems.find(value => value.id === id);
-                if (item && !state.reelViewedIds.has(id)) { state.reelViewedIds.add(id); item.views = (item.views || 0) + 1; }
             });
             video.addEventListener('timeupdate', () => {
                 const elapsed = video.currentTime - lastMediaTime; lastMediaTime = video.currentTime;
@@ -202,6 +202,9 @@ export function endVideoHold() {
 let postVideoObserver = null;
 
 export function initializeVideoObserver() {
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) document.querySelectorAll('.likeable-media video').forEach(video => video.pause());
+    });
     postVideoObserver = "IntersectionObserver" in window
         ? new IntersectionObserver((entries) => {
             entries.forEach((entry) => {

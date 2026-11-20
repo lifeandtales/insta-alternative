@@ -13,7 +13,7 @@ const HOUR_MS = 60 * 60 * 1000;
 
 function postViews(post) {
     const demoCount = demoViewCounts.get(post.id);
-    return Math.max(0, Number(demoCount ?? post.views ?? post.viewCount ?? 0) || 0);
+    return Math.max(0, Number(post.views ?? demoCount ?? post.viewCount ?? 0) || 0);
 }
 
 function getHourlyTrendingPosts(publicPosts) {

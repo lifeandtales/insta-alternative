@@ -2,6 +2,7 @@ import { cloudPerson, fetchSocialConnections } from './cloud-people.js';
 import { loadCloudChat, openCloudChat } from './cloud-chat.js';
 import { renderMessages } from './messages.js';
 import { deleteCloudImagePost, updateCloudImagePost } from '../storage/image-posts.js';
+import { deleteCloudReel, updateCloudReelCaption } from '../storage/cloud-reels.js';
 import { openProfileScanner, registerProfileScannerEvents } from './profile-scanner.js';
 import qrcode from '../vendor/qrcode.js';
 import { profileUrl } from '../core/profile-links.js';
@@ -167,6 +168,10 @@ export function registerProfileEditorEvents() {
             try { await updateCloudImagePost(entity, { location, caption }); }
             catch { showShareFeedback('Could not save your post changes. Try again.'); return; }
         }
+        if (entity.reel && entity.cloudContentId) {
+            try { await updateCloudReelCaption(entity, caption); }
+            catch { showShareFeedback('Could not save your Reel changes. Try again.'); return; }
+        }
         entity.location = location;
         entity.caption = caption;
         const coverFile = document.getElementById('media-edit-cover').files?.[0];
@@ -189,6 +194,10 @@ export function registerProfileEditorEvents() {
         if (entity?.cloudImagePaths && entity.handle === currentUser.handle) {
             try { await deleteCloudImagePost(entity); }
             catch { showShareFeedback('Could not delete the saved post. Try again.'); return; }
+        }
+        if (entity?.reel && entity.cloudContentId && entity.handle === currentUser.handle) {
+            try { await deleteCloudReel(entity); }
+            catch { showShareFeedback('Could not delete the Reel. Try again.'); return; }
         }
         closeMediaDeleteConfirmation();
         if (!deleteProfileMedia(type, id, {fromHome:origin==='home'})) {

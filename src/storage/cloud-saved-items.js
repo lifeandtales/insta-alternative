@@ -5,7 +5,7 @@ import { hydrateCloudReels } from './cloud-reels.js';
 
 const activeRows = 'item_key,updated_at';
 const imageColumns = '*,author:profiles!image_posts_owner_id_fkey!inner(username,display_name,avatar_path),cloud_comments:image_post_comments(count),cloud_likes:image_post_likes(count),viewer_like:image_post_likes(user_id)';
-const reelColumns = 'id,owner_id,caption,publish_at,metadata,author:profiles!inner(username,display_name,avatar_path),assets:media_assets(object_path,mime_type,position)';
+const reelColumns = 'id,owner_id,caption,audience,publish_at,metadata,author:profiles!inner(username,display_name,avatar_path),assets:media_assets(object_path,mime_type,position)';
 let snapshotRequest = 0;
 let collectionRequest = 0;
 let subscribedOwner;

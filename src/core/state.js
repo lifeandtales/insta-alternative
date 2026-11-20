@@ -93,7 +93,6 @@ Object.assign(state, {
     deletionRequestedAt: null,
     revealedMediaKeys: new Set(),
     reelMuted: false,
-    reelViewedIds: new Set(),
     hourlyExploreIds: null,
     exploreRankingHour: null,
     exploreRankingTimer: 0,

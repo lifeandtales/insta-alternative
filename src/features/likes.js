@@ -1,5 +1,6 @@
 import { showShareFeedback } from '../components/feedback.js';
 import { readImagePostLikers, setImagePostLike } from '../storage/cloud-image-likes.js';
+import { setCloudReelLike } from '../storage/video-engagement.js';
 import { likersBackdrop, likersList } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { escapeHtml, formatCount } from '../core/utils.js';
@@ -83,10 +84,15 @@ const pendingLikes = new Set();
 
 export function setEntityLiked(type, entity, isLiked) {
     if (!mayInteract() || !canViewMedia(entity)) return;
-    if (type === 'post' && entity.cloudClientId) {
-        if (pendingLikes.has(entity.id)) return;
-        pendingLikes.add(entity.id);
-        return setImagePostLike(entity, isLiked).then(({ liked, count }) => {
+    const save = type === 'post' && entity.cloudClientId ? setImagePostLike
+        : type === 'reel' && entity.cloudContentId ? setCloudReelLike : null;
+    if (save) {
+        const owner = state.signedInAccountId;
+        const key = `${owner}:${type}:${entity.id}`;
+        if (pendingLikes.has(key)) return;
+        pendingLikes.add(key);
+        return save(entity, isLiked).then(({ liked, count }) => {
+            if (owner !== state.signedInAccountId) return;
             const current = findEntity(type, entity.id);
             if (!current) return;
             current.liked = liked;
@@ -94,7 +100,7 @@ export function setEntityLiked(type, entity, isLiked) {
             renderLikeState(type, current);
             void refreshOpenImageLikers().catch(() => {});
         }).catch(() => showShareFeedback('Could not save the like. Try again.'))
-            .finally(() => pendingLikes.delete(entity.id));
+            .finally(() => pendingLikes.delete(key));
     }
     if (Boolean(entity.liked) === isLiked) return;
     entity.liked = isLiked;

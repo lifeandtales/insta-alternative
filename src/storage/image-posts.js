@@ -4,18 +4,20 @@ import { state } from '../core/state.js';
 import { currentUser, posts } from '../data/sample-data.js';
 import { mediaEdits } from '../features/post-media.js';
 import { getSupabaseClient } from './supabase.js';
+import { loadVideoEngagement } from './video-engagement.js';
 
 const bucketName = 'post-images';
 const tableName = 'image_posts';
 
-function imageSettings(item) {
+function postMediaSettings(item) {
     return {
         ...mediaEdits(item),
         fit: item.fit === 'cover' ? 'cover' : 'contain',
         x: Number.isFinite(item.x) ? item.x : 50,
         y: Number.isFinite(item.y) ? item.y : 50,
         layout: 'post',
-        type: 'image',
+        type: item.type === 'video' ? 'video' : 'image',
+        naturalRatio: Number.isFinite(item.naturalRatio) ? item.naturalRatio : undefined,
     };
 }
 
@@ -29,7 +31,7 @@ export async function publishImagePost(post, { retry = false } = {}) {
         const result = await client.from(tableName).select('items').eq('owner_id', ownerId).eq('client_id', post.id).maybeSingle();
         if (result.error) throw result.error;
         if (result.data) {
-            post.cloudImagePaths = result.data.items.map(item => item.path);
+            post.cloudImagePaths = result.data.items.flatMap(item => [item.path, item.cover_path].filter(Boolean));
             return;
         }
     }
@@ -40,15 +42,24 @@ export async function publishImagePost(post, { retry = false } = {}) {
         const uploadId = crypto.randomUUID();
         for (const [index, item] of post.mediaItems.entries()) {
             const response = await fetch(item.url);
-            if (!response.ok) throw new Error('Could not read the selected image.');
-            const image = await response.blob();
-            if (!image.type.startsWith('image/')) throw new Error('Select a supported image.');
+            if (!response.ok) throw new Error('Could not read the selected media.');
+            const file = await response.blob();
+            if (!file.type.startsWith(item.type === 'video' ? 'video/' : 'image/')) throw new Error('Select supported media.');
             const path = `${ownerId}/${uploadId}/${index}`;
-            const uploaded = await bucket.upload(path, image, { contentType: image.type });
+            const uploaded = await bucket.upload(path, file, { contentType: file.type });
             if (uploaded.error) throw uploaded.error;
             paths.push(path);
-            items.push({ path, settings: imageSettings(item) });
+            items.push({ path, settings: postMediaSettings(item), duration_seconds: item.duration });
         }
+        if (post.cover && items.some(item => item.settings.type === 'video')) {
+            const cover = await (await fetch(post.cover)).blob();
+            const coverPath = `${ownerId}/${uploadId}/cover`;
+            const upload = await bucket.upload(coverPath, cover, { contentType: cover.type });
+            if (upload.error) throw upload.error;
+            paths.push(coverPath);
+            items[0].cover_path = coverPath;
+        }
+        if (ownerId !== state.signedInAccountId) throw new Error('Your account changed. Try again.');
         writingRow = true;
         const { error } = await client.from(tableName).insert({
             owner_id: ownerId, client_id: post.id, caption: post.caption, location: post.location,
@@ -99,32 +110,44 @@ export async function loadCloudImagePosts(targetId = null, taggedHandle = null) 
 
 export async function hydrateCloudImagePosts(client, data, ownerId) {
     const bucket = client.storage.from(bucketName);
-    const paths = [...new Set(data.flatMap(row => row.items.map(item => item.path)))];
-    const signed = paths.length ? await bucket.createSignedUrls(paths, 3600) : { data: [] };
+    const paths = [...new Set(data.flatMap(row => row.items.flatMap(item => [item.path, item.cover_path].filter(Boolean))))];
+    const videoTargets = data.filter(row => row.items.some(item => item.settings?.type === 'video'))
+        .map(row => ({ owner: row.owner_id, id: row.client_id }));
+    const [signed, engagement] = await Promise.all([
+        paths.length ? bucket.createSignedUrls(paths, 3600) : { data: [] },
+        loadVideoEngagement(client, { posts: videoTargets }),
+    ]);
     if (signed.error) throw signed.error;
     const urls = new Map(signed.data.map(item => [item.path, item.signedUrl]));
     if (state.signedInAccountId !== ownerId) return [];
     const avatars = await avatarLookup(client, data.map(row => row.author));
     if (state.signedInAccountId !== ownerId) return [];
     const cloudPosts = [];
+    const totals = new Map(engagement.posts.map(item => [`${item.owner}:${item.id}`, item]));
     for (const row of data) {
         const mine = row.owner_id === ownerId;
         const author = rememberCloudPerson({ ...row.author, id: row.owner_id }, avatars);
         const id = mine ? row.client_id : remoteMediaId(row.owner_id + ':' + row.client_id);
         const mediaItems = row.items.map(item => ({
-            ...imageSettings(item.settings || {}), url: urls.get(item.path),
+            ...postMediaSettings(item.settings || {}), duration: item.duration_seconds, url: urls.get(item.path),
         }));
         if (mediaItems.some(item => !item.url)) continue;
         const existing = posts.find(post => post.id === id && post.cloudImagePaths);
+        const viewTotal = totals.get(`${row.owner_id}:${row.client_id}`);
+        const cover = mediaItems[row.cover_index] || mediaItems[0];
+        const firstVideo = mediaItems.find(item => item.type === 'video');
         cloudPosts.push({
             ...existing,
             id, handle: mine ? currentUser.handle : author.handle,
             user: mine ? currentUser.name : author.name,
             avatar: mine ? currentUser.avatar : author.avatar,
             caption: row.caption, location: row.location, taggedUsers: row.tags, taggedHandles: row.tags,
-            media: mediaItems[0].url, cover: mediaItems[row.cover_index]?.url || mediaItems[0].url,
-            coverIndex: row.cover_index, mediaItems, cloudImagePaths: row.items.map(item => item.path),
-            cloudOwnerId: row.owner_id, cloudClientId: row.client_id, createdAt: Date.parse(row.created_at), mediaType: 'photo', public: row.is_public,
+            media: mediaItems[0].url,
+            cover: urls.get(row.items[0].cover_path) || (cover.type === 'image' ? cover.url : existing?.cover),
+            coverIndex: row.cover_index, mediaItems, cloudImagePaths: row.items.flatMap(item => [item.path, item.cover_path].filter(Boolean)),
+            cloudOwnerId: row.owner_id, cloudClientId: row.client_id, createdAt: Date.parse(row.created_at),
+            mediaType: firstVideo ? 'video' : 'photo', videoUrl: firstVideo?.url, public: row.is_public,
+            views: viewTotal?.views ?? existing?.views ?? 0, viewed: viewTotal?.viewed ?? false,
             mine, reel: false, followed: !mine && Boolean(state.cloudFollowingIds?.has(row.owner_id)),
             likes: row.cloud_likes?.[0]?.count ?? 0, liked: Boolean(row.viewer_like?.length), comments: row.cloud_comments?.[0]?.count ?? existing?.comments ?? 0, commentItems: existing?.commentItems ?? [],
         });

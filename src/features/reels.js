@@ -52,6 +52,7 @@ export function renderReels() {
           <div><button class="author-name reel-author-name" type="button" data-profile-handle="${escapeHtml(reel.handle)}">${escapeHtml(reel.user)}</button><span>Public reel</span></div>
         </div>
         <p>${renderCaption(reel.caption)}</p>
+        <small data-media-view-count="reel:${reel.id}">${formatCount(reel.views || 0)} views</small>
         ${reel.demoVideoCredit ? `<small class="reel-demo-credit">${escapeHtml(reel.demoVideoCredit)}</small>` : ''}
         <div class="reel-actions">
           <button class="like-btn ${reel.liked ? 'liked' : ''}" type="button" data-action="like" data-entity-type="reel" data-entity-id="${reel.id}" aria-pressed="${reel.liked}">♥ ${formatCount(reel.likes)}</button>

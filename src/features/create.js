@@ -1,4 +1,6 @@
 import { publishImagePost } from '../storage/image-posts.js';
+import { publishCloudReel } from '../storage/cloud-reels.js';
+import { supportsCloudVideo } from '../storage/video-engagement.js';
 import { bindReelEditorPlayback } from '../media/reel-editor-playback.js';
 import { resetReelCover, suspendReelCover, renderReelCover, getReelCover } from './reel-cover.js';
 import { renderSquareCover } from '../media/cover-canvas.js';
@@ -142,7 +144,8 @@ export function closeCreateUpload(discard = false) {
 }
 
 let publishingMedia = false;
-const imagePublishIds = new WeakMap();
+const postPublishIds = new WeakMap();
+const reelPublishIds = new WeakMap();
 
 export async function publishCreatedMedia() {
     if (publishingMedia) return;
@@ -171,6 +174,11 @@ async function publishPreparedMedia() {
     const mediaType = getSupportedStoryFileType(state.createMediaFile);
     const createdAt = Date.now();
     let cloudPublished = false;
+    let uploadVideo = false;
+    if (!scheduledAt && state.signedInAccountId && state.createFinalizedItems.some(item => item.type === 'video')) {
+        try { uploadVideo = await supportsCloudVideo(); }
+        catch (error) { showShareFeedback(error.message || 'Could not connect to video publishing. Try again.'); return; }
+    }
     if (state.createMediaType === "reel") {
         const reel = {
             id: createdAt,
@@ -195,7 +203,22 @@ async function publishPreparedMedia() {
             reel: true,
             mine: true
         };
-        if (scheduledAt) (state.scheduledPosts ??= []).push({type:'reel',item:reel,scheduledAt}); else { reels.unshift(reel);recordPostMentions(reel); }
+        if (uploadVideo) {
+            const finalized = state.createFinalizedItems;
+            const attempt = reelPublishIds.get(finalized) || { id: crypto.randomUUID(), clientId: reel.id };
+            reelPublishIds.set(finalized, attempt);
+            reel.id = attempt.clientId;
+            const button = document.querySelector('.create-publish-button');
+            button.disabled = true;
+            try { await publishCloudReel(reel, attempt.id); cloudPublished = true; }
+            catch (error) { showShareFeedback(error.message || 'Could not publish this Reel. Try again.'); return; }
+            finally { button.disabled = false; }
+        }
+        if (scheduledAt) (state.scheduledPosts ??= []).push({type:'reel',item:reel,scheduledAt});
+        else {
+            if (!reels.some(item => item.id === reel.id)) reels.unshift(reel);
+            recordPostMentions(reel);
+        }
     }
     else {
         const post = {
@@ -223,11 +246,11 @@ async function publishPreparedMedia() {
             reel: false,
             mine: true
         };
-        if (!scheduledAt && state.signedInAccountId && post.mediaItems.every(item => item.type === 'image')) {
+        if (!scheduledAt && state.signedInAccountId && (uploadVideo || post.mediaItems.every(item => item.type === 'image'))) {
             const finalized = state.createFinalizedItems;
-            const previousId = imagePublishIds.get(finalized);
+            const previousId = postPublishIds.get(finalized);
             if (previousId) post.id = previousId;
-            else imagePublishIds.set(finalized, post.id);
+            else postPublishIds.set(finalized, post.id);
             const button = document.querySelector('.create-publish-button');
             button.disabled = true;
             try {
@@ -298,12 +321,13 @@ export async function finalizeCreateMedia() {
     const finalizingItems=state.createMediaItems;
     const next=document.querySelector('.create-next');next.disabled=true;next.textContent='Preparing media…';
     try {
-        await Promise.all(state.createMediaItems.map(item=>item.naturalRatio ? Promise.resolve() : new Promise((resolve,reject)=>{
+        await Promise.all(state.createMediaItems.map(item=>item.naturalRatio && (item.type !== 'video' || item.duration) ? Promise.resolve() : new Promise((resolve,reject)=>{
             const media=document.createElement(item.type==='video'?'video':'img');
             if(item.type==='video'){media.muted=true;media.preload='metadata';}
             const timeout=window.setTimeout(()=>{media.removeAttribute('src');reject(new Error('Media load timed out'));},15000);
             media.addEventListener(item.type==='video'?'loadedmetadata':'load',()=>{
                 clearTimeout(timeout);const width=media.naturalWidth||media.videoWidth,height=media.naturalHeight||media.videoHeight;
+                if (item.type === 'video' && Number.isFinite(media.duration)) item.duration = media.duration;
                 if(width&&height){item.naturalRatio=width/height;resolve();}else reject(new Error('Media dimensions unavailable'));
             },{once:true});
             media.addEventListener('error',()=>{clearTimeout(timeout);reject(new Error('Unsupported media'));},{once:true});media.src=item.url;
@@ -404,6 +428,7 @@ export function renderCreatePreview() {
     if (media) {
         const rememberSize = () => {
             const width = media.naturalWidth || media.videoWidth, height = media.naturalHeight || media.videoHeight;
+            if (item.type === 'video' && Number.isFinite(media.duration)) item.duration = media.duration;
             if (width && height && !item.naturalRatio) {
                 item.naturalRatio = width / height;
                 const stage = media.closest('.post-media-stage');

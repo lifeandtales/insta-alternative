@@ -8,6 +8,7 @@ import { subscribeToSocialUpdates } from './src/features/social-updates.js';
 import { readCloudAvatar } from './src/storage/cloud-avatars.js';
 import { loadCloudFollowing } from './src/features/cloud-people.js';
 import { loadCloudImagePosts } from './src/storage/image-posts.js';
+import { loadCloudReels } from './src/storage/cloud-reels.js';
 import { registerHomePullToRefresh } from './src/features/home.js';
 import { currentUser, demoContentEnabled } from './src/data/sample-data.js';
 import { DEFAULT_AVATAR } from './src/core/social.js';
@@ -128,7 +129,7 @@ function renderAccountIdentity() {
 async function loadAccountContent() {
     const [sessionResult] = await Promise.allSettled([loadSession(), loadStoryHighlights()]);
     if (demoContentEnabled && sessionResult.status === 'rejected') return;
-    try { await loadCloudFollowing(); await Promise.all([loadCloudImagePosts(), loadCloudSavedKeys()]); }
+    try { await loadCloudFollowing(); await Promise.all([loadCloudImagePosts(), loadCloudSavedKeys(), loadCloudReels().catch(() => {})]); }
     catch { showShareFeedback('Could not load your saved image posts. Pull down on Home to retry.'); }
     refreshChatAttachmentExpiry();
     processScheduledPosts();

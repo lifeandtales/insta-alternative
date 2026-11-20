@@ -204,6 +204,7 @@ async function refreshViewData(view, owner, handle, activeChat) {
     } else if (view === 'home' || view === 'explore') {
         await loadCloudFollowing();
         await Promise.all([loadCloudImagePosts(), loadCloudSavedKeys(),
+            view === 'home' ? loadCloudReels().catch(() => {}) : undefined,
             view === 'home' ? loadCloudStories().catch(() => {}) : undefined,
             view === 'home' ? loadLiveData().catch(() => {}) : undefined]);
         if (stillVisible()) {
