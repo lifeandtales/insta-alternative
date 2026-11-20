@@ -1,3 +1,4 @@
+import { setCloudGroupInvitationPreference } from './cloud-chat.js';
 import { setCloudBlock } from './cloud-people.js';
 import { readCloudAvatar, saveCloudAvatar } from '../storage/cloud-avatars.js';
 import { supportsAndroidPush, enableAndroidPush, disableAndroidPush } from './android-push.js';
@@ -187,7 +188,23 @@ export function registerAccountSettingsEvents() {
                 privacy.disabled = false;
             }
         }
-        if (event.target.matches('[data-group-preference]') && mayInteract()) { state.groupJoinMode = event.target.value; const owner = getAccount(currentUser.handle); if (owner) owner.groupJoinMode = state.groupJoinMode; saveAccountChanges(); }
+        const preference = event.target;
+        if (preference.matches('[data-group-preference]') && mayInteract()) {
+            const mode = preference.value;
+            preference.disabled = true;
+            try {
+                if (state.signedInAccountId) await setCloudGroupInvitationPreference(mode);
+                state.groupJoinMode = mode;
+                const owner = getAccount(currentUser.handle);
+                if (owner) owner.groupJoinMode = mode;
+                saveAccountChanges();
+            } catch {
+                preference.value = state.groupJoinMode;
+                showShareFeedback('Could not save the invitation preference. Try again.');
+            } finally {
+                preference.disabled = false;
+            }
+        }
         const form = event.target.closest('.account-photo-form'); if (!form || event.target.name !== 'photo') return;
         const file = event.target.files?.[0]; if (!file) return;
         if (file.size > 20 * 1024 * 1024 || !(/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name) || ['image/jpeg','image/png','image/webp','image/heic','image/heif'].includes(file.type))) { showShareFeedback('Choose a supported image up to 20 MB.'); return; }

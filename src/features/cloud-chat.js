@@ -35,10 +35,94 @@ export async function openCloudChat(person, { fromInbox = false } = {}) {
     return upsertChat(data, person);
 }
 
+async function readConnectedGroups(client, owner, target = null) {
+    const { data, error } = await client.rpc('connected_groups', target ? { target } : {});
+    if (error?.code === 'PGRST202' || error?.code === '42883') return null;
+    if (error) throw error;
+    const avatars = await avatarLookup(client, data.flatMap(row => row.members));
+    if (state.signedInAccountId !== owner) return [];
+    return data.map(row => {
+        let chat = conversations.find(item => item.cloudId === row.id);
+        if (!chat) {
+            chat = { cloudId: row.id, handle: 'group:' + row.id, isGroup: true, avatar: DEFAULT_AVATAR, messages: [] };
+            conversations.unshift(chat);
+        }
+        const members = row.members.map(member => ({ ...rememberCloudPerson(member, avatars), role: member.role }));
+        Object.assign(chat, {
+            user: row.group_name, membershipStatus: row.pending ? 'pending' : 'joined',
+            members: members.map(member => member.handle),
+            admins: members.filter(member => member.role === 'admin').map(member => member.handle),
+            participantProfiles: Object.fromEntries(members.map(member => [member.handle, member])),
+            senderNames: Object.fromEntries(members.map(member => [member.id, member.name])),
+            photo: row.photo || '', muted: row.muted, pinned: row.pinned,
+            cloudCanSend: !row.pending, cloudHasMessages: true, lastActivity: Date.parse(row.sent_at),
+            lastMessage: row.kind ? (row.kind === 'text' ? row.body : 'Attachment') : '',
+            unread: row.unread_count > 0 || row.marked_unread, unreadCount: row.unread_count,
+        });
+        return chat;
+    });
+}
+
+export async function createConnectedGroup(name, members) {
+    const owner = state.signedInAccountId;
+    const client = await getSupabaseClient();
+    const { data, error } = await client.rpc('create_connected_group', { name, member_ids: members });
+    if (error) throw error;
+    if (state.signedInAccountId !== owner) return null;
+    const groups = await readConnectedGroups(client, owner, data);
+    if (!groups?.length) throw new Error('Could not read the new group.');
+    return groups[0];
+}
+
+export async function respondToConnectedGroup(chat, accept) {
+    const owner = state.signedInAccountId;
+    const client = await getSupabaseClient();
+    const { data, error } = await client.rpc('respond_to_group_invitation', { target: chat.cloudId, accept });
+    if (error) throw error;
+    if (!data || owner !== state.signedInAccountId) return false;
+    if (accept) return Boolean((await readConnectedGroups(client, owner, chat.cloudId))?.length);
+    const index = conversations.indexOf(chat);
+    if (index >= 0) conversations.splice(index, 1);
+    return true;
+}
+
+export async function saveCloudGroupPhoto(chat, photo) {
+    const client = await getSupabaseClient();
+    const { data, error } = await client.rpc('set_connected_group_photo', { target: chat.cloudId, photo });
+    if (error || !data) throw error || new Error('Could not save group photo.');
+}
+
+export async function leaveConnectedGroup(chat) {
+    const owner = state.signedInAccountId;
+    const client = await getSupabaseClient();
+    const { data, error } = await client.rpc('leave_connected_group', { target: chat.cloudId });
+    if (error) throw error;
+    if (!data || owner !== state.signedInAccountId) return false;
+    const index = conversations.indexOf(chat);
+    if (index >= 0) conversations.splice(index, 1);
+    return true;
+}
+
+export async function setCloudGroupInvitationPreference(mode) {
+    const client = await getSupabaseClient();
+    const { error } = await client.rpc('set_group_invitation_preference', { mode });
+    if (error && !['PGRST202', '42883'].includes(error.code)) throw error;
+}
+
+export async function syncCloudGroupInvitationPreference(owner) {
+    const client = await getSupabaseClient();
+    const { data, error } = await client.from('account_preferences').select('settings').eq('user_id', owner).maybeSingle();
+    if (error || state.signedInAccountId !== owner) return;
+    const mode = data?.settings?.groupJoinMode;
+    if (mode === 'automatic' || mode === 'review') state.groupJoinMode = mode;
+    else if (state.groupJoinMode === 'review') await setCloudGroupInvitationPreference('review');
+}
+
 export async function loadCloudInbox() {
     const owner = state.signedInAccountId;
     if (!owner) return;
     const client = await getSupabaseClient();
+    const loadingGroups = readConnectedGroups(client, owner).catch(() => null);
     let result = await client.rpc('connected_direct_inbox_with_counts');
     if (result.error?.code === 'PGRST202') result = await client.rpc('connected_direct_inbox');
     if (result.error?.code === 'PGRST202') result = await client.rpc('direct_inbox');
@@ -47,7 +131,9 @@ export async function loadCloudInbox() {
     if (owner !== state.signedInAccountId) return;
     const avatars = await avatarLookup(client, data);
     if (owner !== state.signedInAccountId) return;
-    const returned = new Set();
+    const groups = await loadingGroups;
+    if (owner !== state.signedInAccountId) return;
+    const returned = new Set(groups?.map(group => group.cloudId) || []);
     for (const row of data) {
         returned.add(row.id);
         const person = rememberCloudPerson({ id: row.peer_id, username: row.username, display_name: row.display_name, avatar_path: row.avatar_path }, avatars);
@@ -62,7 +148,7 @@ export async function loadCloudInbox() {
     }
     for (let index = conversations.length - 1; index >= 0; index--) {
         const chat = conversations[index];
-        if (chat.cloudId && !returned.has(chat.cloudId) && chat.handle !== state.activeConversationHandle) {
+        if (chat.cloudId && (!chat.isGroup || groups) && !returned.has(chat.cloudId) && chat.handle !== state.activeConversationHandle) {
             conversations.splice(index, 1);
         }
     }
@@ -86,19 +172,32 @@ async function signAttachments(client, rows) {
     return new Map(paths.map(path => [path, attachmentCache.get(path)?.url]));
 }
 
+const hiddenMessageIdsByChat = new WeakMap();
+
 export async function loadCloudChat(chat) {
     const owner = state.signedInAccountId;
     const client = await getSupabaseClient();
+    if (chat.isGroup) {
+        const groups = await readConnectedGroups(client, owner, chat.cloudId);
+        if (state.signedInAccountId !== owner) return false;
+        if (!groups?.length || chat.membershipStatus === 'pending') {
+            if (groups && !groups.length) chat.membershipStatus = 'left';
+            chat.messages = [];
+            chat.cloudCanSend = false;
+            chat.cloudLoaded = true;
+            return true;
+        }
+    }
     const sendRevision = chat.sendRevision;
     const wallpaperRevision = chat.wallpaperRevision;
     const [history, profile, permissions, settings, preferences, wallpaper, receipt] = await Promise.all([
         historyQuery(client, chat).limit(historyPageSize + 1),
-        client.rpc('social_profile', { target: chat.peerId }),
-        client.rpc('connected_chat_can_send', { target: chat.cloudId }),
+        chat.isGroup ? { data: null } : client.rpc('social_profile', { target: chat.peerId }),
+        chat.isGroup ? { data: true } : client.rpc('connected_chat_can_send', { target: chat.cloudId }),
         client.from('conversations').select('retention_hours').eq('id', chat.cloudId).maybeSingle(),
         client.from('conversation_preferences').select('pinned,muted,calls_muted').eq('conversation_id', chat.cloudId).eq('user_id', owner).maybeSingle(),
         client.from('conversation_preferences').select('wallpaper_version').eq('conversation_id', chat.cloudId).eq('user_id', owner).maybeSingle(),
-        client.rpc('direct_chat_read_receipt_details', { target: chat.cloudId }).then(async result => {
+        chat.isGroup ? { data: null } : client.rpc('direct_chat_read_receipt_details', { target: chat.cloudId }).then(async result => {
             if (result.error?.code !== 'PGRST202') return result;
             const legacy = await client.rpc('direct_chat_read_receipt', { target: chat.cloudId });
             return { data: { seen_at: legacy.data }, error: legacy.error };
@@ -139,16 +238,19 @@ export async function loadCloudChat(chat) {
     }
     const previous = chat.messages;
     const canSend = Boolean(permissions.error ? profile.data?.mutual : permissions.data) && !state.blockedHandles.has(chat.handle);
+    const hidden = hiddenMessageIdsByChat.get(chat);
     const page = history.data.slice(0, historyPageSize);
     const earliest = page.at(-1);
-    const previouslyLoaded = previous.filter(item => !item.serverExpiresAt || item.serverExpiresAt > Date.now());
+    const previouslyLoaded = previous.filter(item => !hidden?.has(item.id) && (!item.serverExpiresAt || item.serverExpiresAt > Date.now()));
     const older = earliest && history.data.length > historyPageSize ? previouslyLoaded.filter(item => {
         const itemTime = Date.parse(item.createdAt);
         const limitTime = Date.parse(earliest.created_at);
         return itemTime < limitTime || (itemTime === limitTime && item.id < earliest.id);
     }) : [];
     if (!older.length) chat.cloudHasOlder = history.data.length > historyPageSize;
-    const recent = page.slice().reverse().map(row => toChatMessage(row, owner, links));
+    const visiblePage = page.filter(row => !hidden?.has(row.id));
+    const latest = visiblePage[0];
+    const recent = visiblePage.reverse().map(row => toChatMessage(row, owner, links));
     const sentDuringLoad = chat.sendRevision !== sendRevision
         ? previous.filter(item => item.from === 'me' && item.sentAt >= (recent.at(-1)?.sentAt || 0) && !recent.some(row => row.id === item.id))
         : [];
@@ -166,8 +268,7 @@ export async function loadCloudChat(chat) {
     }
     chat.cloudLoaded = true;
     if (changed) chat.messages = messages;
-    chat.cloudHasMessages = chat.messages.length > 0;
-    const latest = history.data[0];
+    chat.cloudHasMessages = chat.isGroup || chat.messages.length > 0;
     if (latest && !document.hidden && state.currentView === 'messages' && state.activeConversationHandle === chat.handle &&
         (!chat.cloudLastReadAt || Date.parse(latest.created_at) > Date.parse(chat.cloudLastReadAt))) {
         const { error } = await client.rpc('mark_direct_chat_read', { target: chat.cloudId, seen_at: latest.created_at });
@@ -192,7 +293,8 @@ export async function loadOlderCloudMessages(chat) {
     const links = await signAttachments(client, data);
     if (owner !== state.signedInAccountId) return;
     const existing = new Set(chat.messages.map(message => message.id));
-    const older = data.slice(0, historyPageSize).filter(row => !existing.has(row.id))
+    const hidden = hiddenMessageIdsByChat.get(chat);
+    const older = data.slice(0, historyPageSize).filter(row => !existing.has(row.id) && !hidden?.has(row.id))
         .reverse().map(row => toChatMessage(row, owner, links));
     chat.messages = [...older, ...chat.messages];
     chat.cloudHasOlder = data.length > historyPageSize;
@@ -203,7 +305,7 @@ function reactionSignature(reactions = []) {
 }
 
 function toChatMessage(row, owner, links = new Map()) {
-    const message = { id: row.id, type: 'text', text: row.kind === 'text' ? row.body : 'Attachment',
+    const message = { id: row.id, senderId: row.sender_id, type: 'text', text: row.kind === 'text' ? row.body : 'Attachment',
         from: row.sender_id === owner ? 'me' : 'them', sentAt: Date.parse(row.created_at), createdAt: row.created_at,
         expiresAt: Date.parse(row.attachment_expires_at), serverExpiresAt: Date.parse(row.expires_at),
         replyToId: row.reply_to_id, reactions: row.reactions || [] };
@@ -213,7 +315,7 @@ function toChatMessage(row, owner, links = new Map()) {
         fileName: String(meta.fileName || 'Voice message'), durationSeconds: Number(meta.durationSeconds) || 0 };
     if (['photo', 'video', 'file', 'voice'].includes(row.kind)) return {
         ...message, type: 'attachment', mediaKind: row.kind === 'voice' ? 'file' : row.kind,
-        media, fileName: String(meta.fileName || (row.kind === 'voice' ? 'Voice message' : 'Attachment')),
+        media, voiceRecording: row.kind === 'voice', fileName: String(meta.fileName || (row.kind === 'voice' ? 'Voice message' : 'Attachment')),
         sticker: meta.sticker === true, animated: meta.animated === true, fileSize: Number(meta.fileSize) || 0
     };
     if (row.kind === 'location') return { ...message, type: 'location', place: String(meta.place || '') };
@@ -309,12 +411,19 @@ export async function updateCloudChatTimer(chat, enabled) {
 
 export async function hideCloudMessages(chat, ids) {
     if (!ids.length) return;
+    const owner = state.signedInAccountId;
     const client = await getSupabaseClient();
+    if (!owner || state.signedInAccountId !== owner) return;
     const { error } = await client.from('hidden_messages').upsert(
-        ids.map(message_id => ({ user_id: state.signedInAccountId, message_id })), { ignoreDuplicates: true });
+        [...new Set(ids)].map(message_id => ({ user_id: owner, message_id })),
+        { onConflict: 'user_id,message_id', ignoreDuplicates: true });
     if (error) throw error;
-    const hidden = new Set(ids);
+    if (state.signedInAccountId !== owner) return;
+    const hidden = hiddenMessageIdsByChat.get(chat) || new Set();
+    for (const id of ids) hidden.add(id);
+    hiddenMessageIdsByChat.set(chat, hidden);
     chat.messages = chat.messages.filter(item => !hidden.has(item.id));
+    chat.cloudHasMessages = chat.isGroup || chat.messages.length > 0;
 }
 
 export async function findMessageRecipients(query, offset) {
@@ -354,4 +463,36 @@ export async function setCloudMessageReaction(message, emoji) {
 
 export function hideCloudMessage(chat, message) {
     return hideCloudMessages(chat, [message.id]);
+}
+
+export async function findCloudChatMessages(chat, term, before) {
+    const client = await getSupabaseClient();
+    const { data, error } = await client.rpc('search_chat_messages', {
+        target: chat.cloudId, search_text: term, before_time: before?.created_at ?? null, before_id: before?.id ?? null,
+    });
+    if (error?.code === 'PGRST202' || error?.code === '42883') return null;
+    if (error) throw error;
+    return data;
+}
+
+export async function loadCloudSearchContext(chat, match) {
+    const owner = state.signedInAccountId;
+    const client = await getSupabaseClient();
+    const query = () => client.from('messages').select(historyColumns)
+        .eq('conversation_id', chat.cloudId).in('kind', ['text', 'file']);
+    const before = `created_at.lt.${match.created_at},and(created_at.eq.${match.created_at},id.lt.${match.id})`;
+    const after = `created_at.gt.${match.created_at},and(created_at.eq.${match.created_at},id.gt.${match.id})`;
+    const [older, anchor, newer] = await Promise.all([
+        query().or(before).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(25),
+        query().eq('id', match.id).maybeSingle(),
+        query().or(after).order('created_at').order('id').limit(25),
+    ]);
+    const error = older.error || anchor.error || newer.error;
+    if (error) throw error;
+    if (owner !== state.signedInAccountId || !anchor.data) return [];
+    const hidden = hiddenMessageIdsByChat.get(chat);
+    const rows = [...older.data.reverse(), anchor.data, ...newer.data].filter(row => !hidden?.has(row.id));
+    const links = await signAttachments(client, rows);
+    if (owner !== state.signedInAccountId) return [];
+    return rows.map(row => toChatMessage(row, owner, links));
 }

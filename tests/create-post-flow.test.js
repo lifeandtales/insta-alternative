@@ -123,13 +123,16 @@ test('twenty distinct post filters plus Original are available and preserved for
     assert.equal(mediaEdits({filter:'unsupported'}).filter,'none');
 });
 
-test('regular posts cannot become excessively tall or wide, including old Original and 9:16 uploads',async()=>{
+test('Original photos use their source proportions and explicit formats keep their bounds',async()=>{
     const app=await loadApp(),{mediaAspect,mediaFit,renderEditedMedia}=app.exportsOf('src/features/post-media.js');
     assert.equal(mediaAspect({ratio:'original',naturalRatio:.1}),.75);assert.equal(mediaFit({ratio:'original',naturalRatio:.1}),'cover');
     assert.equal(mediaAspect({ratio:'original',naturalRatio:10}),1.91);assert.equal(mediaFit({ratio:'original',naturalRatio:10}),'cover');
     assert.equal(mediaAspect({ratio:'9/16'}),.75);assert.equal(mediaAspect({ratio:'4/5'}),.8);assert.equal(mediaAspect({ratio:'3/4'}),.75);
     assert.equal(mediaAspect({ratio:'9/16',layout:'reel'}),9/16);
-    assert.match(renderEditedMedia({type:'image',url:'long.jpg',ratio:'original',naturalRatio:.1}),/aspect-ratio:0.75/);
+    assert.match(renderEditedMedia({type:'image',url:'tall.jpg',ratio:'original',naturalRatio:9/16}),/aspect-ratio:0.5625/);
+    assert.match(renderEditedMedia({type:'image',url:'crop.jpg',ratio:'1/1',naturalRatio:16/9},{feedPriority:false}),/aspect-ratio:1/);
+    assert.match(renderEditedMedia({type:'image',url:'legacy.jpg'},{feedPriority:false}),/data-original-photo-size/);
+    assert.doesNotMatch(renderEditedMedia({type:'image',url:'crop.jpg',ratio:'1/1'},{feedPriority:false}),/data-original-photo-size/);
 });
 
 test('reordering preserves edits, current selection, cover identity and the first media type',async()=>{

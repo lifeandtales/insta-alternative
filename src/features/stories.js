@@ -80,22 +80,27 @@ export function expireStory(id) {
         : `${story.user}'s story expired after 24 hours.`);
 }
 
-export function renderStories() {
-    const list = document.getElementById("stories-list");
-    const groups = getStoryGroups({ includeMuted: true });
-    const ownStories = groups.find((group) => group.handle === currentUser.handle);
-    const ownStoriesSeen = ownStories?.stories.some((story) => state.seenStoryIds.has(story.id));
-    const otherStories = groups.filter((group) => group.handle !== currentUser.handle && !group.muted);
-    const mutedStories = groups.filter((group) => group.handle !== currentUser.handle && group.muted);
-    list.innerHTML = `
-    ${renderLiveCircles()}
+export function renderOwnStoryTile(ownStories) {
+    const ownStoriesSeen = ownStories?.stories.some(story => state.seenStoryIds.has(story.id));
+    return `
     <div class="story-own-group"><button class="story-item story-own" type="button" data-story-owner="${escapeHtml(currentUser.handle)}">
       <span class="story-ring ${ownStories ? `has-story ${ownStoriesSeen ? "seen-story" : ""}` : ""}">
         <img src="${escapeHtml(currentUser.avatar)}" alt="" />
         ${ownStories ? "" : '<span class="story-add-badge" aria-hidden="true">+</span>'}
       </span>
       <span>${ownStories ? "Your story" : state.scheduledStories.size || state.hasScheduledCloudStory ? "Scheduled story" : "Add story"}</span>
-    </button>${ownStories ? '<button class="story-add-control" type="button" aria-label="Add story"><span aria-hidden="true">+</span></button>' : ''}</div>
+    </button>${ownStories ? '<button class="story-add-control" type="button" aria-label="Add story"><span aria-hidden="true">+</span></button>' : ''}</div>`;
+}
+
+export function renderStories() {
+    const list = document.getElementById("stories-list");
+    const groups = getStoryGroups({ includeMuted: true });
+    const ownStories = groups.find((group) => group.handle === currentUser.handle);
+    const otherStories = groups.filter((group) => group.handle !== currentUser.handle && !group.muted);
+    const mutedStories = groups.filter((group) => group.handle !== currentUser.handle && group.muted);
+    list.innerHTML = `
+    ${renderLiveCircles()}
+    ${renderOwnStoryTile(ownStories)}
     ${otherStories.map((group) => {
       const allSeen = group.stories.every((story) => state.seenStoryIds.has(story.id));
       return `
@@ -111,6 +116,7 @@ export function renderStories() {
         <span>${escapeHtml(group.user)}</span>
       </button>`).join("")}</div>` : ''}
   `;
+    if (state.currentView === 'messages') document.dispatchEvent?.(new Event('stories-updated'));
 }
 
 export function openStoryCreator() {

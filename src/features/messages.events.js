@@ -1,5 +1,7 @@
+import { openGroupCreator } from './group-creator.js';
+import { openChatSearch } from './chat-search.js';
 import { startInAppCall } from './in-app-calls.js';
-import { findMessageRecipients, hideCloudMessage, hideCloudMessages, loadCloudChat, loadOlderCloudMessages, muteConnectedCalls, openCloudChat, sendCloudMedia, sendCloudText,
+import { leaveConnectedGroup, respondToConnectedGroup, findMessageRecipients, hideCloudMessage, hideCloudMessages, loadCloudChat, loadOlderCloudMessages, muteConnectedCalls, openCloudChat, sendCloudMedia, sendCloudText,
     setCloudChatPreference, setCloudMessageReaction, updateCloudChatTimer } from './cloud-chat.js';
 import { TEMPORARY_ATTACHMENT_BYTES, expireChatAttachments } from './chat-attachment-expiry.js';
 import { openChatWallpaper, registerChatWallpaperEvents } from './chat-wallpaper.js';
@@ -13,8 +15,8 @@ import { state } from '../core/state.js';
 import { escapeHtml } from '../core/utils.js';
 import { findEntity } from '../data/entities.js';
 import { conversations, currentUser } from '../data/sample-data.js';
-import { appendChatMessage, renderMessages, renderReplyQuote, conversationAvatar, markInboxChatRead } from './messages.js';
-import { canSendToConversation, createLocalGroup, respondToGroupInvitation, isJoinedGroup, leaveLocalGroup, isGroupAdmin, updateGroupMember, availableGroupInvitees, addLocalGroupMembers, visibleConversationMessages, hideConversationMessages, clearConversationForViewer, refreshConversationTimers } from './message-access.js';
+import { appendChatMessage, renderMessages, renderReplyQuote, conversationAvatar, getInboxConversations, markInboxChatRead, renderInboxConversation } from './messages.js';
+import { canSendToConversation, respondToGroupInvitation, isJoinedGroup, leaveLocalGroup, isGroupAdmin, updateGroupMember, availableGroupInvitees, addLocalGroupMembers, visibleConversationMessages, hideConversationMessages, clearConversationForViewer, refreshConversationTimers } from './message-access.js';
 import { closeHomePanel, openReportPanel, showHomePanel } from './home-controls.js';
 import { persistSession } from '../storage/local-session.js';
 import { supabaseProjectUrl } from '../storage/supabase.js';
@@ -171,7 +173,7 @@ function registerMessageReactionGestures(list) {
           </div>
           <div class="chat-message-actions">
           ${message && bubble.closest('.chat-window').querySelector('.chat-composer') ? '<button type="button" data-reply-to-message>Reply</button>' : ''}
-          ${message ? '<button type="button" data-delete-one-message>Delete</button>' : ''}
+          ${message ? '<button type="button" data-delete-one-message>Delete for you</button>' : ''}
           ${canCopy ? '<button type="button" data-copy-message>Copy</button>' : ''}
           ${message?.type === 'voice' && message.media ? '<button type="button" data-copy-voice>Copy audio</button>' : ''}
           ${canDownload ? '<button type="button" data-copy-chat-media>Copy</button><button type="button" data-download-chat-media>Download</button>' : ''}
@@ -417,11 +419,6 @@ function saveMessage(conversation, message, options) {
     if (message.type === 'attachment' || conversation.chatTimerEnabled) refreshChatAttachmentExpiry();
     persistSession().catch(() => showShareFeedback('The message is visible, but could not be saved on this device.'));
     return true;
-}
-function openGroupCreator() {
-    if (!mayInteract()) { showShareFeedback('Group creation is unavailable while verification is pending.'); return; }
-    const people = state.accountDirectory.filter(person => person.handle !== currentUser.handle && !state.blockedHandles.has(person.handle));
-    showHomePanel('New group', `<form class="create-group-form"><label>Group name<input name="groupName" required maxlength="60" autocomplete="off" /></label><fieldset><legend>Choose participants</legend>${people.map(person => `<label><input type="checkbox" name="member" value="${escapeHtml(person.handle)}" /> ${escapeHtml(person.name)} <small>${escapeHtml(person.handle)}${person.groupJoinMode === 'review' ? ' · Invitation review' : ''}</small></label>`).join('')}</fieldset><p>You will be the first admin. Each participant's invitation preference is respected.</p><button type="submit">Create group</button></form>`);
 }
 function openGroupManager(group) {
     if (!mayInteract() || !group.members?.includes(currentUser.handle) || !group.admins?.includes(currentUser.handle)) return;
@@ -832,59 +829,74 @@ async function pickChatContact(conversation) {
     }
 }
 
-let recipientPicker;
 const recipientPageSize = 30;
 
-async function loadRecipientPage(picker, reset = false) {
-    const { form } = picker;
-    const term = form.elements.recipientSearch.value.trim();
-    const list = form.querySelector('.message-recipient-results');
-    const request = ++picker.request;
-    if (reset) picker.people = [];
-    list.setAttribute('aria-busy', 'true');
-    if (!picker.people.length) list.textContent = 'Loading people…';
+function renderMessageRecipient(person) {
+    return `
+      <button type="button" class="profile-connection" data-message-recipient="${escapeHtml(person.id)}">
+        <img src="${escapeHtml(person.avatar)}" alt="" />
+        <span><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.handle)} · ${person.isFollowing ? 'Following' : 'Follows you'}</small></span>
+      </button>`;
+}
+
+let inboxSearch;
+
+function searchMessagesInbox(form, { delay = 180, browse = false } = {}) {
+    window.clearTimeout(inboxSearch?.timer);
+    inboxSearch = null;
+    const term = form.elements.inboxSearch.value.trim().replace(/^@+/, '').toLowerCase();
+    const inbox = form.closest('.messages-inbox');
+    const results = inbox.querySelector('.inbox-search-results');
+    const status = results.querySelector('.inbox-search-status');
+    const existing = results.querySelector('.inbox-search-chats');
+    const people = results.querySelector('.inbox-search-people');
+    const canSearchPeople = Boolean(state.signedInAccountId) && mayInteract();
+    const showResults = Boolean(term) || (browse && canSearchPeople);
+    results.hidden = !showResults;
+    inbox.querySelector('.inbox-conversation-rows').hidden = showResults;
+    people.replaceChildren();
+    if (!showResults) return;
+
+    results.closest('.conversation-list').scrollTop = 0;
+
+    const chats = getInboxConversations();
+    const matching = chats.filter(chat => [chat.user, chat.handle].some(value => value?.toLowerCase().includes(term)));
+    existing.innerHTML = matching.map(renderInboxConversation).join('');
+    if (!canSearchPeople) {
+        status.textContent = matching.length ? '' : 'No matching conversations.';
+        return;
+    }
+
+    status.textContent = 'Searching people…';
+    const search = { form, term, owner: state.signedInAccountId, people: [], offset: 0,
+        matching, existingHandles: new Set(chats.map(chat => chat.handle)), peopleList: people, status };
+    inboxSearch = search;
+    search.timer = window.setTimeout(() => void loadInboxRecipients(search), delay);
+}
+
+async function loadInboxRecipients(search) {
+    const isCurrent = () => inboxSearch === search && search.form.isConnected && search.owner === state.signedInAccountId;
+    if (!isCurrent()) return;
     try {
-        const rows = await findMessageRecipients(term, picker.people.length);
-        if (recipientPicker !== picker || request !== picker.request || !form.isConnected) return;
-        picker.people.push(...rows.slice(0, recipientPageSize));
-        const results = picker.people.map(person => `
-          <button type="button" class="profile-connection" data-message-recipient="${escapeHtml(person.id)}">
-            <img src="${escapeHtml(person.avatar)}" alt="" />
-            <span><strong>${escapeHtml(person.name)}</strong><small>${escapeHtml(person.handle)} · ${person.isFollowing ? 'Following' : 'Follows you'}</small></span>
-          </button>`).join('');
-        list.innerHTML = (results || '<p>No matching followers or following accounts.</p>') +
-            (rows.length > recipientPageSize ? '<button type="button" data-recipients-more>Load more</button>' : '');
+        const rows = await findMessageRecipients(search.term, search.offset);
+        if (!isCurrent()) return;
+        const page = rows.slice(0, recipientPageSize);
+        search.offset += page.length;
+        search.people.push(...page.filter(person => !search.existingHandles.has(person.handle)));
+        search.peopleList.innerHTML = search.people.map(renderMessageRecipient).join('') +
+            (rows.length > recipientPageSize ? '<button type="button" class="inbox-search-more" data-inbox-recipients-more>Load more people</button>' : '');
+        search.status.textContent = search.people.length || search.matching.length || rows.length > recipientPageSize ? '' : 'No matching people or chats.';
     } catch {
-        if (recipientPicker === picker && request === picker.request) list.textContent = 'Could not load people. Search again to retry.';
-    } finally {
-        if (request === picker.request) list.removeAttribute('aria-busy');
+        if (isCurrent()) search.status.textContent = 'Could not search people. Submit your search to retry.';
     }
 }
 
-function openMessageRecipientPicker() {
-    showHomePanel('New message', `
-      <form class="message-recipient-picker">
-        <label>Find a person <input type="search" name="recipientSearch" maxlength="100" placeholder="Name or username"></label>
-        <button type="submit">Search</button>
-        <div class="message-recipient-results" aria-live="polite"></div>
-      </form>`);
-    const form = document.querySelector('.message-recipient-picker');
-    const picker = { form, people: [], request: 0 };
-    recipientPicker = picker;
-    form.addEventListener('submit', event => {
-        event.preventDefault();
-        void loadRecipientPage(picker, true);
-    });
-    void loadRecipientPage(picker);
-}
 
 async function startPickedConversation(person, button) {
     button.disabled = true;
     try {
         const chat = await openCloudChat(person, { fromInbox: true });
-        if (state.currentView !== 'messages' || state.activeConversationHandle || !button.isConnected ||
-            button.closest('.home-controls-backdrop')?.hidden) return;
-        closeHomePanel();
+        if (state.currentView !== 'messages' || state.activeConversationHandle || !button.isConnected) return;
         state.activeConversationHandle = chat.handle;
         pushConversationHistory(chat.handle);
         chat.cloudLastReadAt = null;
@@ -901,20 +913,16 @@ async function startPickedConversation(person, button) {
 }
 
 export function handleMessageClick(event) {
-    if (event.target.closest('[data-new-direct-message]')) {
-        if (state.signedInAccountId && mayInteract()) openMessageRecipientPicker();
-        return true;
-    }
     const recipient = event.target.closest('[data-message-recipient]');
     if (recipient) {
-        const person = recipientPicker?.people.find(item => item.id === recipient.dataset.messageRecipient);
+        const person = inboxSearch?.people.find(item => item.id === recipient.dataset.messageRecipient);
         if (person && !recipient.disabled) void startPickedConversation(person, recipient);
         return true;
     }
-    const moreRecipients = event.target.closest('[data-recipients-more]');
-    if (moreRecipients && recipientPicker) {
-        moreRecipients.disabled = true;
-        void loadRecipientPage(recipientPicker);
+    const moreInboxRecipients = event.target.closest('[data-inbox-recipients-more]');
+    if (moreInboxRecipients && inboxSearch) {
+        moreInboxRecipients.disabled = true;
+        void loadInboxRecipients(inboxSearch).finally(() => { moreInboxRecipients.disabled = false; });
         return true;
     }
     const cancelReply = event.target.closest('[data-cancel-chat-reply]');
@@ -1057,6 +1065,19 @@ export function handleMessageClick(event) {
             case 'group-profile': openGroupProfile(chat); return true;
             case 'leave-group': confirmLeaveGroup(chat); return true;
             case 'confirm-leave':
+                if (chat.cloudId) {
+                    if (inboxAction.disabled) return true;
+                    inboxAction.disabled = true;
+                    void leaveConnectedGroup(chat).then(left => {
+                        if (!left) { showShareFeedback('You could not leave the group.'); return; }
+                        closeHomePanel();
+                        if (state.currentView !== 'messages') return;
+                        if (state.activeConversationHandle === chat.handle && !returnToConversationList(chat.handle)) state.activeConversationHandle = null;
+                        renderMessages();
+                    }).catch(() => showShareFeedback('You could not leave the group. Try again.'))
+                        .finally(() => { inboxAction.disabled = false; });
+                    return true;
+                }
                 if (leaveLocalGroup(chat)) {
                     closeHomePanel();
                     const wasOpen = state.activeConversationHandle === chat.handle;
@@ -1097,7 +1118,15 @@ export function handleMessageClick(event) {
         }
         return true;
     }
-    if (event.target.closest('[data-create-group]')) { openGroupCreator(); return true; }
+    if (event.target.closest('[data-create-group]')) {
+        openGroupCreator(group => {
+            state.activeConversationHandle = group.handle;
+            pushConversationHistory(group.handle);
+            renderMessages();
+            if (!group.cloudId) persistSession().catch(() => showShareFeedback('The group could not be saved on this device.'));
+        });
+        return true;
+    }
     const shared = event.target.closest('[data-shared-id]');
     if (shared) {
         const entity = findEntity(shared.dataset.sharedType, Number(shared.dataset.sharedId));
@@ -1177,6 +1206,7 @@ export function handleMessageClick(event) {
     if (option) {
         const conversation = activeConversation(); if (!conversation) return true;
         const action = option.dataset.chatOption;
+        if (action === 'search') { closeChatOptions(); openChatSearch(conversation); return true; }
         if (action === 'pin' && conversation.cloudId) {
             closeChatOptions();
             void setCloudChatPreference(conversation, 'pin', !conversation.pinned)
@@ -1249,7 +1279,22 @@ export function handleMessageClick(event) {
     const invite = event.target.closest('[data-group-invite]');
     if (invite) {
         const conversation = activeConversation();
-        if (conversation && respondToGroupInvitation(conversation, invite.dataset.groupInvite === 'accept')) {
+        const accept = invite.dataset.groupInvite === 'accept';
+        if (conversation?.cloudId) {
+            const actions = invite.closest('.group-invitation-actions').querySelectorAll('button');
+            if (invite.disabled) return true;
+            for (const button of actions) button.disabled = true;
+            void respondToConnectedGroup(conversation, accept).then(async responded => {
+                if (!responded) { showShareFeedback('This group invitation is no longer available.'); return; }
+                if (activeConversation() !== conversation && (accept || state.activeConversationHandle !== conversation.handle)) return;
+                if (accept) await loadCloudChat(conversation);
+                else if (!returnToConversationList(conversation.handle)) state.activeConversationHandle = null;
+                if (state.currentView === 'messages') renderMessages();
+            }).catch(() => showShareFeedback('Could not update the group invitation. Try again.'))
+                .finally(() => { for (const button of actions) button.disabled = false; });
+            return true;
+        }
+        if (conversation && respondToGroupInvitation(conversation, accept)) {
             if (invite.dataset.groupInvite === 'decline') {
                 if (!returnToConversationList(state.activeConversationHandle)) state.activeConversationHandle = null;
             }
@@ -1390,7 +1435,11 @@ export function handleMessageClick(event) {
     if (event.target.closest('[data-attachment-discard]')) { if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.media); pendingAttachment = null; closePanel(); return true; }
     const call = event.target.closest('[data-chat-call]');
     if (call) {
-        const conversation = activeConversation(); if (!canSendToConversation(conversation)) return true;
+        const conversation = activeConversation();
+        const canCall = conversation?.cloudId && conversation.isGroup
+            ? mayInteract() && isJoinedGroup(conversation) && conversation.cloudCanSend
+            : canSendToConversation(conversation);
+        if (!canCall) return true;
         if (conversation.cloudId) {
             closeChatOptions();
             void startInAppCall(conversation, call.dataset.chatCall);
@@ -1453,13 +1502,26 @@ async function forwardChatMessage(form) {
 export function registerMessageFormEvents() {
     const messagesList = document.getElementById('messages-list');
     registerMessageReactionGestures(messagesList);
+    document.addEventListener('stories-updated', () => {
+        if (state.currentView === 'messages' && !state.activeConversationHandle && !state.activeGroupProfileHandle) renderMessages();
+    });
     for (const type of ['loadedmetadata', 'durationchange', 'timeupdate', 'play', 'pause', 'ended']) {
         messagesList.addEventListener(type, event => {
             if (event.target.matches('.chat-voice-player audio')) syncVoicePlayer(event.target);
         }, true);
     }
+    messagesList.addEventListener('focusin', event => {
+        const input = event.target;
+        if (input.name === 'inboxSearch' && !input.value.trim()) {
+            searchMessagesInbox(input.form, { browse: true });
+        }
+    });
     messagesList.addEventListener('input', event => {
         const seek = event.target;
+        if (seek.name === 'inboxSearch' && !event.isComposing) {
+            searchMessagesInbox(seek.form);
+            return;
+        }
         if (!seek.matches('[data-voice-seek]')) return;
         const audio = seek.closest('.chat-voice-player').querySelector('audio');
         audio.currentTime = Number(seek.value);
@@ -1490,7 +1552,13 @@ export function registerMessageFormEvents() {
             input.blur();
         }
     });
-    document.getElementById('messages-list').addEventListener('submit', event => {
+    messagesList.addEventListener('submit', event => {
+        const searchForm = event.target.closest('.messages-inbox-search');
+        if (searchForm) {
+            event.preventDefault();
+            searchMessagesInbox(searchForm, { delay: 0, browse: true });
+            return;
+        }
         const form = event.target.closest('.chat-composer');
         if (!form) return;
         event.preventDefault();
@@ -1666,12 +1734,6 @@ export function registerMessageFormEvents() {
             renderMessages();
             persistSession().catch(() => showShareFeedback('The new group members could not be saved on this device.'));
             return;
-        }
-        if (form.matches('.create-group-form')) {
-            event.preventDefault();
-            const group = createLocalGroup(form.elements.groupName.value, [...form.querySelectorAll('input[name="member"]:checked')].map(input => input.value));
-            if (!group) { showShareFeedback('Enter a name and choose at least one participant.'); return; }
-            state.activeConversationHandle = group.handle; pushConversationHistory(group.handle); closePanel(); renderMessages(); persistSession().catch(() => showShareFeedback('The group could not be saved on this device.'));
         }
         if (form.matches('.manage-group-form')) {
             event.preventDefault(); const group = conversations.find(item => item.handle === form.dataset.groupHandle);

@@ -1,3 +1,4 @@
+import { getStoryGroups, renderOwnStoryTile } from './stories.js';
 import { attachmentExpiryForSize, isExpiredAttachment } from './chat-attachment-expiry.js';
 import { canViewMedia, canViewStory, visibleAvatar, mediaNeedsWarning, getAccount, DEFAULT_AVATAR } from '../core/social.js';
 import { findEntity } from '../data/entities.js';
@@ -49,7 +50,7 @@ function messagePreview(lastMessage) {
 
 export function renderReplyQuote(message, conversation) {
     if (!message) return '<div class="chat-reply-quote">Original message unavailable</div>';
-    const author = message.from === 'me' ? 'You' : getAccount(message.from)?.name || conversation.user;
+    const author = message.from === 'me' ? 'You' : conversation.senderNames?.[message.senderId] || getAccount(message.from)?.name || conversation.user;
     const preview = message.type === 'text' ? message.text : messagePreview(message);
     const entity = message.type === 'shared-post' ? findEntity(message.entityType, message.entityId) : null;
     const showPreview = entity && canViewMedia(entity)
@@ -91,7 +92,7 @@ function formatInboxTime(timestamp) {
 
 function renderGroupProfile(group) {
     const members = [...new Set(group.members)];
-    const admin = isGroupAdmin(group);
+    const admin = !group.cloudId && isGroupAdmin(group);
     return `
       <section class="group-profile" aria-label="Group profile">
         <header class="group-profile-header">
@@ -107,7 +108,7 @@ function renderGroupProfile(group) {
         <h4>Members (${members.length})</h4>
         <ul class="group-profile-members">
           ${members.map(handle => {
-              const account = getAccount(handle);
+              const account = group.participantProfiles?.[handle] || getAccount(handle);
               return `<li><img src="${escapeHtml(visibleAvatar(handle, account?.avatar))}" alt="" />
                 <span>${escapeHtml(account?.name || handle)}</span>
                 ${handle === currentUser.handle ? '<small>You</small>' : ''}
@@ -128,19 +129,108 @@ function renderInboxStories() {
     const groups = new Map();
     const stories = state.signedInAccountId ? state.inboxStories : state.stories;
     for (const story of stories || []) {
-        if (!contacts.has(story.handle) || story.expiresAt <= Date.now() || !canViewStory(story)) continue;
+        if (!contacts.has(story.handle) || story.handle === currentUser.handle || story.expiresAt <= Date.now() ||
+            state.mutedStoryHandles.has(story.handle) || !canViewStory(story)) continue;
         const group = groups.get(story.handle) || { ...story, seen: true };
         group.seen &&= state.seenStoryIds.has(story.id);
         groups.set(story.handle, group);
     }
-    if (!groups.size) return '';
-    return `<section class="inbox-stories stories-list" aria-label="Stories from your chats">${[...groups.values()].map(story =>
+    const ownStories = getStoryGroups().find(group => group.handle === currentUser.handle);
+    return renderOwnStoryTile(ownStories) + [...groups.values()].map(story =>
         `<button type="button" class="story-item" data-inbox-story="${escapeHtml(story.handle)}">
           <span class="story-ring has-story ${story.seen ? 'seen-story' : ''}"><img src="${escapeHtml(story.avatar)}" alt="" /></span>
-          <span>${escapeHtml(story.user)}</span></button>`).join('')}</section>`;
+          <span>${escapeHtml(story.user)}</span></button>`).join('');
 }
 
-export function renderMessages({ preserveComposer = false, preserveHistoryAnchor = false, scrollToLatest = false } = {}) {
+export function getInboxConversations() {
+    return conversations.filter(item => item.cloudId ? item.cloudHasMessages
+        : !conversations.some(other => other.cloudId && other.cloudHasMessages && other.handle === item.handle))
+        .sort((left, right) => Number(right.pinned) - Number(left.pinned) || inboxMessageTime(right) - inboxMessageTime(left));
+}
+
+export function renderInboxConversation(item) {
+    const unreadCount = getUnreadMessageCount(item);
+    const timestamp = inboxMessageTime(item);
+    const preview = getConversationPreview(item);
+    return `
+    <button class="conversation-tile ${item.unread ? "unread" : ""}" type="button" data-open-conversation="${escapeHtml(item.handle)}">
+      <img class="conversation-avatar" src="${escapeHtml(conversationAvatar(item))}" alt="" />
+      <span class="conversation-copy">
+        <strong>${escapeHtml(item.user)}</strong>
+        ${item.isGroup || item.pinned || item.muted ? `<span class="conversation-handle">${[
+          item.isGroup ? `${item.members?.length || 0} members` : '',
+          item.isGroup && item.pendingMembers?.length ? `${item.pendingMembers.length} invited` : '',
+          item.pinned ? 'Pinned' : '',
+          item.muted ? 'Muted' : '',
+        ].filter(Boolean).join(' · ')}</span>` : ''}
+        ${item.membershipStatus === 'pending'
+          ? '<span class="conversation-preview">Group invitation — review to join</span>'
+          : `<span class="conversation-preview">${escapeHtml(preview)}</span>`}
+      </span>
+      <span class="conversation-meta">
+        <time class="conversation-time">${formatInboxTime(timestamp)}</time>
+        ${unreadCount > 0 && item.membershipStatus !== 'pending'
+          ? `<span class="conversation-unread-count" aria-label="${unreadCount > 4 ? 'More than 4' : unreadCount} unread ${unreadCount === 1 ? 'message' : 'messages'}">${unreadCount > 4 ? '+4' : unreadCount}</span>` : ''}
+      </span>
+    </button>
+  `;
+}
+
+function renderMessagesInbox(list) {
+    const rows = getInboxConversations().map(renderInboxConversation).join('');
+    const empty = state.signedInAccountId ? '<p class="messages-local-note">No messages yet.</p>' : '';
+    const stories = renderInboxStories();
+    if (list.firstElementChild?.classList.contains('messages-inbox')) {
+        list.querySelector('.inbox-stories').innerHTML = stories;
+        list.querySelector('.inbox-conversation-rows').innerHTML = rows || empty;
+        return;
+    }
+    list.innerHTML = `
+    <section class="messages-inbox" aria-label="Messages inbox">
+      <header class="messages-inbox-header"><h2>Messages</h2><button class="new-group-button" type="button" data-create-group aria-label="New group" title="New group">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="8" cy="7" r="3" /><path d="M2 19v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M15 4a3 3 0 0 1 0 6M19 13v7M15.5 16.5h7" />
+        </svg>
+      </button></header>
+      <form class="messages-inbox-search" role="search" aria-label="Search messages">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 4.5 4.5" stroke-linecap="round" />
+        </svg>
+        <input type="search" name="inboxSearch" aria-label="Search by name or username" placeholder="Search name or username"
+          maxlength="100" autocomplete="off" aria-controls="inbox-search-results" />
+      </form>
+      <section class="inbox-stories stories-list" aria-label="Stories from your chats">${stories}</section>
+      <div class="conversation-list">
+        <div class="inbox-conversation-rows">${rows || empty}</div>
+        <div class="inbox-search-results" id="inbox-search-results" hidden>
+          <p class="inbox-search-status" role="status"></p>
+          <div class="inbox-search-chats"></div>
+          <div class="inbox-search-people"></div>
+        </div>
+      </div>
+      ${state.signedInAccountId ? '' : '<p class="messages-local-note">Messages are saved on this device. Delivery and connected calls will be added later.</p>'}
+    </section>`;
+}
+
+let chatSlide;
+
+export function renderMessages(options) {
+    const list = document.getElementById('messages-list');
+    const previous = list.dataset.messageScreen;
+    renderMessagesView(options);
+    const screen = state.activeGroupProfileHandle ? 'profile' : state.activeConversationHandle ? 'chat' : 'inbox';
+    list.dataset.messageScreen = screen;
+    if (!previous || previous === screen || state.currentView !== 'messages' || document.hidden ||
+        window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
+    const backwards = screen === 'inbox' || previous === 'profile';
+    chatSlide?.cancel();
+    chatSlide = list.firstElementChild?.animate?.(
+        [{ transform: `translateX(${backwards ? -28 : 28}px)`, opacity: .75 }, { transform: 'translateX(0)', opacity: 1 }],
+        { duration: 220, easing: 'cubic-bezier(.18,.84,.28,1)' },
+    );
+}
+
+function renderMessagesView({ preserveComposer = false, preserveHistoryAnchor = false, scrollToLatest = false } = {}) {
     const list = document.getElementById("messages-list");
     const group = conversations.find(item => item.handle === state.activeGroupProfileHandle);
     if (isJoinedGroup(group)) {
@@ -151,45 +241,7 @@ export function renderMessages({ preserveComposer = false, preserveHistoryAnchor
     const conversation = conversations.find((item) => item.handle === state.activeConversationHandle);
     if (!conversation) {
         state.activeConversationHandle = null;
-        list.innerHTML = `
-      <header class="messages-inbox-header"><h2>Messages</h2><button class="new-group-button" type="button" data-create-group aria-label="New group" title="New group">
-        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="8" cy="7" r="3" /><path d="M2 19v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M15 4a3 3 0 0 1 0 6M19 13v7M15.5 16.5h7" />
-        </svg>
-      </button></header>
-      ${renderInboxStories()}
-      <div class="conversation-list">
-        ${conversations.filter(item => item.cloudId ? item.cloudHasMessages : !conversations.some(other => other.cloudId && other.cloudHasMessages && other.handle === item.handle)).sort((left, right) => Number(right.pinned) - Number(left.pinned) || inboxMessageTime(right) - inboxMessageTime(left)).map((item) => {
-          const unreadCount = getUnreadMessageCount(item);
-          const timestamp = inboxMessageTime(item);
-          const preview = getConversationPreview(item);
-          return `
-          <button class="conversation-tile ${item.unread ? "unread" : ""}" type="button" data-open-conversation="${escapeHtml(item.handle)}">
-            <img class="conversation-avatar" src="${escapeHtml(conversationAvatar(item))}" alt="" />
-            <span class="conversation-copy">
-              <strong>${escapeHtml(item.user)}</strong>
-              ${item.isGroup || item.pinned || item.muted ? `<span class="conversation-handle">${[
-                item.isGroup ? `${item.members?.length || 0} members` : '',
-                item.isGroup && item.pendingMembers?.length ? `${item.pendingMembers.length} invited` : '',
-                item.pinned ? 'Pinned' : '',
-                item.muted ? 'Muted' : '',
-              ].filter(Boolean).join(' · ')}</span>` : ''}
-              ${item.membershipStatus === 'pending'
-                ? '<span class="conversation-preview">Group invitation — review to join</span>'
-                : `<span class="conversation-preview">${escapeHtml(preview)}</span>`}
-            </span>
-            <span class="conversation-meta">
-              <time class="conversation-time">${formatInboxTime(timestamp)}</time>
-              ${unreadCount > 0 && item.membershipStatus !== 'pending'
-                ? `<span class="conversation-unread-count" aria-label="${unreadCount > 4 ? 'More than 4' : unreadCount} unread ${unreadCount === 1 ? 'message' : 'messages'}">${unreadCount > 4 ? '+4' : unreadCount}</span>` : ''}
-            </span>
-          </button>
-        `;
-        }).join("")}
-      </div>
-      ${state.signedInAccountId ? '<div class="messages-compose-footer"><button class="messages-compose-button" type="button" data-new-direct-message aria-label="New message" title="New message">＋</button></div>' : ''}
-      ${state.signedInAccountId ? (conversations.some(item => !item.cloudId || item.cloudHasMessages) ? '' : '<p class="messages-local-note">No messages yet.</p>') : '<p class="messages-local-note">Messages are saved on this device. Delivery and connected calls will be added later.</p>'}
-    `;
+        renderMessagesInbox(list);
         return;
     }
     if (conversation.cloudId) {
@@ -257,12 +309,13 @@ function renderConversationActions(conversation, canSend) {
           <div class="chat-options-menu" role="menu" hidden>
             <button type="button" role="menuitem" data-chat-option="pin">${conversation.pinned ? "Unpin chat" : "Pin chat"}</button>
             <button type="button" role="menuitem" data-chat-option="mute">Mute</button>
+            ${!conversation.isGroup || isJoinedGroup(conversation) ? '<button type="button" role="menuitem" data-chat-option="search">Search chat</button>' : ''}
             <button type="button" role="menuitem" data-chat-option="wallpaper">Change chat wallpaper</button>
             ${!conversation.isGroup ? '<button type="button" role="menuitem" data-chat-option="timer">Chat timer</button>' : ''}
             ${!conversation.isGroup || isJoinedGroup(conversation) ? '<button type="button" role="menuitem" data-chat-option="delete">Delete chat</button>' : ''}
             ${conversation.isGroup ? '' : `<button type="button" role="menuitem" data-chat-profile data-profile-handle="${escapeHtml(conversation.handle)}">View profile</button>`}
             ${isJoinedGroup(conversation) ? '<button type="button" role="menuitem" data-chat-option="group-profile">View group profile</button><button type="button" role="menuitem" data-chat-option="leave-group">Leave group</button>' : ''}
-            ${conversation.isGroup && conversation.admins?.includes(currentUser.handle) ? '<button type="button" role="menuitem" data-chat-option="manage-group">Manage group</button>' : ''}
+            ${conversation.isGroup && !conversation.cloudId && conversation.admins?.includes(currentUser.handle) ? '<button type="button" role="menuitem" data-chat-option="manage-group">Manage group</button>' : ''}
             ${conversation.isGroup ? '' : `<div class="chat-more-wrap">
               <button class="chat-more-toggle" type="button" role="menuitem" data-chat-more aria-haspopup="menu" aria-expanded="false" aria-controls="chat-more-menu">More <span aria-hidden="true">›</span></button>
               <div class="chat-more-menu" id="chat-more-menu" role="menu" aria-label="More chat options" hidden>
@@ -417,13 +470,16 @@ function renderConnectedChat(list, chat, { preserveComposer, preserveHistoryAnch
     const wallpaper = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(chat.wallpaper || '') ? chat.wallpaper : '';
     const bubbles = messages.map(message => {
         const markup = renderConversationMessage(message, chat, byId);
+        const sender = chat.isGroup && message.from !== 'me' ? chat.senderNames?.[message.senderId] || 'Former member' : '';
         const badges = (message.reactions || []).map(reaction => reaction.emoji).join(' ');
         const receipt = seenMessage === message
             ? `<span class="chat-read-receipt">${readReceiptLabel(chat.peerReadAt)}</span>` : '';
         return markup.replace('<article ', `<article data-reactable-message="${escapeHtml(String(message.id))}" `)
+            .replace(/^(<article[^>]*>)/, tag => tag + (sender ? `<small class="chat-group-sender">${escapeHtml(sender)}</small>` : ''))
             .replace('</article>', `<span class="chat-message-reaction" role="status"${badges ? '' : ' hidden'}>${escapeHtml(badges)}</span>${receipt}</article>`);
     }).join('') || `<p class="chat-empty">${chat.cloudLoaded ? 'Start with a message.' : 'Loading messages…'}</p>`;
-    const markup = (chat.cloudHasOlder && messages.length
+    const invitation = '<p class="chat-empty">Accept this invitation to join the group.</p><div class="group-invitation-actions"><button type="button" data-group-invite="accept">Accept invitation</button><button type="button" data-group-invite="decline">Decline</button></div>';
+    const markup = chat.membershipStatus === 'pending' ? invitation : (chat.cloudHasOlder && messages.length
         ? '<button type="button" class="chat-load-older" data-load-older-chat>Load older messages</button>'
         : '') + bubbles;
     let history = list.querySelector('.chat-history');
@@ -451,7 +507,7 @@ function renderConnectedChat(list, chat, { preserveComposer, preserveHistoryAnch
             ${renderConversationActions(chat, chat.cloudCanSend)}
         </header>
         <div class="chat-history${wallpaper ? ` chat-history-custom" style="background-image:url(${wallpaper})` : ''}" aria-live="polite">${markup}</div>
-        ${chat.cloudCanSend ? renderChatComposer() : chat.cloudLoaded ? '<p class="chat-empty">Messaging requires an accepted follow between these accounts.</p>' : ''}
+        ${chat.cloudCanSend ? renderChatComposer() : chat.cloudLoaded && !chat.isGroup ? '<p class="chat-empty">Messaging requires an accepted follow between these accounts.</p>' : ''}
       </section>`;
     history = list.querySelector('.chat-history');
     history.scrollTop = history.scrollHeight;

@@ -1,3 +1,4 @@
+import { syncCloudGroupInvitationPreference } from './src/features/cloud-chat.js';
 import { enableAndroidPush } from './src/features/android-push.js';
 import { registerSignupValidation, resetSignupFeedback, pauseSignupValidation } from './src/features/signup-validation.js';
 import { readAuthEmail, checkSignupEmailResponse } from './src/features/auth-email.js';
@@ -176,6 +177,7 @@ async function enterAccount(user, profile) {
         document.getElementById('feed').innerHTML = '<p class="feed-empty" role="status">Loading posts…</p>';
     }
     void enableAndroidPush({ sync: true }).catch(() => {});
+    void syncCloudGroupInvitationPreference(user.id).catch(() => {});
     await loadAccountContent();
     void refreshHomeNotifications().catch(() => {});
     void subscribeToSocialUpdates(user.id).catch(() => {});

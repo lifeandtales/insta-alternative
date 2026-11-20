@@ -10,7 +10,18 @@ function showPhotoState(image, failed) {
 
 export function registerPostPhotoEvents() {
     document.addEventListener('load', event => {
-        if (event.target.matches?.('img[data-post-photo]') && event.target.naturalWidth) showPhotoState(event.target, false);
+        const image = event.target;
+        if (!image.matches?.('img[data-post-photo]') || !image.naturalWidth || !image.naturalHeight) return;
+        showPhotoState(image, false);
+        const frame = image.parentElement;
+        if (!frame.hasAttribute('data-original-photo-size')) return;
+        const originalRatio = image.naturalWidth / image.naturalHeight;
+        const ratio = Math.min(10, Math.max(.1, originalRatio));
+        if (ratio !== originalRatio) image.style.objectFit = 'cover';
+        if (Math.abs(Number(frame.style.getPropertyValue('--media-ratio')) - ratio) < .001) return;
+        frame.style.aspectRatio = String(ratio);
+        frame.style.setProperty('--media-ratio', String(ratio));
+        frame.dispatchEvent(new Event('post-photo-resize', { bubbles: true }));
     }, true);
     document.addEventListener('error', event => {
         if (event.target.matches?.('img[data-post-photo]')) showPhotoState(event.target, true);

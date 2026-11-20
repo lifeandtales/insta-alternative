@@ -30,6 +30,13 @@ export async function subscribeToSocialUpdates(owner) {
             if (state.signedInAccountId === owner && !document.hidden) void refreshOpenCloudComments().catch(() => {});
         });
     }
+    for (const [table, column] of [['group_invitations', 'recipient_id'], ['group_members', 'user_id']]) {
+        next.on('postgres_changes', { event: 'INSERT', schema: 'public', table, filter: column + '=eq.' + owner }, () => {
+            if (owner === state.signedInAccountId && !document.hidden && state.currentView === 'messages') {
+                void refreshConnectedView('messages').catch(() => {});
+            }
+        });
+    }
     for (const table of ['profiles', 'account_follows', 'messages', 'image_posts', 'media_content', 'image_post_comments', 'conversation_preferences', 'message_reactions']) {
         for (const event of table === 'media_content' ? ['INSERT', 'UPDATE', 'DELETE'] : ['INSERT', 'UPDATE']) next.on('postgres_changes', { event, schema: 'public', table }, () => {
             if (owner !== state.signedInAccountId || document.hidden) return;

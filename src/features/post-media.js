@@ -44,10 +44,15 @@ export function mediaFilter(item) {
     const effect = POST_FILTERS.find(filter => filter.id === edit.filter).effect;
     return `brightness(${edit.brightness}%) contrast(${edit.contrast}%) saturate(${edit.saturation}%)${effect ? ' '+effect : ''}`;
 }
+function usesOriginalPhotoRatio(item, edit) {
+    return item.type === 'image' && item.layout !== 'reel' && edit.ratio === 'original' && !edit.rotation;
+}
+
 export function mediaAspect(item) {
     const edit = mediaEdits(item);
     const parts=edit.ratio.split('/').map(Number);
     const ratio=edit.ratio==='original'?bounded(item.naturalRatio,1,.1,10):parts[0]/parts[1];
+    if (usesOriginalPhotoRatio(item, edit)) return ratio;
     return item.layout==='reel' ? bounded(ratio,9/16,9/16,1.91) : bounded(ratio,4/5,3/4,1.91);
 }
 export function mediaFit(item) {
@@ -73,9 +78,10 @@ export function renderEditedMedia(item, {className = 'post-image', alt = 'Select
         ? `<video class="${escapeHtml(className)}" playsinline ${nativeControls?'controls':'disablepictureinpicture disableremoteplayback'} preload="${feedPriority === false ? 'none' : 'metadata'}" ${item.poster ? `poster="${escapeHtml(item.poster)}"` : ''} ${preview || edit.originalAudioMuted ? 'muted' : ''} ${edit.originalAudioMuted ? 'data-original-audio-muted="true"' : ''} src="${escapeHtml(item.url)}" style="${style}"></video>`
         : feedPriority === null ? `<img class="${escapeHtml(className)}" src="${escapeHtml(item.url)}" alt="${escapeHtml(alt)}" style="${style}" />`
             : renderPostPhoto(item.url, { className, alt, style, priority: feedPriority, storagePath: item.storagePath });
-    const aspect = String(mediaAspect(item)).split("/").map(Number);
-    const numericAspect = aspect.length === 2 ? aspect[0]/aspect[1] : aspect[0];
-    return `<div class="post-media-stage" style="aspect-ratio:${mediaAspect(item)};--media-ratio:${numericAspect}">${media}${item.type==='video'&&!nativeControls?'<button type="button" class="reel-editor-play-toggle" aria-label="Play reel preview">▶</button>':''}${edit.text ? `<span class="post-media-text" style="left:${edit.textX}%;top:${edit.textY}%;font-size:${edit.textSize}cqw">${escapeHtml(edit.text)}</span>` : ''}</div>`;
+    const aspect = mediaAspect(item);
+    const originalPhoto = feedPriority !== null && usesOriginalPhotoRatio(item, edit);
+    return `<div class="post-media-stage"${originalPhoto ? ' data-original-photo-size' : ''}
+        style="aspect-ratio:${aspect};--media-ratio:${aspect}">${media}${item.type==='video'&&!nativeControls?'<button type="button" class="reel-editor-play-toggle" aria-label="Play reel preview">▶</button>':''}${edit.text ? `<span class="post-media-text" style="left:${edit.textX}%;top:${edit.textY}%;font-size:${edit.textSize}cqw">${escapeHtml(edit.text)}</span>` : ''}</div>`;
 }
 
 // Work in percentages of the same fixed canvas used for the published post.

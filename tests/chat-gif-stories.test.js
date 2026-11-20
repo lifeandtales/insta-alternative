@@ -11,16 +11,19 @@ test('inbox Stories require a visible chat and disappear when its history is hid
     state.signedInAccountId = 'fixture-owner';
     chat.cloudId = 'thread';
     chat.cloudHasMessages = true;
+    state.stories = [];
     state.inboxStories = [{
         id: 'story', handle: chat.handle, user: chat.user, avatar: chat.avatar,
         cloudContentId: 'story', cloudOwnerId: 'friend', public: true,
         expiresAt: 1792738800000 + 60000,
     }];
     renderMessages();
-    assert.match(app.element('#messages-list').innerHTML, /data-inbox-story=/);
+    assert.match(app.element('#messages-list').innerHTML, /name="inboxSearch"[\s\S]+class="inbox-stories[\s\S]+data-inbox-story=/);
     chat.cloudHasMessages = false;
     renderMessages();
-    assert.doesNotMatch(app.element('#messages-list').innerHTML, /data-inbox-story=/);
+    const inbox = app.element('#messages-list').innerHTML;
+    assert.doesNotMatch(inbox, /data-inbox-story=/);
+    assert.match(inbox, /class="inbox-stories[\s\S]+data-story-owner=[\s\S]+<span>Add story<\/span>[\s\S]+class="conversation-list"/);
 });
 
 test('GIF and transparent sticker attachments render as original media, with sticker presentation retained', async () => {

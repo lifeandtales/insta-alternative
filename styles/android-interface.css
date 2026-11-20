@@ -12,6 +12,20 @@ html.android-app,
     padding-inline: 16px;
 }
 
+@media (max-width: 600px) {
+    .android-app {
+        --app-frame-width: 100%;
+    }
+
+    .android-app .app-shell.view-home .main-area {
+        padding-inline: max(4px, env(safe-area-inset-left)) max(4px, env(safe-area-inset-right));
+    }
+
+    .android-app .app-shell.view-home :is(.home-brand-header, .home-stories, .home-create-row, .account-access-notice) {
+        margin-inline: 8px;
+    }
+}
+
 .android-app .app-shell.view-home .home-brand-header {
     justify-content: flex-start;
     min-height: 62px;

@@ -19,7 +19,8 @@ test('Community entry belongs to Explore and Messages keeps its compose action',
     assert.equal(entry.hidden, true);
     assert.equal(app.element('#explore-grid').hidden, true);
     const messages = app.element('#messages-list').innerHTML;
-    assert.match(messages, /data-new-direct-message/);
+    assert.match(messages, /name="inboxSearch"/);
+    assert.doesNotMatch(messages, /data-new-direct-message/);
     assert.doesNotMatch(messages, /data-open-communities/);
 });
 

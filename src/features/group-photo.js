@@ -1,5 +1,6 @@
 import { mayInteract } from '../core/social.js';
 import { state } from '../core/state.js';
+import { saveCloudGroupPhoto } from './cloud-chat.js';
 import { bindCoverCrop } from '../media/cover-crop.js';
 import { renderSquareCover } from '../media/cover-canvas.js';
 import { persistSession } from '../storage/local-session.js';
@@ -143,13 +144,17 @@ export function registerGroupPhotoEvents() {
         if (event.target.closest('[data-group-photo-reselect]')) openGroupPhotoPicker(session.group);
         if (event.target.closest('[data-group-photo-save]') && session.binding) {
             try {
-                session.group.photo = renderSquareCover(panel.querySelector('.group-photo-crop-stage img'), null, { ...session.crop, size: 384 });
-                releaseEditor();
-                panel.close();
-                renderMessages();
-                await persistSession();
+                const photo = renderSquareCover(panel.querySelector('.group-photo-crop-stage img'), null, { ...session.crop, size: 384 });
+                if (session.group.cloudId) await saveCloudGroupPhoto(session.group, photo);
+                session.group.photo = photo;
+                if (editor === session) {
+                    releaseEditor();
+                    panel.close();
+                    renderMessages();
+                }
+                if (!session.group.cloudId) await persistSession();
             } catch {
-                showShareFeedback('The group photo could not be saved on this device.');
+                showShareFeedback('The group photo could not be saved.');
             }
         }
     });

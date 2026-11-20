@@ -1,5 +1,6 @@
 import { state } from '../core/state.js';
 import { getSupabaseClient } from '../storage/supabase.js';
+import { hasGroupCall, registerGroupCallControls, startGroupCall } from './group-calls.js';
 import { showShareFeedback } from '../components/feedback.js';
 
 const stun = [{ urls: 'stun:stun.l.google.com:19302' }];
@@ -172,7 +173,8 @@ async function setupPeer(call) {
 }
 
 export async function startInAppCall(chat, kind) {
-    if (current || !chat?.cloudId || !chat.cloudCanSend) return;
+    if (current || hasGroupCall() || !chat?.cloudId || !chat.cloudCanSend) return;
+    if (chat.isGroup) return startGroupCall(chat, kind);
     if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection !== 'function') {
         showShareFeedback('Voice and video calls are unavailable in this browser.');
         return;
@@ -247,7 +249,7 @@ async function accept(call) {
 
 export async function refreshInAppCalls() {
     const owner = state.signedInAccountId;
-    if (checking || !owner || (document.hidden && !current)) return;
+    if (checking || !owner || (!current && (document.hidden || hasGroupCall()))) return;
     checking = true;
     try {
         const call = current;
@@ -275,10 +277,10 @@ export async function refreshInAppCalls() {
         const { data, error } = await client.from('direct_calls').select(callColumns + ',caller:profiles!direct_calls_caller_id_fkey(display_name)')
             .eq('recipient_id', owner).eq('status', 'ringing').gt('expires_at', new Date().toISOString())
             .order('expires_at').limit(1).maybeSingle();
-        if (error || !data || current || state.signedInAccountId !== owner) return;
+        if (error || !data || current || hasGroupCall() || state.signedInAccountId !== owner) return;
         const mute = await client.from('conversation_preferences').select('calls_muted')
             .eq('user_id', owner).eq('conversation_id', data.conversation_id).maybeSingle();
-        if (mute.data?.calls_muted || current || state.signedInAccountId !== owner) return;
+        if (mute.data?.calls_muted || current || hasGroupCall() || state.signedInAccountId !== owner) return;
         current = { id: data.id, incoming: true, expiresAt: Date.parse(data.expires_at), kind: data.kind, offer: data.offer, owner, name: data.caller?.display_name || 'Incoming caller' };
         render(current, 'Incoming call');
     } catch {
@@ -289,6 +291,7 @@ export async function refreshInAppCalls() {
 }
 
 export function registerInAppCallControls() {
+    registerGroupCallControls({ canReceive: () => !current, iceServers, awaitIce });
     const panel = dialog();
     panel.innerHTML = `
       <div class="call-heading"><h2 data-call-title></h2><p data-call-status role="status"></p></div>
