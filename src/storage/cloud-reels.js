@@ -7,7 +7,7 @@ import { mediaEdits } from '../features/post-media.js';
 import { cloudMediaCommentCounts } from './cloud-comments.js';
 import { loadVideoEngagement } from './video-engagement.js';
 
-export const cloudReelProjection = 'id,owner_id,caption,audience,publish_at,metadata,author:profiles!inner(username,display_name,avatar_path,is_private),assets:media_assets(object_path,mime_type,position),' + cloudMediaCommentCounts;
+export const cloudReelProjection = 'id,owner_id,caption,audience,publish_at,metadata,author:profiles!media_content_owner_id_fkey!inner(username,display_name,avatar_path,is_private),assets:media_assets(object_path,mime_type,position),' + cloudMediaCommentCounts;
 
 export async function publishCloudReel(reel, id) {
     const owner = state.signedInAccountId;
