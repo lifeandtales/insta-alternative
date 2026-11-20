@@ -91,14 +91,14 @@ export function handleProfileSectionClick(event) {
     const profileSectionButton = event.target.closest("[data-profile-section]");
     if (profileSectionButton) {
         state.activeProfileSection = profileSectionButton.dataset.profileSection;
-        renderProfile();
         if (state.activeProfileSection === 'reposts') {
             const handle = state.profileHandle;
             const target = handle === currentUser.handle ? state.signedInAccountId : cloudPerson(handle)?.id;
             if (target) void loadCloudReposts(target, handle).then(() => {
                 if (state.currentView === 'profile' && state.profileHandle === handle && state.activeProfileSection === 'reposts') renderProfile();
-            }).catch(() => showShareFeedback('Could not load reposts. Try again.'));
+            });
         }
+        renderProfile();
         return true;
     }
     return false;

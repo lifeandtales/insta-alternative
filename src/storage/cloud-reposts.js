@@ -15,8 +15,12 @@ function repostTarget(entity) {
 }
 
 export function canRepost(entity) {
-    return Boolean(state.signedInAccountId && repostTarget(entity) && entity.public && canViewMedia(entity) &&
-        cloudPerson(entity.handle)?.isPrivate !== true);
+    if (!state.signedInAccountId || !repostTarget(entity) || !canViewMedia(entity)) return false;
+    if (entity.reel && entity.cloudAudience && !['public', 'followers'].includes(entity.cloudAudience)) return false;
+    const author = cloudPerson(entity.handle);
+    return entity.cloudOwnerId === state.signedInAccountId ||
+        (entity.public && author?.isPrivate !== true) ||
+        Boolean(state.cloudFollowingIds?.has(entity.cloudOwnerId) || author?.followStatus === 'accepted');
 }
 
 function filterOriginal(query, entity) {
@@ -44,37 +48,67 @@ export async function setRepost(entity, desired) {
 export function getRepostedMedia(handle = state.profileHandle) {
     const collection = state.cloudReposts;
     if (!collection || collection.handle !== handle || collection.viewer !== state.signedInAccountId) return [];
-    return collection.items.filter(({ entity }) => entity.public && canViewMedia(entity) &&
-        cloudPerson(entity.handle)?.isPrivate !== true);
+    return collection.items.filter(({ entity }) => canViewMedia(entity));
+}
+
+export function repostLoadStatus(handle = state.profileHandle) {
+    const collection = state.cloudReposts;
+    if (!collection || collection.handle !== handle || collection.viewer !== state.signedInAccountId) return '';
+    return collection.status;
+}
+
+async function readRepostImages(client, rows, viewer) {
+    const groups = [];
+    const batchSize = 25;
+    for (let start = 0; start < rows.length; start += batchSize) {
+        const filter = rows.slice(start, start + batchSize)
+            .map(row => `and(owner_id.eq.${row.image_owner_id},client_id.eq.${row.image_client_id})`)
+            .join(',');
+        groups.push(client.from('image_posts').select(cloudImageCollectionProjection)
+            .or(filter).eq('viewer_like.user_id', viewer));
+    }
+    const results = await Promise.all(groups);
+    const failed = results.find(result => result.error);
+    if (failed) throw failed.error;
+    return hydrateCloudImagePosts(client, results.flatMap(result => result.data), viewer);
+}
+
+async function readRepostReels(client, ids, viewer) {
+    if (!ids.length) return [];
+    const { data, error } = await client.from('media_content').select(cloudReelProjection)
+        .eq('kind', 'reel').in('id', ids);
+    if (error) throw error;
+    return hydrateCloudReels(client, data, viewer);
 }
 
 let loadRevision = 0;
 
 export async function loadCloudReposts(target, handle) {
     const viewer = state.signedInAccountId;
-    if (!viewer) return;
+    if (!viewer || state.profileHandle !== handle) return;
     const revision = ++loadRevision;
-    const client = await getSupabaseClient();
-    const { data, error } = await client.from('profile_reposts')
-        .select(`id,image:image_posts(${cloudImageCollectionProjection}),reel:media_content(${cloudReelProjection})`)
-        .eq('user_id', target).eq('image.viewer_like.user_id', viewer)
-        .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(100);
-    if (state.signedInAccountId !== viewer || revision !== loadRevision) return;
-    if (error) {
-        if (state.cloudReposts?.handle === handle) state.cloudReposts = null;
-        if (!['PGRST200', 'PGRST205', '42P01'].includes(error.code)) throw error;
-        return;
+    const isCurrent = () => state.signedInAccountId === viewer && state.profileHandle === handle && revision === loadRevision;
+    state.cloudReposts = { handle, viewer, items: [], status: 'loading' };
+    try {
+        const client = await getSupabaseClient();
+        const { data, error } = await client.from('profile_reposts')
+            .select('id,image_owner_id,image_client_id,reel_id')
+            .eq('user_id', target).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(100);
+        if (!isCurrent()) return;
+        if (error) throw error;
+        const [images, reels] = await Promise.allSettled([
+            readRepostImages(client, data.filter(row => row.image_owner_id), viewer),
+            readRepostReels(client, data.map(row => row.reel_id).filter(Boolean), viewer),
+        ]);
+        if (!isCurrent()) return;
+        const imageByKey = new Map((images.value || []).map(post => [`${post.cloudOwnerId}:${post.cloudClientId}`, post]));
+        const reelById = new Map((reels.value || []).map(reel => [reel.cloudContentId, reel]));
+        const items = data.flatMap(row => {
+            const entity = row.image_owner_id ? imageByKey.get(`${row.image_owner_id}:${row.image_client_id}`) : reelById.get(row.reel_id);
+            return entity ? [{ type: entity.reel ? 'reel' : 'post', entity }] : [];
+        });
+        state.cloudReposts = { handle, viewer, items, status: images.status === 'rejected' || reels.status === 'rejected' ? 'failed' : 'loaded' };
+    } catch {
+        if (isCurrent()) state.cloudReposts = { handle, viewer, items: [], status: 'failed' };
     }
-    const [posts, reels] = await Promise.all([
-        hydrateCloudImagePosts(client, data.flatMap(row => row.image ? [row.image] : []), viewer),
-        hydrateCloudReels(client, data.flatMap(row => row.reel ? [row.reel] : []), viewer),
-    ]);
-    if (state.signedInAccountId !== viewer || revision !== loadRevision || state.profileHandle !== handle) return;
-    const imageByKey = new Map(posts.map(post => [`${post.cloudOwnerId}:${post.cloudClientId}`, post]));
-    const reelById = new Map(reels.map(reel => [reel.cloudContentId, reel]));
-    const items = data.flatMap(row => {
-        const entity = row.image ? imageByKey.get(`${row.image.owner_id}:${row.image.client_id}`) : reelById.get(row.reel?.id);
-        return entity ? [{ type: entity.reel ? 'reel' : 'post', entity }] : [];
-    });
-    state.cloudReposts = { handle, viewer, items };
 }

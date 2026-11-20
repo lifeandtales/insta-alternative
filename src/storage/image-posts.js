@@ -10,6 +10,40 @@ import { hydrateImageComments, imageCommentProjection } from './cloud-comments.j
 const bucketName = 'post-images';
 const tableName = 'image_posts';
 
+const signedMedia = new Map();
+let cacheAccount;
+
+async function signedImagePostUrls(client, paths, accountId, retry = false) {
+    if (accountId !== state.signedInAccountId) return new Map();
+    if (cacheAccount !== accountId) {
+        signedMedia.clear();
+        cacheAccount = accountId;
+    }
+    const now = Date.now();
+    for (const [path, asset] of signedMedia) {
+        if (asset.reuseUntil <= now) signedMedia.delete(path);
+    }
+    const missing = paths.filter(path => retry || !signedMedia.has(path));
+    if (missing.length) {
+        const { data, error } = await client.storage.from(bucketName).createSignedUrls(missing, 3600);
+        if (error) throw error;
+        if (accountId !== state.signedInAccountId) return new Map();
+        for (const item of data || []) {
+            if (item.signedUrl) signedMedia.set(item.path, { url: item.signedUrl, reuseUntil: now + 300000 });
+            else signedMedia.delete(item.path);
+        }
+    }
+    return new Map(paths.map(path => [path, signedMedia.get(path)?.url]));
+}
+
+export async function retryImagePostPhoto(path) {
+    const accountId = state.signedInAccountId;
+    if (!accountId || !path) return '';
+    const client = await getSupabaseClient();
+    const urls = await signedImagePostUrls(client, [path], accountId, true);
+    return urls.get(path) || '';
+}
+
 function postMediaSettings(item) {
     return {
         ...mediaEdits(item),
@@ -115,18 +149,14 @@ export async function loadCloudImagePosts(targetId = null, taggedHandle = null) 
 }
 
 export async function hydrateCloudImagePosts(client, data, ownerId) {
-    const bucket = client.storage.from(bucketName);
     const paths = [...new Set(data.flatMap(row => row.items.flatMap(item => [item.path, item.cover_path].filter(Boolean))))];
     const videoTargets = data.filter(row => row.items.some(item => item.settings?.type === 'video'))
         .map(row => ({ owner: row.owner_id, id: row.client_id }));
-    const [signed, engagement] = await Promise.all([
-        paths.length ? bucket.createSignedUrls(paths, 3600) : { data: [] },
+    const [urls, engagement, avatars] = await Promise.all([
+        signedImagePostUrls(client, paths, ownerId),
         loadVideoEngagement(client, { posts: videoTargets }),
+        avatarLookup(client, data.flatMap(row => [row.author, ...(row.preview_comments || []).map(comment => comment.author)])),
     ]);
-    if (signed.error) throw signed.error;
-    const urls = new Map(signed.data.map(item => [item.path, item.signedUrl]));
-    if (state.signedInAccountId !== ownerId) return [];
-    const avatars = await avatarLookup(client, data.flatMap(row => [row.author, ...(row.preview_comments || []).map(comment => comment.author)]));
     if (state.signedInAccountId !== ownerId) return [];
     const cloudPosts = [];
     const totals = new Map(engagement.posts.map(item => [`${item.owner}:${item.id}`, item]));
@@ -136,8 +166,9 @@ export async function hydrateCloudImagePosts(client, data, ownerId) {
         const id = mine ? row.client_id : remoteMediaId(row.owner_id + ':' + row.client_id);
         const mediaItems = row.items.map(item => ({
             ...postMediaSettings(item.settings || {}), duration: item.duration_seconds, url: urls.get(item.path),
+            storagePath: item.path, poster: urls.get(item.cover_path),
         }));
-        if (mediaItems.some(item => !item.url)) continue;
+        if (!mediaItems.length || mediaItems.some(item => item.type === 'video' && !item.url)) continue;
         const existing = posts.find(post => post.id === id && post.cloudImagePaths);
         const commentPreviews = Array.isArray(row.preview_comments) ? hydrateImageComments(row.preview_comments, avatars, existing?.commentItems) : undefined;
         const viewTotal = totals.get(`${row.owner_id}:${row.client_id}`);
@@ -149,7 +180,7 @@ export async function hydrateCloudImagePosts(client, data, ownerId) {
             user: mine ? currentUser.name : author.name,
             avatar: mine ? currentUser.avatar : author.avatar,
             caption: row.caption, location: row.location, taggedUsers: row.tags, taggedHandles: row.tags,
-            media: mediaItems[0].url,
+            media: mediaItems[0].url || '',
             cover: urls.get(row.items[0].cover_path) || (cover.type === 'image' ? cover.url : existing?.cover),
             coverIndex: row.cover_index, mediaItems, cloudImagePaths: row.items.flatMap(item => [item.path, item.cover_path].filter(Boolean)),
             cloudOwnerId: row.owner_id, cloudClientId: row.client_id, createdAt: Date.parse(row.created_at),

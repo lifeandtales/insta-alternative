@@ -37,7 +37,7 @@ export function handlePostOption(option, post, type, control) {
         void setRepost(post, desired).then(() => {
             if (state.currentView === 'profile') setView('profile');
             showShareFeedback(desired ? 'Added to your profile’s Reposts.' : 'Repost removed.');
-        }).catch(() => showShareFeedback('Could not update the repost. Check that the original is public.'))
+        }).catch(() => showShareFeedback('Could not update the repost. Check that you can still open the original.'))
             .finally(() => { control.disabled = false; });
         return;
     }

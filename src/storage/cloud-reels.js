@@ -110,7 +110,7 @@ export async function hydrateCloudReels(client, data, accountId) {
             ...previous, id, cloudContentId: row.id, cloudOwnerId: row.owner_id, handle: author.handle,
             user: author.name, avatar: author.avatar, caption: row.caption,
             createdAt: Date.parse(row.publish_at), video: url, poster: cover, cover, mine,
-            public: !row.audience || row.audience === 'public', reel: true,
+            public: !row.audience || row.audience === 'public', cloudAudience: row.audience, reel: true,
             cloudVideoPaths: row.assets.map(asset => asset.object_path),
             mediaItems: edits ? [{ ...mediaEdits(edits), type: 'video', layout: 'reel', url,
                 naturalRatio: row.metadata.naturalRatio, x: row.metadata.x, y: row.metadata.y, fit: row.metadata.fit }] : undefined,

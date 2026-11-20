@@ -1,4 +1,4 @@
-import { getRepostedMedia } from '../storage/cloud-reposts.js';
+import { getRepostedMedia, repostLoadStatus } from '../storage/cloud-reposts.js';
 import { cloudSavedEntities, cloudSavedKey, isMediaSaved } from '../storage/cloud-saved-items.js';
 import { cloudFollowLabel, cloudPerson } from './cloud-people.js';
 import { persistSession, unexpiredDrafts } from '../storage/local-session.js';
@@ -174,6 +174,7 @@ export function renderProfile() {
     const count = user.postCount ?? (accessible ? ownPosts.length : '—');
     const savedCollection = getSavedCollection();
     const reposted = accessible ? getRepostedMedia() : [];
+    const repostStatus = repostLoadStatus();
     document.getElementById("profile-view").innerHTML = `
     <div class="profile-topbar">
       ${isOwnProfile ? '<span aria-hidden="true"></span>' : '<button type="button" class="profile-back" data-profile-back aria-label="Back to previous screen">←</button>'}
@@ -217,7 +218,9 @@ export function renderProfile() {
     <section class="profile-section-content" data-profile-content="reposts" ${state.activeProfileSection === 'reposts' ? '' : 'hidden'}>
       <div class="media-grid profile-media-grid">
         ${reposted.map(({ type, entity }) => `<article class="profile-media-tile" data-profile-media-type="${type}" data-profile-media-id="${entity.id}" tabindex="0" role="button" aria-label="View ${escapeHtml(entity.user)}'s ${type}">${renderProfileMedia(type, entity)}</article>`).join('')
-        || '<p class="empty-profile-posts">No reposts yet.</p>'}
+        || (repostStatus === 'loading' ? '<p class="empty-profile-posts" role="status">Loading reposts…</p>'
+          : repostStatus === 'failed' ? '' : '<p class="empty-profile-posts">No reposts yet.</p>')}
+        ${repostStatus === 'failed' ? '<p class="empty-profile-posts" role="status">Could not load all reposts. Tap Reposts to retry.</p>' : ''}
       </div>
     </section>
     <section class="profile-section-content" data-profile-content="posts" ${state.activeProfileSection === "posts" ? "" : "hidden"}>

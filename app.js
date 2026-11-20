@@ -22,6 +22,7 @@ import { loadSession, persistSession } from './src/storage/local-session.js';
 // Entry point: initialize storage, media observation, event routing, then Home.
 import { state } from './src/core/state.js';
 import { loadSavedItems, loadJoinedCommunities, loadStoryHighlights } from './src/storage/browser-storage.js';
+import { registerPostPhotoEvents } from './src/media/post-photos.js';
 import { initializeVideoObserver } from './src/media/video.js';
 import { refreshConnectedView, setView } from './src/core/navigation.js';
 import { showShareFeedback } from './src/components/feedback.js';
@@ -128,10 +129,18 @@ function renderAccountIdentity() {
 }
 
 async function loadAccountContent() {
-    const [sessionResult] = await Promise.allSettled([loadSession(), loadStoryHighlights()]);
+    const local = Promise.allSettled([loadSession(), loadStoryHighlights()]);
+    const following = Promise.allSettled([loadCloudFollowing()]);
+    const [sessionResult] = await local;
     if (demoContentEnabled && sessionResult.status === 'rejected') return;
-    try { await loadCloudFollowing(); await Promise.all([loadCloudImagePosts(), loadCloudSavedKeys(), loadCloudReels().catch(() => {})]); }
-    catch { showShareFeedback('Could not load your saved image posts. Pull down on Home to retry.'); }
+    const [imageResult] = await Promise.allSettled([
+        following.then(([result]) => {
+            if (result.status === 'rejected') throw result.reason;
+            return loadCloudImagePosts();
+        }),
+        loadCloudSavedKeys(), loadCloudReels(),
+    ]);
+    if (imageResult.status === 'rejected') showShareFeedback('Could not load your saved image posts. Pull down on Home to retry.');
     refreshChatAttachmentExpiry();
     processScheduledPosts();
     syncIncomingStoryMentions();
@@ -146,27 +155,32 @@ async function enterAccount(user, profile) {
     Object.assign(currentUser, identity);
     loadAccountPreferences();
     Object.assign(currentUser, identity);
-    if (profile.avatar_path) {
-        try { currentUser.avatar = await readCloudAvatar(profile.avatar_path) || DEFAULT_AVATAR; }
-        catch { currentUser.avatar = DEFAULT_AVATAR; }
-    }
+    if (profile.avatar_path) void readCloudAvatar(profile.avatar_path).then(avatar => {
+        if (state.signedInAccountId !== user.id || !avatar) return;
+        currentUser.avatar = avatar;
+        if (account) account.avatar = avatar;
+        renderAccountIdentity();
+    }).catch(() => {});
     state.profileHandle = currentUser.handle;
     const account = state.accountDirectory.find(item => item.id === user.id || item.id === 'local-owner');
     if (account) Object.assign(account, { id: user.id, ...identity, avatar: currentUser.avatar });
     state.viewerAgeBand = user.user_metadata?.age_band === 'adult' ? 'adult' : 'minor';
     renderAccountIdentity();
+    for (const form of welcomeForms) form.reset();
+    pendingProfileUser = null;
+    welcomeScreen.hidden = true;
+    const locked = syncDeletionLock();
+    if (!locked) {
+        document.querySelector('.app-shell').hidden = false;
+        document.querySelector('.mobile-nav').hidden = false;
+        document.getElementById('feed').innerHTML = '<p class="feed-empty" role="status">Loading posts…</p>';
+    }
     void enableAndroidPush({ sync: true }).catch(() => {});
     await loadAccountContent();
     void refreshHomeNotifications().catch(() => {});
     void subscribeToSocialUpdates(user.id).catch(() => {});
     void subscribeToSavedChanges(user.id, refreshSavedState).catch(() => {});
-    for (const form of welcomeForms) form.reset();
-    pendingProfileUser = null;
-    welcomeScreen.hidden = true;
-    if (syncDeletionLock()) return;
-    document.querySelector('.app-shell').hidden = false;
-    document.querySelector('.mobile-nav').hidden = false;
-    openMediaFromHash();
+    if (!syncDeletionLock()) openMediaFromHash();
 }
 
 async function continueWithUser(client, user, details) {
@@ -319,6 +333,7 @@ if (demoContentEnabled) {
 registerDeletionLock(() => { setView('home'); openMediaFromHash(); });
 syncDeletionLock();
 initializeVideoObserver();
+registerPostPhotoEvents();
 // Preserve the original click priority: a handled action stops dispatch.
 const clickHandlers = [
     handleVideoExitClick,

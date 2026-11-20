@@ -1,6 +1,6 @@
 import { initializePostCarousels } from '../media/carousel.js';
 import { renderCaption } from './caption.js';
-import { renderEditedMedia } from '../features/post-media.js';
+import { renderEditedMedia, renderPostPhoto } from '../features/post-media.js';
 import { feed, profilePostViewerContent } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { escapeHtml, formatCount } from '../core/utils.js';
@@ -23,31 +23,33 @@ export function renderSaveButton(type, entity) {
   </button>`;
 }
 
-export function renderMedia(post, className = "post-image", type = "post") {
+export function renderMedia(post, className = "post-image", type = "post", priority = false) {
     if (mediaNeedsWarning(post) && !state.revealedMediaKeys.has(`${type}:${post.id}`)) {
         return `<div class="sensitive-media" data-media-class="${escapeHtml(className)}"><img class="${className}" src="${escapeHtml(post.cover || post.poster || post.media || '')}" alt="Sensitive media obscured" /><div class="sensitive-media-warning"><strong>Sensitive content</strong><p>This media may contain sensitive content.</p>${state.viewerAgeBand === 'minor' ? '<p>Unavailable for under-18 accounts.</p>' : `<button type="button" data-media-reveal="${post.id}" data-entity-type="${type}">View content</button>`}</div></div>`;
     }
     if (post.mediaItems?.length) {
-        return `<div class="post-carousel" aria-label="${post.mediaItems.length} media items"><div class="carousel-slides" tabindex="0">${post.mediaItems.map((item, index) => `<div class="carousel-slide likeable-media" data-likeable-id="${post.id}" data-likeable-type="${type}" data-video-asset-index="${index}" role="group" aria-label="${index + 1} of ${post.mediaItems.length}">${renderEditedMedia(item,{className,alt:`${post.user} media ${index+1}`})}<span class="double-like-heart" aria-hidden="true">♥</span></div>`).join('')}</div>${post.mediaItems.length>1?`<span class="carousel-index" role="status" aria-live="polite" aria-label="Item 1 of ${post.mediaItems.length}">1/${post.mediaItems.length}</span>`:''}</div>`;
+        return `<div class="post-carousel" aria-label="${post.mediaItems.length} media items"><div class="carousel-slides" tabindex="0">${post.mediaItems.map((item, index) => `<div class="carousel-slide likeable-media" data-likeable-id="${post.id}" data-likeable-type="${type}" data-video-asset-index="${index}" role="group" aria-label="${index + 1} of ${post.mediaItems.length}">${renderEditedMedia(item, {
+            className, alt: `${post.user} media ${index + 1}`, feedPriority: priority && index === 0,
+        })}<span class="double-like-heart" aria-hidden="true">♥</span></div>`).join('')}</div>${post.mediaItems.length>1?`<span class="carousel-index" role="status" aria-live="polite" aria-label="Item 1 of ${post.mediaItems.length}">1/${post.mediaItems.length}</span>`:''}</div>`;
     }
     if (post.mediaType === "video" || type === "reel") {
-        const poster = type === "reel" ? post.poster : post.media;
+        const poster = post.cover || (type === "reel" ? post.poster : post.media);
         const video = type === "reel" ? post.video : post.videoUrl;
         return `<div class="likeable-media" data-likeable-id="${post.id}" data-likeable-type="${type}">
-      <video class="${className}" tabindex="0" playsinline preload="auto" muted poster="${escapeHtml(poster)}"><source src="${escapeHtml(video)}">Your browser does not support video playback.</video>
+      <video class="${className}" tabindex="0" playsinline preload="${priority ? 'metadata' : 'none'}" muted poster="${escapeHtml(poster || '')}"><source src="${escapeHtml(video)}">Your browser does not support video playback.</video>
       <button class="video-sound-toggle" type="button" data-video-sound aria-label="Turn video sound on" aria-pressed="false">🔇</button>
       <span class="double-like-heart" aria-hidden="true">♥</span>
     </div>`;
     }
     return `<div class="likeable-media" data-likeable-id="${post.id}" data-likeable-type="${type}">
-    <img class="${className}" src="${escapeHtml(post.media)}" alt="${escapeHtml(post.user)}'s post" />
+    ${renderPostPhoto(post.media, { className, alt: `${post.user}'s post`, priority })}
     <span class="double-like-heart" aria-hidden="true">♥</span>
   </div>`;
 }
 
 export function renderPostCards(items, target = feed) {
     const canManageMedia = target === profilePostViewerContent && !state.activeMediaViewerItems;
-    target.innerHTML = items.length ? items.map((post) => `
+    target.innerHTML = items.length ? items.map((post, index) => `
     <article class="post-card" id="post-${post.id}" data-id="${post.id}" data-entity-type="${post.reel ? "reel" : "post"}">
       <header class="post-header">
         <div class="post-user">
@@ -74,7 +76,7 @@ export function renderPostCards(items, target = feed) {
           </div>
         </div>
       </header>
-      ${renderMedia(post, "post-image", post.reel ? "reel" : "post")}
+      ${renderMedia(post, "post-image", post.reel ? "reel" : "post", index === 0)}
       <div class="post-body">
         <div class="post-meta">
           <div class="interactions">

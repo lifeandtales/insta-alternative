@@ -55,12 +55,24 @@ export function mediaFit(item) {
     const source=bounded(item.naturalRatio,mediaAspect(item),.1,10);
     return item.fit==='cover'||edit.ratio!=='original'||Math.abs(source-mediaAspect(item))>.0001?'cover':'contain';
 }
-export function renderEditedMedia(item, {className = 'post-image', alt = 'Selected media', preview = false, nativeControls = true} = {}) {
+export function renderPostPhoto(url, { className, alt, priority, style = '', storagePath = '' }) {
+    return `<img class="${escapeHtml(className)}" ${url ? `src="${escapeHtml(url)}"` : 'hidden'}
+        alt="${escapeHtml(alt)}" style="${style}" data-post-photo data-photo-path="${escapeHtml(storagePath)}"
+        decoding="async" loading="${priority ? 'eager' : 'lazy'}"${priority ? ' fetchpriority="high"' : ''} />
+        <div class="post-photo-error" ${url ? 'hidden' : ''}><span>Photo couldn’t load</span>
+          <button type="button" data-retry-post-photo>Retry</button></div>`;
+}
+
+export function renderEditedMedia(item, {className = 'post-image', alt = 'Selected media', preview = false, nativeControls = true, feedPriority = null} = {}) {
     const edit = mediaEdits(item);
-    const style = `object-fit:${mediaFit(item)};object-position:${bounded(item.x,50,0,100)}% ${bounded(item.y,50,0,100)}%;filter:${mediaFilter(item)};transform:rotate(${edit.rotation}deg)`;
+    const filter = edit.filter !== 'none' || edit.brightness !== 100 || edit.contrast !== 100 || edit.saturation !== 100
+        ? `;filter:${mediaFilter(item)}` : '';
+    const rotation = edit.rotation ? `;transform:rotate(${edit.rotation}deg)` : '';
+    const style = `object-fit:${mediaFit(item)};object-position:${bounded(item.x,50,0,100)}% ${bounded(item.y,50,0,100)}%${filter}${rotation}`;
     const media = item.type === 'video'
-        ? `<video class="${escapeHtml(className)}" playsinline ${nativeControls?'controls':'disablepictureinpicture disableremoteplayback'} preload="metadata" ${preview || edit.originalAudioMuted ? 'muted' : ''} ${edit.originalAudioMuted ? 'data-original-audio-muted="true"' : ''} src="${escapeHtml(item.url)}" style="${style}"></video>`
-        : `<img class="${escapeHtml(className)}" src="${escapeHtml(item.url)}" alt="${escapeHtml(alt)}" style="${style}" />`;
+        ? `<video class="${escapeHtml(className)}" playsinline ${nativeControls?'controls':'disablepictureinpicture disableremoteplayback'} preload="${feedPriority === false ? 'none' : 'metadata'}" ${item.poster ? `poster="${escapeHtml(item.poster)}"` : ''} ${preview || edit.originalAudioMuted ? 'muted' : ''} ${edit.originalAudioMuted ? 'data-original-audio-muted="true"' : ''} src="${escapeHtml(item.url)}" style="${style}"></video>`
+        : feedPriority === null ? `<img class="${escapeHtml(className)}" src="${escapeHtml(item.url)}" alt="${escapeHtml(alt)}" style="${style}" />`
+            : renderPostPhoto(item.url, { className, alt, style, priority: feedPriority, storagePath: item.storagePath });
     const aspect = String(mediaAspect(item)).split("/").map(Number);
     const numericAspect = aspect.length === 2 ? aspect[0]/aspect[1] : aspect[0];
     return `<div class="post-media-stage" style="aspect-ratio:${mediaAspect(item)};--media-ratio:${numericAspect}">${media}${item.type==='video'&&!nativeControls?'<button type="button" class="reel-editor-play-toggle" aria-label="Play reel preview">▶</button>':''}${edit.text ? `<span class="post-media-text" style="left:${edit.textX}%;top:${edit.textY}%;font-size:${edit.textSize}cqw">${escapeHtml(edit.text)}</span>` : ''}</div>`;

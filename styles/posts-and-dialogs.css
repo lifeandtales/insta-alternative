@@ -905,3 +905,31 @@ body.profile-post-viewer-open {
 
 .comment-reply-context[hidden] { display: none; }
 .comment-reply-context button { padding: 4px 8px; background: transparent; color: var(--muted); }
+
+.post-media-stage:not(.post-photo-loaded):has(> img[data-post-photo]),
+.post-card > .likeable-media:not(.post-photo-loaded):has(> img[data-post-photo]) {
+  background: var(--line);
+}
+
+img[data-post-photo][hidden] { visibility: hidden; }
+
+.post-photo-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: .85rem;
+}
+
+.post-photo-error[hidden] { display: none; }
+.post-photo-error button {
+  padding: 8px 16px;
+  border-radius: 100vw;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 700;
+}

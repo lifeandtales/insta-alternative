@@ -210,7 +210,7 @@ async function refreshViewData(view, owner, handle, activeChat) {
                 if (state.cloudReposts?.handle === handle) state.cloudReposts = null;
             }
             if (accessible && state.activeProfileSection === 'reposts' && state.profileHandle === handle) {
-                loads.push(loadCloudReposts(target, person.handle).catch(() => {}));
+                loads.push(loadCloudReposts(target, handle));
             }
             if (target === owner) {
                 loads.push(loadCloudSavedKeys(), loadCloudSavedCollection(), loadCloudStoryArchive().catch(() => {}));
