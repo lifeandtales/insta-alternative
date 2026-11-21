@@ -62,6 +62,13 @@ function warningNeeded(reel) {
   return Boolean(reel.sensitive || reel.audience === 'adult' || getAccount(reel.handle)?.contentAudience === 'adult');
 }
 
+export function renderReelsStatus(status) {
+  const message = status === 'loading' ? 'Loading Reels…' : status === 'error'
+    ? 'Could not load Reels.' : 'No Reels to show yet.';
+  document.getElementById('reels-feed').innerHTML = `<div class="reels-status"><p role="status">${message}</p>
+    ${status === 'error' ? '<button type="button" data-reels-retry>Try again</button>' : ''}</div>`;
+}
+
 export function renderReels({ status = 'ready' } = {}) {
   const feed = document.getElementById('reels-feed');
   const recommended = rankRecommendedReels();
@@ -69,10 +76,7 @@ export function renderReels({ status = 'ready' } = {}) {
     .sort((left, right) => (right.createdAt || 0) - (left.createdAt || 0));
   const visible = [...recommended, ...personal];
   if (!visible.length) {
-    const message = status === 'loading' ? 'Loading Reels…' : status === 'error'
-      ? 'Could not load Reels.' : 'No Reels to show yet.';
-    feed.innerHTML = `<div class="reels-status"><p role="status">${message}</p>
-      ${status === 'error' ? '<button type="button" data-reels-retry>Try again</button>' : ''}</div>`;
+    renderReelsStatus(status);
     return;
   }
   feed.innerHTML = visible.map(reel => {

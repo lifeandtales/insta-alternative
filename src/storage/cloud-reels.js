@@ -92,16 +92,18 @@ export async function loadCloudReels(targetId = null) {
 export async function hydrateCloudReels(client, data, accountId) {
     const videos = data.map(row => ({ row, video: row.assets.find(asset => asset.mime_type?.startsWith('video/')) })).filter(item => item.video);
     const paths = videos.flatMap(item => item.row.assets.map(asset => asset.object_path));
-    const [signed, engagement] = await Promise.all([
+    const [signed, engagement, avatars] = await Promise.all([
         paths.length ? client.storage.from('app-media').createSignedUrls(paths, 3600) : { data: [] },
-        loadVideoEngagement(client, { reels: videos.map(({ row }) => row.id) }),
+        loadVideoEngagement(client, { reels: videos.map(({ row }) => row.id) }).catch(() => null),
+        avatarLookup(client, videos.map(({ row }) => row.author)).catch(() => undefined),
     ]);
     if (signed.error) throw signed.error;
     if (state.signedInAccountId !== accountId) return [];
-    const urls = new Map(signed.data.map(item => [item.path, item.signedUrl]));
-    const avatars = await avatarLookup(client, data.map(row => row.author));
-    if (state.signedInAccountId !== accountId) return [];
-    const totals = new Map(engagement.reels.map(item => [item.id, item]));
+    const urls = new Map((signed.data || []).map(item => [item.path, item.signedUrl]));
+    if (videos.length && !videos.some(({ video }) => urls.get(video.object_path))) {
+        throw new Error('The Reel videos could not be loaded.');
+    }
+    const totals = new Map((engagement?.reels || []).map(item => [item.id, item]));
     const fresh = videos.flatMap(({ row, video }) => {
         const url = urls.get(video.object_path);
         if (!url) return [];
@@ -124,7 +126,7 @@ export async function hydrateCloudReels(client, data, accountId) {
             originalAudioMuted: edits?.originalAudioMuted === true,
             taggedUsers: Array.isArray(row.metadata?.tags) ? row.metadata.tags.filter(tag => typeof tag === 'string') : [],
             mediaType: 'video', videoUrl: url, sensitive: row.metadata?.sensitive === true,
-            views: metrics?.views ?? previous?.views ?? 0, viewed: metrics?.viewed ?? false,
+            views: metrics?.views ?? previous?.views ?? 0, viewed: metrics?.viewed ?? previous?.viewed ?? false,
             likes: metrics?.likes ?? previous?.likes ?? 0, liked: metrics?.liked ?? previous?.liked ?? false,
             comments: row.cloud_comments?.[0]?.count ?? previous?.comments ?? 0, commentItems: previous?.commentItems || [],
         }];

@@ -18,7 +18,7 @@ import { renderExplore } from '../features/explore.js';
 import { getHomeFeedItems } from '../features/home.js';
 import { refreshReadReceiptLabel, renderMessages } from '../features/messages.js';
 import { renderProfile } from '../features/profile.js';
-import { renderReels } from '../features/reels.js';
+import { renderReels, renderReelsStatus } from '../features/reels.js';
 import { renderStories } from '../features/stories.js';
 import { syncDeletionLock } from './account-lock.js';
 import { findEntity } from '../data/entities.js';
@@ -153,8 +153,11 @@ export function setView(view, { fromHistory = false, refresh = true } = {}) {
         state.explorePostOrder = null;
     if (view === "explore")
         renderExplore();
-    if (view === "reels")
-        renderReels({ status: refresh && state.signedInAccountId && previousView !== view ? 'loading' : 'ready' });
+    if (view === "reels") {
+        const status = refresh && state.signedInAccountId && previousView !== view ? 'loading' : 'ready';
+        if (status === 'loading') renderReelsStatus(status);
+        else renderReels();
+    }
     if (view === "messages")
         renderMessages();
     if (view === "shared-post")
@@ -230,13 +233,13 @@ async function refreshViewData(view, owner, handle, activeChat) {
             else if (chat) refreshReadReceiptLabel(chat);
         }
     } else if (view === 'reels') {
-        if (stillVisible()) renderReels({ status: 'loading' });
+        if (stillVisible() && !document.querySelector('#reels-feed .reel-card')) renderReelsStatus('loading');
         void loadCloudSavedKeys().then(() => { if (stillVisible()) syncVisibleSaveButtons(); }).catch(() => {});
         try {
             await Promise.all([loadCloudReels(), loadCloudFollowing().catch(() => {})]);
             if (stillVisible()) renderReels();
         } catch {
-            if (stillVisible()) renderReels({ status: 'error' });
+            if (stillVisible()) renderReelsStatus('error');
         }
     } else if (view === 'home' || view === 'explore') {
         const imagePosts = loadCloudFollowing().then(() => loadCloudImagePosts());
