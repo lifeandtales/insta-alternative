@@ -6,6 +6,7 @@ import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.ClipDescription;
+import android.content.ClipData;
 import android.os.ResultReceiver;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -34,6 +35,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 
 public class MainActivity extends Activity {
     private static final String ASSET_HOST = "appassets.androidplatform.net";
@@ -154,6 +156,7 @@ public class MainActivity extends Activity {
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
         web.getSettings().setAllowFileAccess(false);
+        web.getSettings().setAllowContentAccess(true);
         web.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -195,10 +198,19 @@ public class MainActivity extends Activity {
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (fileResult != null) fileResult.onReceiveValue(null);
                 fileResult = callback;
-                try { startActivityForResult(params.createIntent(), PICK_FILES); }
+                String[] types = PickerMimeTypes.normalize(params.getAcceptTypes());
+                Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                picker.addCategory(Intent.CATEGORY_OPENABLE);
+                picker.setType(types.length == 1 ? types[0] : "*/*");
+                if (types.length > 1) picker.putExtra(Intent.EXTRA_MIME_TYPES, types);
+                picker.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,
+                    params.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE);
+                picker.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+                try { startActivityForResult(picker, PICK_FILES); }
                 catch (ActivityNotFoundException unavailable) {
                     fileResult = null;
                     callback.onReceiveValue(null);
+                    Toast.makeText(MainActivity.this, "No file picker is available on this phone.", Toast.LENGTH_LONG).show();
                 }
                 return true;
             }
@@ -309,8 +321,33 @@ public class MainActivity extends Activity {
         if (code == PICK_FILES && fileResult != null) {
             ValueCallback<Uri[]> callback = fileResult;
             fileResult = null;
-            callback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data));
+            Uri[] files = selectedFiles(result, data);
+            callback.onReceiveValue(files);
+            if (result == RESULT_OK && files == null) {
+                Toast.makeText(this, "No readable file was returned. Open Gallery again and select a file.", Toast.LENGTH_LONG).show();
+            }
         }
+    }
+
+    private Uri[] selectedFiles(int result, Intent data) {
+        if (result != RESULT_OK || data == null) return null;
+        LinkedHashSet<Uri> files = new LinkedHashSet<>();
+        ClipData selected = data.getClipData();
+        if (selected != null) for (int i = 0; i < selected.getItemCount(); i++) {
+            Uri uri = selected.getItemAt(i).getUri();
+            if (uri != null && "content".equals(uri.getScheme())) files.add(uri);
+        }
+        Uri single = data.getData();
+        if (single != null && "content".equals(single.getScheme())) files.add(single);
+        if (files.isEmpty()) return null;
+        if ((data.getFlags() & Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) != 0) {
+            for (Uri uri : files) try {
+                getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } catch (SecurityException unsupported) {
+                // A temporary read grant is sufficient when a provider cannot persist it.
+            }
+        }
+        return files.toArray(new Uri[0]);
     }
 
     @Override

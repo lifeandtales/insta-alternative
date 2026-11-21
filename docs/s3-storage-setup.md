@@ -30,10 +30,10 @@ The registry supports legacy Supabase files alongside new S3 objects. Cleanup ch
 
 Limits remain 50 MB for posts, Stories and chat files, and 10 MB for profile photos.
 
-## Deployment still required
+## Deployment and remaining verification
 
-1. Run `supabase/migrations/20261121000700_s3_media_storage.sql` in the existing project. This is additional to the Reels migration already run.
-2. Deploy `supabase/functions/media-storage/index.ts` as `media-storage`. The function verifies its own user JWT; use legacy gateway JWT verification OFF. Reuse the existing server-side `REEL_S3_ACCESS_KEY_ID`, `REEL_S3_SECRET_ACCESS_KEY`, and optional session-token secrets. Do not paste keys into source code.
+1. The user reported applying `supabase/migrations/20261121000700_s3_media_storage.sql`. REST probes confirm the registry table and chat-upload RPC exist and reject anonymous access.
+2. The user reported deploying `supabase/functions/media-storage/index.ts` as `media-storage`; a live unauthenticated request returns the expected sign-in error. The function verifies its own user JWT; use legacy gateway JWT verification OFF. Reuse the existing server-side `REEL_S3_ACCESS_KEY_ID`, `REEL_S3_SECRET_ACCESS_KEY`, and optional session-token secrets. Do not paste keys into source code.
 3. Only after both succeed, release the prepared web and Android frontend changes.
 4. Verify one upload and cross-account playback for a photo post, video post, Story, avatar and message attachment. Check that an outsider cannot read private media or chat files. Confirm actual runtime IAM access, not only policy simulation.
 
@@ -41,4 +41,4 @@ Do not remove old Supabase uploads: this change does not migrate or erase them.
 
 ## Validation
 
-247 application and endpoint tests passed, including route selection, login and ownership checks, immutable upload verification, signed read authorization and failed cleanup. PGlite tests passed both fresh/previous-image-schema upgrade paths, migration reruns, private-account/follower access, Story/audio publishing, attachment participants and expiry, and cleanup protection. Android debug APK builds and its signature verifies. Live media-function deployment and real S3 transfer tests remain pending.
+249 application and endpoint tests passed, including route selection, login and ownership checks, immutable upload verification, signed read authorization and failed cleanup. PGlite tests passed both fresh/previous-image-schema upgrade paths, migration reruns, private-account/follower access, Story/audio publishing, attachment participants and expiry, and cleanup protection. Android debug APK builds and its signature verifies. Native picker MIME normalization checks also pass. Backend deployment existence is verified; real S3 transfer tests remain pending. The gallery picker has been updated to ACTION_OPEN_DOCUMENT with explicit MIME filters and multiple-result handling; its actual behavior on the user’s disconnected phone still requires confirmation.

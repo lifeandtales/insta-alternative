@@ -14,6 +14,46 @@ test('Post starts with a file chooser and opens editing only after Start editing
     }
 });
 
+test('gallery accepts array-like FileLists and input events without adding the same selection twice', async () => {
+    const app = await loadApp();
+    const { state } = app.exportsOf('src/core/state.js');
+    const create = app.exportsOf('src/features/create.js');
+    create.openCreateUpload('post');
+    const file = new Blob(['fixture'], { type: 'image/jpeg' });
+    const picker = app.element('#post-upload');
+    picker.files = { 0: file, length: 1 };
+    const input = app.listeners.find(item => item.key === '#post-upload' && item.type === 'input').callback;
+    const change = app.listeners.find(item => item.key === '#post-upload' && item.type === 'change').callback;
+    input({ target: picker });
+    const url = state.createMediaUrl;
+    change({ target: picker });
+    assert.equal(state.createMediaItems.length, 1);
+    assert.equal(state.createMediaUrl, url);
+    assert.equal(app.element('.create-start-editing').disabled, false);
+    state.createAppending = true;
+    const another = new Blob(['video'], { type: 'video/mp4' });
+    picker.files = { 0: another, length: 1 };
+    input({ target: picker });
+    change({ target: picker });
+    assert.equal(state.createMediaItems.length, 2);
+    create.openCreateUpload('post');
+    change({ target: picker });
+    assert.equal(state.createMediaItems.length, 1);
+    assert.equal(app.element('.create-start-editing').disabled, false);
+});
+
+test('unreadable gallery selections show feedback without losing existing selected media', async () => {
+    const app = await loadApp();
+    const { state } = app.exportsOf('src/core/state.js');
+    app.exportsOf('src/features/create.js').openCreateUpload('post');
+    const change = app.listeners.find(item => item.key === '#post-upload' && item.type === 'change').callback;
+    change({ target: { files: [new Blob(['photo'], { type: 'image/jpeg' })] } });
+    const selected = state.createMediaItems;
+    change({ target: { files: [{ type: 'image/jpeg', name: 'unreadable.jpg' }] } });
+    assert.equal(state.createMediaItems, selected);
+    assert.match(app.element('.create-file-selection').textContent, /Could not open this selection/);
+});
+
 test('empty tag search has no suggestions; followed accounts rank before global public and private matches',async()=>{
     const app=await loadApp(),{state}=app.exportsOf('src/core/state.js'),create=app.exportsOf('src/features/create.js');
     state.accountDirectory=[{name:'A global public',handle:'@alex_public',isPrivate:false},{name:'B global private',handle:'@alex_private',isPrivate:true},{name:'Z followed',handle:'@alex_followed',isPrivate:true},{name:'Blocked',handle:'@alex_blocked'}];

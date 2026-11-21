@@ -111,23 +111,54 @@ export function registerMediaUploadEvents() {
         if (control.dataset.cropY !== undefined) item.y = Number(control.value);
         renderCreatePreview();
     });
-    document.getElementById('post-upload').addEventListener('change', event => {
-        const files = [...event.target.files];
+    let previousFiles = [], previousSelection;
+    const selectionFeedback = message => {
+        document.querySelector('.create-file-selection').textContent = message;
+        showShareFeedback(message);
+    };
+    const acceptSelection = event => {
+        const files = Array.from(event.target.files || []);
         if (!files.length) return;
+        // Some WebViews deliver input before change for the same selection.
+        if (previousSelection === state.createMediaItems && files.length === previousFiles.length &&
+            files.every((file, index) => file === previousFiles[index])) return;
         if (files.length + (state.createAppending ? state.createMediaItems.length : 0) > (state.createMediaType === 'reel' ? 1 : 20)) {
-            showShareFeedback('Choose at most 20 items per post, or one video per reel.'); return;
+            selectionFeedback('Choose at most 20 items per post, or one video per reel.'); return;
         }
         if (files.some(file => !getSupportedStoryFileType(file) || (state.createMediaType === 'reel' && getSupportedStoryFileType(file) !== 'video'))) {
-            showShareFeedback('Choose supported photos or videos.'); return;
+            selectionFeedback('Choose supported photos or videos.'); return;
         }
-        if(!state.createAppending)state.createMediaItems.forEach(item=>{if(item.url?.startsWith('blob:'))URL.revokeObjectURL(item.url);});
-        const incoming=files.map(file => ({ type: getSupportedStoryFileType(file), url: URL.createObjectURL(file), fit: 'contain', x: 50, y: 50, originalAudioMuted:false, ratio:state.createMediaType==='reel'?'9/16':'original', layout:state.createMediaType==='reel'?'reel':'post' }));
-        if(state.createAppending){state.createMediaItems=[...state.createMediaItems,...incoming];state.createAppending=false;if(state.createCoverIndex===null)state.createCoverIndex=0;syncCreateMediaSelection();renderCreatePreview();return;}
-        state.createMediaItems = incoming;
-        state.createCoverIndex = null;
-        state.createMediaFile = files[0];
-        state.createMediaUrl = state.createMediaItems[0].url;
-        document.querySelector('.create-file-selection').textContent=files.length===1?files[0].name:`${files.length} files selected`;
-        document.querySelector('.create-start-editing').disabled=false;
-    });
+        const incoming = [];
+        try {
+            for (const file of files) incoming.push({ type: getSupportedStoryFileType(file),
+                url: URL.createObjectURL(file), fit: 'contain', x: 50, y: 50, originalAudioMuted: false,
+                ratio: state.createMediaType === 'reel' ? '9/16' : 'original',
+                layout: state.createMediaType === 'reel' ? 'reel' : 'post' });
+        } catch {
+            incoming.forEach(item => URL.revokeObjectURL(item.url));
+            selectionFeedback('Could not open this selection. Choose the file again from Gallery or Files.');
+            return;
+        }
+        if (state.createAppending) {
+            state.createMediaItems = [...state.createMediaItems, ...incoming];
+            state.createAppending = false;
+            if (state.createCoverIndex === null) state.createCoverIndex = 0;
+            syncCreateMediaSelection();
+            renderCreatePreview();
+        } else {
+            state.createMediaItems.forEach(item => { if (item.url?.startsWith('blob:')) URL.revokeObjectURL(item.url); });
+            state.createMediaItems = incoming;
+            state.createCoverIndex = null;
+            state.createMediaFile = files[0];
+            state.createMediaUrl = incoming[0].url;
+            document.querySelector('.create-file-selection').textContent = files.length === 1
+                ? files[0].name || '1 file selected' : `${files.length} files selected`;
+            document.querySelector('.create-start-editing').disabled = false;
+        }
+        previousFiles = files;
+        previousSelection = state.createMediaItems;
+    };
+    const picker = document.getElementById('post-upload');
+    picker.addEventListener('input', acceptSelection);
+    picker.addEventListener('change', acceptSelection);
 }
