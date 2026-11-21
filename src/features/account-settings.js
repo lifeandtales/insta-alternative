@@ -1,3 +1,4 @@
+import { openDeletionRequest, submitDeletionRequest } from './account-deletion-request.js';
 import { setCloudGroupInvitationPreference } from './cloud-chat.js';
 import { setCloudBlock } from './cloud-people.js';
 import { readCloudAvatar, saveCloudAvatar } from '../storage/cloud-avatars.js';
@@ -97,7 +98,7 @@ function openSettingsPage(page) {
     if (page === 'audience') showHomePanel('Creator audience', `<p>Current audience: <strong>${state.contentAudience === 'adult' ? '18+' : 'All ages'}</strong></p>${state.audienceReview ? `<p>A change to ${state.audienceReview.requested === 'adult' ? '18+' : 'All ages'} is pending review. Your current audience remains active. Automated and admin review services are not connected in this preview.</p>` : `<form class="audience-request-form"><label>Request audience change<select name="audience"><option value="all" ${state.contentAudience === 'all' ? 'selected' : ''}>All ages</option><option value="adult" ${state.contentAudience === 'adult' ? 'selected' : ''}>18+</option></select></label><button type="submit">Request review</button></form>`}`);
     if (page === 'verification') showHomePanel('Verification', `<p>Status: <strong>${state.verificationStatus === 'approved' ? 'Approved account' : 'Pending review'}</strong></p><p>No identity review service is connected to this local preview. Do not upload real identity documents.</p>${state.verificationStatus !== 'approved' ? '<button type="button" data-verification-resubmit>Correct or resubmit demo request</button><p>Your request will stay pending until a real review system is available.</p>' : ''}`);
     if (page === 'help') showHomePanel('Help', '<p>This is a local social-app preview. Account review, reports, connected calls and message delivery need future services.</p><p>While verification is pending, browse accessible content and Stories, check status, correct a demo request, or log out. No real ID documents or passwords are needed here.</p>');
-    if (page === 'deletion') showHomePanel(state.deletionRequestedAt ? 'Cancel deletion request' : 'Delete account', `${state.deletionRequestedAt ? deletionNotice() : '<p>Request account deletion with a 15-day grace period. During that time, cancellation requires password re-entry.</p><p>This preview records the request locally; it does not authenticate you or delete a server account.</p>'}<form class="account-deletion-form"><label><input type="checkbox" name="confirmed" required /> ${state.deletionRequestedAt ? 'I want to cancel the deletion request.' : 'I understand the deletion request and grace period.'}</label><label>Demo password<input type="password" name="password" required autocomplete="off" /></label><p>For this local flow, enter <strong>demo-password</strong>. Never enter a real password.</p><button type="submit">${state.deletionRequestedAt ? 'Cancel deletion request' : 'Request deletion'}</button></form>`);
+    if (page === 'deletion') void openDeletionRequest();
 }
 export function registerAccountSettingsEvents() {
     document.addEventListener('click', event => {
@@ -269,6 +270,7 @@ export function registerAccountSettingsEvents() {
             if (form.elements.audience.value === state.contentAudience) { showShareFeedback('This is already your current audience.'); return; }
             state.audienceReview = { requested: form.elements.audience.value, status: 'pending', requestedAt: Date.now() }; saveAccountChanges(); openSettingsPage('audience');
         }
+        if (form.matches('.cloud-deletion-request, .cloud-deletion-withdraw')) { event.preventDefault(); void submitDeletionRequest(form); return; }
         if (form.matches('.account-deletion-form')) {
             event.preventDefault(); if (!form.elements.confirmed.checked || form.elements.password.value !== 'demo-password') { showShareFeedback('Confirm the action and enter the demo password shown above.'); return; }
             const cancelling = Boolean(state.deletionRequestedAt);

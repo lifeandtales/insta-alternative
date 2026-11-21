@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Insta Alternative Admin</title>
+  <link rel="stylesheet" href="./styles/admin-dashboard.css">
+  <script type="module" src="./src/features/admin-dashboard.js?v=346"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <div><a href="./index.html">Insta Alternative</a><h1>Admin dashboard</h1></div>
+      <div class="actions">
+        <button id="refresh" type="button" hidden>Refresh</button>
+        <button id="sign-out" type="button" hidden>Sign out</button>
+      </div>
+    </header>
+    <p id="status" role="status">Connecting to Supabase…</p>
+    <form id="sign-in" hidden>
+      <h2>Admin sign-in</h2>
+      <label>Email <input name="email" type="email" autocomplete="username" required></label>
+      <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit">Sign in</button>
+    </form>
+    <div id="dashboard" hidden>
+      <details class="dashboard-panel">
+        <summary>Change my password</summary>
+        <p>This changes the password of the account currently signed in to this dashboard.</p>
+        <form id="admin-password-form">
+          <label>New password <input name="password" type="password" minlength="8" autocomplete="new-password" required></label>
+          <label>Confirm new password <input name="confirmPassword" type="password" minlength="8" autocomplete="new-password" required></label>
+          <button type="submit">Update my password</button>
+          <p id="admin-password-status" role="status"></p>
+        </form>
+      </details>
+      <nav class="dashboard-nav" aria-label="Admin sections">
+        <button type="button" data-section="overview" aria-current="page">Overview</button>
+        <button type="button" data-section="users">Users</button>
+        <button type="button" data-section="deletions">Deletion requests</button>
+        <button type="button" data-section="activity-panel">Activity</button>
+        <button type="button" data-section="reports-panel">Reports</button>
+      </nav>
+      <section id="overview" class="dashboard-panel" aria-labelledby="totals-title">
+        <h2 id="totals-title">Platform overview</h2>
+        <p>Counts reflect activity synced to Supabase.</p>
+        <dl id="totals"></dl>
+      </section>
+      <section id="users" class="dashboard-panel" aria-labelledby="users-title" hidden>
+        <h2 id="users-title">Users</h2>
+        <form id="user-search" role="search">
+          <label for="user-query">Search by name, username, email or user ID</label>
+          <div class="actions">
+            <input id="user-query" type="search" maxlength="160">
+            <button type="submit">Search</button>
+          </div>
+        </form>
+        <p id="users-status" role="status"></p>
+        <div class="user-layout">
+          <div>
+            <ul id="user-list"></ul>
+            <div class="actions pagination">
+              <button id="users-previous" type="button" disabled>Previous</button>
+              <button id="users-next" type="button" disabled>Next</button>
+            </div>
+          </div>
+          <article id="user-detail" aria-label="Account details" aria-live="polite">Choose an account to see its details.</article>
+        </div>
+      </section>
+      <section id="deletions" class="dashboard-panel" hidden><h2>Account deletion requests</h2><p id="deletion-requests-status" role="status"></p><ul id="deletion-request-list"></ul></section>
+      <section id="activity-panel" class="dashboard-panel" aria-labelledby="activity-title" hidden>
+        <h2 id="activity-title">Recent activity</h2>
+        <p>Shows synced events. Private message text and file contents stay private.</p>
+        <ul id="activity"></ul>
+      </section>
+      <section id="reports-panel" class="dashboard-panel" aria-labelledby="reports-title" hidden>
+        <h2 id="reports-title">Reports awaiting review</h2>
+        <ul id="reports"></ul>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
