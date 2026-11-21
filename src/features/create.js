@@ -43,6 +43,7 @@ export function syncCreateCaptionPreview() {
     const field=document.getElementById('create-caption'),highlight=document.querySelector('.create-caption-highlight');
     highlight.innerHTML=renderCaption(field.value,{interactive:false})+'\n';
     highlight.scrollTop=field.scrollTop;highlight.scrollLeft=field.scrollLeft;
+    document.getElementById('create-caption-count').textContent = `${field.value.length}/${field.maxLength}`;
 }
 export function renderCreateTags(){
     const handles=document.getElementById('create-tags').value.split(',').map(value=>value.trim()).filter(Boolean);
@@ -81,6 +82,7 @@ export function openCreateUpload(type) {
     document.querySelector('.create-picker-step').hidden=false;
     document.querySelector('.create-editor-step').hidden=true;
     document.querySelector('.create-upload-dialog').classList.remove('create-editing');
+    document.querySelector('.create-upload-dialog').classList.remove('create-reel-details');
     document.querySelector('.create-upload-backdrop').classList.remove('create-editor-open');
     document.querySelector('.create-start-editing').disabled=true;
     document.querySelector('.create-file-selection').textContent='';
@@ -431,9 +433,17 @@ export function updateCreateScheduleMinimum() {
 export function setCreateDetails(details) {
     if (!state.createMediaItems.length || publishingMedia) return false;
     state.createDetailsOpen = Boolean(details);
+    const isReel = state.createMediaType === 'reel';
+    const reelDetails = Boolean(details && isReel);
+    document.querySelector('.create-upload-dialog').classList.toggle('create-reel-details', reelDetails);
+    document.getElementById('create-caption-count').hidden = !reelDetails;
+    if (details) {
+        document.querySelector('.create-publish-options').open = !isReel;
+        document.querySelector('.create-publish-options summary').hidden = !isReel;
+        syncCreateCaptionPreview();
+    }
     if(details) {
         updateCreateScheduleMinimum();
-        const isReel = state.createMediaType === 'reel';
         document.querySelector('.create-schedule-label').textContent = isReel ? 'Schedule Reel' : 'Schedule post';
         document.querySelector('.create-schedule-note').textContent = isReel
             ? 'Publishes online at the scheduled time if the app is open, or the next time you open it.'
@@ -505,8 +515,24 @@ export function renderCreatePreview() {
     if(state.createDetailsOpen){
         const items=state.createFinalizedItems||state.createMediaItems;
         controls.hidden=true;
-        preview.innerHTML=`<div class="post-carousel" aria-label="${items.length} media items"><div class="carousel-slides" tabindex="0" aria-label="Post preview: swipe to see all media">${items.map((entry,i)=>`<div class="carousel-slide" role="group" aria-label="${i+1} of ${items.length}">${renderEditedMedia(entry,{preview:true,alt:`Media ${i+1}`})}</div>`).join('')}</div>${items.length>1?`<span class="carousel-index" role="status" aria-live="polite" aria-label="Item 1 of ${items.length}">1/${items.length}</span>`:''}</div>`;
-        initializePostCarousels(preview);
+        if (state.createMediaType === 'reel') {
+            preview.innerHTML = `<div class="create-reel-preview">${renderEditedMedia(items[0], { preview: true, nativeControls: false, alt: 'Reel preview' })}<span class="create-reel-duration" hidden></span></div>`;
+            const stage = preview.querySelector('.post-media-stage');
+            const video = preview.querySelector('video');
+            const duration = preview.querySelector('.create-reel-duration');
+            bindReelEditorPlayback(stage, () => state.createDetailsOpen && !publishingMedia && mayInteract());
+            const showDuration = () => {
+                if (!Number.isFinite(video.duration) || video.duration <= 0) return;
+                const seconds = Math.ceil(video.duration);
+                duration.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+                duration.hidden = false;
+            };
+            video.addEventListener('loadedmetadata', showDuration);
+            showDuration();
+        } else {
+            preview.innerHTML=`<div class="post-carousel" aria-label="${items.length} media items"><div class="carousel-slides" tabindex="0" aria-label="Post preview: swipe to see all media">${items.map((entry,i)=>`<div class="carousel-slide" role="group" aria-label="${i+1} of ${items.length}">${renderEditedMedia(entry,{preview:true,alt:`Media ${i+1}`})}</div>`).join('')}</div>${items.length>1?`<span class="carousel-index" role="status" aria-live="polite" aria-label="Item 1 of ${items.length}">1/${items.length}</span>`:''}</div>`;
+            initializePostCarousels(preview);
+        }
         renderReelCover(items[0]);
         document.querySelector('.create-publish-button').disabled=state.createMediaType==='reel'&&!getReelCover(items[0]);
         return;

@@ -8,7 +8,7 @@ import { openProfileMedia } from './profile.js';
 import { setView } from '../core/navigation.js';
 import { state } from '../core/state.js';
 import { conversations, currentUser, posts, reels, demoContentEnabled } from '../data/sample-data.js';
-import { getAccount, canViewStory, canViewMedia, isFollowing, mayInteract } from '../core/social.js';
+import { getAccount, canViewStory, canViewMedia, isFollowing, mayInteract, visibleAvatar } from '../core/social.js';
 import { respondToFollowRequest } from './account-model.js';
 import { toggleSessionFollow } from './follows.js';
 import { escapeHtml, normalizeHandle } from '../core/utils.js';
@@ -101,17 +101,17 @@ function actorLabel(notice) {
 function describeSocialNotification(notice) {
     const name = actorLabel(notice);
     const entity = notice.entityType === 'reel' ? 'reel' : 'post';
-    const [title, text] = {
-        'post-like': [entity === 'reel' ? 'Reel like' : 'Post like', `${name} liked your ${entity}.`],
-        'story-like': ['Story like', `${name} liked your story.`],
-        'story-mention': ['Story mention', `${name} mentioned you in their story.`],
-        'post-mention': ['Caption mention', `${name} mentioned you in a caption.`],
-        'post-tag': ['Post tag', `${name} tagged you in a ${entity}.`],
-        'post-comment': ['Comment', `${name} commented on your ${entity}.`],
-        'follow-approved': ['Follow request approved', `${name} accepted your follow request.`],
-        'new-follower': ['New follower', `${name} started following you.`],
-    }[notice.kind || 'story-like'] || ['Activity', `${name} interacted with your content.`];
-    return { ...notice, title, text, read: Boolean(notice.read) };
+    const [title, activity] = {
+        'post-like': [entity === 'reel' ? 'Reel like' : 'Post like', `liked your ${entity}.`],
+        'story-like': ['Story like', 'liked your story.'],
+        'story-mention': ['Story mention', 'mentioned you in their story.'],
+        'post-mention': ['Caption mention', 'mentioned you in a caption.'],
+        'post-tag': ['Post tag', `tagged you in a ${entity}.`],
+        'post-comment': ['Comment', `commented on your ${entity}.`],
+        'follow-approved': ['Follow request approved', 'accepted your follow request.'],
+        'new-follower': ['New follower', 'started following you.'],
+    }[notice.kind || 'story-like'] || ['Activity', 'interacted with your content.'];
+    return { ...notice, title, activity, text: `${name} ${activity}`, read: Boolean(notice.read) };
 }
 
 function describeCloudNotification(row) {
@@ -184,7 +184,23 @@ function renderNotificationItem(item){
             ? `<span class="notification-follow-status">${item.followBackStatus === 'accepted' ? 'Following' : 'Requested'}</span>`
             : `<button class="notification-action" type="button" data-notification-follow-back="${escapeHtml(item.actorId || item.actor)}" ${item.actorId ? '' : 'data-local-request'}>Follow back</button>`
         : '';
-    return `<li class="notification-card" ${item.id ? `data-notification-id="${escapeHtml(item.id)}"` : ''}><div class="notification-copy"><div class="notification-item-heading"><strong>${escapeHtml(item.title)}</strong>${notificationTime(item)}</div><p>${escapeHtml(item.text)}</p>${followBack}</div>${thumbnail}</li>`;
+    const avatar = item.activity
+        ? `<img class="notification-avatar" src="${escapeHtml(visibleAvatar(item.actor))}" alt="" loading="lazy" />`
+        : '';
+    const description = item.activity
+        ? `<strong>${escapeHtml(actorLabel(item))}</strong> ${escapeHtml(item.activity)}`
+        : `<strong>${escapeHtml(item.title)}</strong> ${escapeHtml(item.text)}`;
+    const actions = followBack || thumbnail
+        ? `<div class="notification-row-actions">${followBack}${thumbnail}</div>`
+        : '';
+    return `<li class="notification-card" ${item.id ? `data-notification-id="${escapeHtml(item.id)}"` : ''}>${avatar}
+        <p class="notification-copy">${description} ${notificationTime(item)}</p>${actions}</li>`;
+}
+
+function renderNotificationGroup(title, items) {
+    if (!items.length) return '';
+    return `<section class="notification-group"><h2>${title}</h2><ul class="notification-list">${items
+        .map(item => item.pending ? renderFollowRequests(item) : renderNotificationItem(item)).join('')}</ul></section>`;
 }
 
 export function availableLocalNotifications() {
@@ -431,8 +447,11 @@ export function renderNotificationsPage({ focus = true } = {}){
     const cloud = currentHistory();
     const older = cloud.total > cloud.items.length
         ? '<button type="button" class="notification-action notification-load-older" data-notification-older>Load older notifications</button>' : '';
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const recent = items.filter(item => notificationTimestamp(item) > cutoff);
+    const earlier = items.slice(recent.length);
     content.innerHTML = items.length
-        ? `<ul class="notification-list">${items.map(item => item.pending ? renderFollowRequests(item) : renderNotificationItem(item)).join('')}</ul>${older}`
+        ? `${renderNotificationGroup('New', recent)}${renderNotificationGroup('Earlier', earlier)}${older}`
         : '<div class="notification-empty"><strong>You’re all caught up.</strong><p>No notifications yet.</p></div>';
     if (focus) document.getElementById('notifications-title').focus();
     let changed=false;

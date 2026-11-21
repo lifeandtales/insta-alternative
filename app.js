@@ -86,6 +86,7 @@ let pendingLogin;
 let authBusy = false;
 
 function showWelcomeForm(mode, status = '') {
+    welcomeScreen.dataset.entryMode = mode || '';
     welcomeMessage.hidden = Boolean(mode);
     welcomeEntry.hidden = !mode;
     welcomeSessionChoice.hidden = mode !== 'remember';
@@ -110,7 +111,10 @@ function showWelcomeForm(mode, status = '') {
     document.getElementById('welcome-entry-title').textContent = titles[mode] || '';
     document.getElementById('welcome-entry-eyebrow').textContent = '';
     document.getElementById('welcome-entry-description').textContent = '';
-    if (mode === 'remember') document.getElementById('welcome-entry-title').focus();
+    if (mode === 'login' || mode === 'signup') {
+        window.scrollTo?.(0, 0);
+        document.getElementById('welcome-entry-title').focus({ preventScroll: true });
+    } else if (mode === 'remember') document.getElementById('welcome-entry-title').focus();
     else welcomeForms.find(form => form.dataset.entryForm === mode)?.querySelector('input')?.focus();
 }
 

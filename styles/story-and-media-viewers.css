@@ -1380,3 +1380,115 @@ button.caption-hashtag:focus-visible { outline:2px solid currentColor; outline-o
   max-height: min(43vh, 176px);
 }
 .story-reel-share .story-repost-drag-frame video { pointer-events: none; }
+
+/* Story editing controls float above the composition. */
+.story-editor-toolbar .story-editor-close-icon,
+.story-reel-share :is(.story-tool-rail > [data-story-tool], .story-editor-actions > .story-replace-media) {
+  display: none;
+}
+.story-reel-share .story-tools-open svg { display: none; }
+.story-tool-rail {
+  position: absolute;
+  z-index: 5;
+  inset: calc(76px + env(safe-area-inset-top)) 12px auto auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: calc(100% - 216px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+}
+.story-tool-rail > button {
+  position: static;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid #ffffff40;
+  border-radius: 24px;
+  background: #161817e8;
+  color: #fff;
+  font-size: .8125rem;
+  font-weight: 600;
+}
+.story-tool-rail > button > span { flex: 0 0 20px; text-align: center; font-size: 1.125rem; }
+.story-tool-rail svg, .story-replace-media svg {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.story-reel-share .story-tool-rail { top: calc(60px + env(safe-area-inset-top)); }
+.story-editing:is(.story-mode-active, .story-location-editing) .story-tool-rail { display: none; }
+
+.story-editing:not(.story-reel-share) > .share-dialog-header {
+  min-height: calc(72px + env(safe-area-inset-top));
+  background: linear-gradient(#1119, transparent);
+  pointer-events: none;
+}
+.story-editing:not(.story-reel-share) .story-create-close,
+.story-editing:not(.story-reel-share) .story-create-back > svg:first-child { display: none; }
+.story-editing:not(.story-reel-share) .story-editor-close-icon { display: block; }
+.story-editing:not(.story-reel-share) .story-editor-settings-toggle {
+  top: calc(10px + env(safe-area-inset-top));
+  right: 16px;
+  transform: none;
+  pointer-events: auto;
+}
+.story-editing:not(.story-reel-share) .story-editor-toolbar {
+  top: calc(10px + env(safe-area-inset-top));
+  left: 16px;
+  right: auto;
+}
+.story-editing:not(.story-reel-share) .story-create-back,
+.story-editing:not(.story-reel-share) .story-editor-settings-toggle {
+  width: 48px;
+  height: 48px;
+  background: #161817e8;
+}
+.story-editing:not(.story-reel-share) .story-history-controls {
+  top: calc(12px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+}
+.story-editing:not(.story-reel-share) .story-history-controls:not(:has(button:enabled)) { visibility: hidden; }
+.story-editing:not(.story-reel-share) .story-preview-sound {
+  top: calc(81px + env(safe-area-inset-top));
+  right: auto;
+  left: 16px;
+}
+.story-editing:not(.story-reel-share) .story-preview-play {
+  top: 45%;
+  right: auto;
+  left: 16px;
+}
+.story-editing:not(.story-reel-share) .story-editor-controls {
+  background: linear-gradient(transparent, #111e);
+  border: 0;
+  border-radius: 0;
+  padding: 12px 12px max(12px, env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+.story-editing:not(.story-reel-share) .story-editor-controls button { pointer-events: auto; }
+.story-editing.story-footer-drag-over:not(.story-reel-share) .story-editor-controls button { pointer-events: none; }
+.story-editing:not(.story-reel-share) .story-editor-actions { grid-template-columns: 48px auto minmax(0, 1fr); }
+.story-editing:not(.story-reel-share) :is(.story-option-buttons, .story-editor-actions) > button {
+  min-height: 48px;
+  height: auto;
+  padding: 6px 8px;
+  border-radius: 24px;
+  background: #161817e8;
+}
+.story-editing:not(.story-reel-share) .story-editor-actions > .story-publish-selected {
+  background: #125648;
+  border: 1px solid #d1e9e0;
+}
+.story-editing:not(.story-reel-share) .story-publish-selected > .story-editor-control-icon { order: 1; }

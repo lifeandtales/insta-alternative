@@ -38,9 +38,24 @@ export function renderReelCover(item){
     const next=reelCoverSignature(item);if(signature===next)return;
     generation++;releaseMedia();cropController?.dispose();cropController=null;signature=next;
     const saved=getReelCover(item);
-    root.innerHTML=`<h3>Reel thumbnail</h3><p class="reel-cover-size">Square · ${REEL_COVER_SIZE} × ${REEL_COVER_SIZE}</p><div class="reel-cover-saved" ${saved?'':'hidden'}><img alt="Selected reel thumbnail" /><button type="button" class="reel-cover-change">Change thumbnail</button></div><div class="reel-cover-editor" ${saved?'hidden':''}><p>Choose a frame from your reel or upload an image.</p><div class="reel-cover-sources"><button type="button" data-cover-source="video" aria-pressed="false">From video</button><button type="button" data-cover-source="gallery" aria-pressed="false">Upload image</button></div><input class="reel-cover-file" type="file" accept="image/*" hidden /><p class="reel-cover-status" role="status"></p><div class="reel-cover-crop" hidden><div class="reel-cover-canvas" tabindex="0" role="group" aria-label="Thumbnail crop: drag with one finger, pinch with two fingers to zoom"><img class="reel-cover-preview" alt="Full image for thumbnail selection" draggable="false" /><div class="reel-cover-selection" aria-hidden="true"></div><div class="reel-cover-zoom-buttons"><button type="button" data-cover-zoom="out" aria-label="Zoom out">−</button><button type="button" data-cover-zoom="in" aria-label="Zoom in">＋</button></div></div><small class="reel-cover-gesture-hint">Drag the square to move it. Pinch to zoom.</small><div class="reel-cover-timeline" hidden><div class="reel-cover-frames" aria-label="Nearby video frames" hidden><div class="reel-cover-frame-group" data-nearby="before" aria-label="Earlier frames"></div><span class="reel-cover-frame-divider" aria-hidden="true"></span><div class="reel-cover-frame-group" data-nearby="after" aria-label="Later frames"></div></div><label>Choose frame <output class="reel-cover-time">0:00.0</output><input class="reel-cover-seek" aria-label="Choose video frame" type="range" min="0" max="0" step="0.01" value="0" /></label></div><button type="button" class="reel-cover-apply">Use thumbnail</button></div></div>`;
-    const q=selector=>root.querySelector(selector),editor=q('.reel-cover-editor'),savedPanel=q('.reel-cover-saved'),status=q('.reel-cover-status'),cropPanel=q('.reel-cover-crop'),timeline=q('.reel-cover-timeline'),range=q('.reel-cover-seek'),apply=q('.reel-cover-apply');
-    if(saved)q('.reel-cover-saved img').src=saved;
+    root.innerHTML=`<details class="reel-cover-disclosure"><summary class="reel-cover-summary">
+        <span class="reel-cover-miniature">
+            <img alt="" hidden />
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m3.5 17 5-5 4 4 3.5-4 4.5 5"/></svg>
+        </span>
+        <span><strong>Edit cover</strong><small>Choose a frame from your video</small></span>
+        <svg class="reel-cover-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </summary><div class="reel-cover-editor"><p>Choose a frame from your reel or upload an image. Square · ${REEL_COVER_SIZE} × ${REEL_COVER_SIZE}</p><div class="reel-cover-sources"><button type="button" data-cover-source="video" aria-pressed="false">From video</button><button type="button" data-cover-source="gallery" aria-pressed="false">Upload image</button></div><input class="reel-cover-file" type="file" accept="image/*" hidden /><p class="reel-cover-status" role="status"></p><div class="reel-cover-crop" hidden><div class="reel-cover-canvas" tabindex="0" role="group" aria-label="Thumbnail crop: drag with one finger, pinch with two fingers to zoom"><img class="reel-cover-preview" alt="Full image for thumbnail selection" draggable="false" /><div class="reel-cover-selection" aria-hidden="true"></div><div class="reel-cover-zoom-buttons"><button type="button" data-cover-zoom="out" aria-label="Zoom out">−</button><button type="button" data-cover-zoom="in" aria-label="Zoom in">＋</button></div></div><small class="reel-cover-gesture-hint">Drag the square to move it. Pinch to zoom.</small><div class="reel-cover-timeline" hidden><div class="reel-cover-frames" aria-label="Nearby video frames" hidden><div class="reel-cover-frame-group" data-nearby="before" aria-label="Earlier frames"></div><span class="reel-cover-frame-divider" aria-hidden="true"></span><div class="reel-cover-frame-group" data-nearby="after" aria-label="Later frames"></div></div><label>Choose frame <output class="reel-cover-time">0:00.0</output><input class="reel-cover-seek" aria-label="Choose video frame" type="range" min="0" max="0" step="0.01" value="0" /></label></div><button type="button" class="reel-cover-apply">Use thumbnail</button></div></div></details>`;
+    const q=selector=>root.querySelector(selector),status=q('.reel-cover-status'),cropPanel=q('.reel-cover-crop'),timeline=q('.reel-cover-timeline'),range=q('.reel-cover-seek'),apply=q('.reel-cover-apply');
+    const disclosure = q('.reel-cover-disclosure');
+    const summary = q('.reel-cover-summary');
+    const coverImage = q('.reel-cover-miniature img');
+    const showCover = url => {
+        if (!url) return;
+        coverImage.src = url;
+        coverImage.hidden = false;
+    };
+    showCover(saved || item.poster);
     const current=token=>token===generation&&root.isConnected&&state.createDetailsOpen;
     let sourceGeometry={width:1,height:1};
     const stage=q('.reel-cover-canvas'),cropGestures=cropController=bindCoverCrop(stage,()=>sourceGeometry,()=>crop,next=>{crop=next;});
@@ -119,7 +134,22 @@ export function renderReelCover(item){
     });
     apply.addEventListener('click',()=>{
         if(working||!draftMedia)return;
-        try{const data=renderSquareCover(draftMedia,draftItem,crop);state.createReelThumbnail={signature:next,data};q('.reel-cover-saved img').src=data;savedPanel.hidden=false;editor.hidden=true;document.querySelector('.create-publish-button').disabled=false;generation++;releaseMedia();}catch(error){status.textContent=error.message;}
+        try {
+            const data = renderSquareCover(draftMedia, draftItem, crop);
+            state.createReelThumbnail = { signature: next, data };
+            showCover(data);
+            document.querySelector('.create-publish-button').disabled = false;
+            generation++;
+            releaseMedia();
+            selectSource(null);
+            hideNearby();
+            cropPanel.hidden = true;
+            timeline.hidden = true;
+            status.textContent = '';
+            disclosure.open = false;
+            summary.focus();
+        } catch (error) {
+            status.textContent = error.message;
+        }
     });
-    q('.reel-cover-change').addEventListener('click',()=>{savedPanel.hidden=true;editor.hidden=false;cropPanel.hidden=true;status.textContent='Choose a source to change your thumbnail.';});
 }

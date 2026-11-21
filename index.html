@@ -17,10 +17,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
-    <link rel="stylesheet" href="styles.css?v=340" />
+    <link rel="stylesheet" href="styles.css?v=346" />
     <link rel="stylesheet" href="styles/android-interface.css?v=328" />
-    <link rel="stylesheet" href="styles/creation-studio.css?v=323" />
-    <link rel="stylesheet" href="styles/home-notifications.css?v=323" />
+    <link rel="stylesheet" href="styles/creation-studio.css?v=346" />
+    <link rel="stylesheet" href="styles/home-notifications.css?v=346" />
   </head>
   <body>
     <main id="deletion-lock" class="welcome-screen" hidden aria-labelledby="deletion-lock-title">
@@ -52,18 +52,21 @@
           </div>
           <section class="welcome-entry" id="welcome-entry" aria-live="polite" hidden>
             <p class="welcome-eyebrow" id="welcome-entry-eyebrow"></p>
+            <button type="button" class="welcome-auth-back" data-welcome-action="back" aria-label="Back to welcome"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4m7-7-7 7 7 7" /></svg></button>
+            <div class="welcome-login-hero" aria-hidden="true"><span>insta</span></div>
+            <div class="welcome-signup-emblem" aria-hidden="true"></div>
             <h1 id="welcome-entry-title" tabindex="-1"></h1>
             <p class="welcome-description" id="welcome-entry-description"></p>
             <p id="welcome-auth-status" role="status" hidden></p>
             <form class="welcome-form" id="login-form" data-entry-form="login" autocomplete="off" novalidate hidden>
               <label for="login-email">Email or username</label>
-              <input id="login-email" name="email" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required aria-describedby="login-email-error" />
+              <div class="welcome-auth-field"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg><input id="login-email" name="email" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required aria-describedby="login-email-error" /></div>
               <p class="welcome-email-error" id="login-email-error" data-email-error role="alert" hidden></p>
               <label for="login-password">Password</label>
-              <div class="welcome-password-wrap"><input id="login-password" name="password" type="password" minlength="8" autocomplete="off" required aria-describedby="login-error login-password-note" /><button type="button" class="welcome-password-toggle" data-toggle-password="login-password" aria-controls="login-password" aria-pressed="false">Show</button></div>
+              <div class="welcome-password-wrap welcome-auth-field"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><input id="login-password" name="password" type="password" minlength="8" autocomplete="off" required aria-describedby="login-error login-password-note" /><button type="button" class="welcome-password-toggle" data-toggle-password="login-password" aria-controls="login-password" aria-pressed="false">Show</button></div>
               <p class="welcome-password-note" id="login-password-note">Use at least 8 characters. Spaces are not allowed.</p>
               <p class="welcome-form-error" id="login-error" role="alert" hidden></p>
-              <div class="welcome-actions"><button class="welcome-primary" type="submit">Log in</button><button class="welcome-secondary" type="button" data-welcome-action="back">Back</button></div>
+              <div class="welcome-actions"><button class="welcome-primary" type="submit">Log in</button><button class="welcome-secondary" type="button" data-welcome-action="signup">Create account</button></div>
             </form>
             <div id="welcome-session-choice" hidden>
               <p class="welcome-description">Stay logged in on this device after you close the app.</p>
@@ -74,13 +77,13 @@
             </div>
             <form class="welcome-form" id="signup-form" data-entry-form="signup" autocomplete="off" novalidate hidden>
               <label for="signup-email">Email</label>
-              <input id="signup-email" name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" required aria-describedby="signup-email-error" />
+              <div class="welcome-auth-field"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg><input id="signup-email" name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" required aria-describedby="signup-email-error" /></div>
               <p class="welcome-email-error" id="signup-email-error" data-field-feedback="email" data-email-error role="alert" hidden></p>
               <label for="signup-full-name">Display name</label>
-              <input id="signup-full-name" name="displayName" type="text" maxlength="100" autocomplete="off" required aria-describedby="signup-error signup-full-name-feedback" />
+              <div class="welcome-auth-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2"/></svg><input id="signup-full-name" name="displayName" type="text" maxlength="100" autocomplete="off" required aria-describedby="signup-error signup-full-name-feedback" /></div>
               <p class="welcome-field-feedback" id="signup-full-name-feedback" data-field-feedback="displayName" role="status" hidden></p>
               <label for="signup-username">Choose a username</label>
-              <input id="signup-username" name="username" type="text" minlength="8" maxlength="20" pattern="[a-zA-Z0-9._]{8,20}" autocomplete="username" autocapitalize="none" spellcheck="false" required aria-describedby="signup-error signup-username-note signup-username-feedback" />
+              <div class="welcome-auth-field"><span aria-hidden="true">@</span><input id="signup-username" name="username" type="text" minlength="8" maxlength="20" pattern="[a-zA-Z0-9._]{8,20}" autocomplete="username" autocapitalize="none" spellcheck="false" required aria-describedby="signup-error signup-username-note signup-username-feedback" /></div>
               <p class="welcome-field-feedback" id="signup-username-feedback" data-field-feedback="username" role="status" hidden></p>
               <p class="welcome-password-note" id="signup-username-note">Use 8–20 characters: letters, numbers, dots or underscores. No spaces.</p>
               <fieldset class="welcome-age-fieldset" aria-describedby="signup-age-note">
@@ -90,14 +93,14 @@
                 <p id="signup-age-note">Self-declared, not verified. This choice does not establish legal eligibility to use the service.</p>
               </fieldset>
               <label for="signup-password">Create password</label>
-              <div class="welcome-password-wrap"><input id="signup-password" name="password" type="password" minlength="8" autocomplete="off" required aria-describedby="signup-error signup-password-note signup-password-feedback" /><button type="button" class="welcome-password-toggle" data-toggle-password="signup-password" aria-controls="signup-password" aria-pressed="false">Show</button></div>
+              <div class="welcome-password-wrap welcome-auth-field"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><input id="signup-password" name="password" type="password" minlength="8" autocomplete="off" required aria-describedby="signup-error signup-password-note signup-password-feedback" /><button type="button" class="welcome-password-toggle" data-toggle-password="signup-password" aria-controls="signup-password" aria-pressed="false">Show</button></div>
               <p class="welcome-field-feedback" id="signup-password-feedback" data-field-feedback="password" role="status" hidden></p>
               <label for="signup-password-confirm">Confirm password</label>
-              <div class="welcome-password-wrap"><input id="signup-password-confirm" name="confirmPassword" type="password" minlength="8" autocomplete="off" required aria-describedby="signup-error signup-password-note signup-password-confirm-feedback" /><button type="button" class="welcome-password-toggle" data-toggle-password="signup-password-confirm" aria-controls="signup-password-confirm" aria-pressed="false">Show</button></div>
+              <div class="welcome-password-wrap welcome-auth-field"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><input id="signup-password-confirm" name="confirmPassword" type="password" minlength="8" autocomplete="off" required aria-describedby="signup-error signup-password-note signup-password-confirm-feedback" /><button type="button" class="welcome-password-toggle" data-toggle-password="signup-password-confirm" aria-controls="signup-password-confirm" aria-pressed="false">Show</button></div>
               <p class="welcome-field-feedback" id="signup-password-confirm-feedback" data-field-feedback="confirmPassword" role="status" hidden></p>
               <p class="welcome-password-note" id="signup-password-note">Use at least 8 characters. Spaces are not allowed.</p>
               <p class="welcome-form-error" id="signup-error" role="alert" hidden></p>
-              <div class="welcome-actions"><button class="welcome-primary" type="submit">Create account</button><button class="welcome-secondary" type="button" data-welcome-action="back">Back</button></div>
+              <div class="welcome-actions"><button class="welcome-primary" type="submit">Create account</button><button class="welcome-secondary" type="button" data-welcome-action="login">Log in</button></div>
             </form>
             <form class="welcome-form" data-entry-form="profile" hidden>
               <label for="complete-name">Display name</label>
@@ -144,8 +147,8 @@
       <main class="main-area">
         <header class="topbar">
           <div class="search-wrap">
-            <span>⌕</span>
-            <input type="text" aria-label="Search people, hashtags, places, or communities" placeholder="Search people, #hashtags, places, communities..." autocomplete="off" aria-autocomplete="list" aria-controls="explore-search-results" aria-expanded="false" />
+            <svg class="explore-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4.5 4.5"/></svg>
+            <input type="text" aria-label="Search people, hashtags, places, or communities" placeholder="Search people and communities" autocomplete="off" aria-autocomplete="list" aria-controls="explore-search-results" aria-expanded="false" />
             <div class="search-results" id="explore-search-results" role="listbox" aria-label="Search results" hidden></div>
           </div>
 
@@ -167,13 +170,18 @@
         </button></header>
 
         <section class="home-stories" aria-label="Stories">
+          <div class="home-create-row">
+            <button class="primary-btn create-button" type="button"><span aria-hidden="true">+</span> Create</button>
+          </div>
           <div id="stories-list" class="stories-list"></div>
         </section>
-        <div class="home-create-row">
-          <button class="primary-btn create-button" type="button"><span aria-hidden="true">+</span> Create</button>
-        </div>
 
         <section id="feed" class="feed" aria-live="polite"></section>
+        <button class="explore-community-button" type="button" data-open-communities hidden>
+          <span class="explore-community-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.4-3.1 2.2-5 5.5-5s5.1 1.9 5.5 5M16 7.5a2.5 2.5 0 1 1 0 5m1.5 2.2c1.8.6 2.8 2 3 4.3"/></svg></span>
+          <span><strong>Community</strong><small>Find communities and creators</small></span>
+          <span class="explore-community-action">Browse</span>
+        </button>
         <section id="explore-grid" class="media-grid" aria-label="Explore public posts" hidden></section>
         <section id="community-view" class="community-view" aria-label="Community" hidden></section>
         <section id="reels-feed" class="reels-feed" aria-label="Reels feed" hidden></section>
@@ -186,7 +194,10 @@
           <div class="shared-post-content"></div>
         </section>
         <section id="notifications-page" class="notifications-page" aria-labelledby="notifications-title" hidden>
-          <header class="notifications-page-header"><button type="button" class="notifications-close" aria-label="Back from notifications">←</button><h1 id="notifications-title" tabindex="-1"><svg class="notifications-title-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg><span>Notifications</span></h1></header>
+          <header class="notifications-page-header">
+            <button type="button" class="notifications-close" aria-label="Back from notifications"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4m7-7-7 7 7 7" /></svg></button>
+            <h1 id="notifications-title" tabindex="-1">Notifications</h1>
+          </header>
           <div class="notifications-page-body"><div class="notifications-content"></div></div>
         </section>
         <section id="profile-view" class="profile-view" aria-label="Profile" hidden></section>
@@ -208,7 +219,6 @@
       </aside>
     </div>
 
-    <button class="explore-community-button" type="button" data-open-communities aria-label="Communities" hidden>Community</button>
     <nav class="mobile-nav" aria-label="Main navigation" hidden>
       <button class="mobile-nav-item active" type="button" data-view="home" aria-label="Home" aria-current="page">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" /></svg>
@@ -409,9 +419,16 @@
           <div class="story-inline-text" hidden></div>
           <div class="story-edit-mode-controls" hidden aria-label="Story editing controls"></div>
           <div class="story-delete-target" hidden aria-label="Drop overlay here to delete"><span aria-hidden="true">🗑</span><span>Drop to delete</span></div>
-          <div class="story-editor-toolbar"><button type="button" class="story-create-back" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4m7-7-7 7 7 7" /></svg></button></div>
+          <div class="story-editor-toolbar"><button type="button" class="story-create-back" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4m7-7-7 7 7 7" /></svg><svg class="story-editor-close-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 5 14 14M19 5 5 19" /></svg></button></div>
           <div class="story-history-controls" aria-label="Edit history"><button class="story-undo" type="button" aria-label="Undo Story edit" disabled>↶</button><button class="story-redo" type="button" aria-label="Redo Story edit" disabled>↷</button></div>
-          <button class="story-tools-open" type="button" aria-haspopup="dialog" aria-controls="story-tools-dialog">⚒ Tools</button>
+          <div class="story-tool-rail" role="group" aria-label="Story editing tools">
+            <button type="button" data-story-tool="text"><span aria-hidden="true">T</span>Text</button>
+            <button type="button" data-story-tool="mention"><span aria-hidden="true">@</span>Mention</button>
+            <button type="button" data-story-tool="draw"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16.5-.8 4.3 4.3-.8L20 7.5 16.5 4zM14.8 5.7l3.5 3.5"/></svg>Draw</button>
+            <button type="button" data-story-tool="filters"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7.5" r="4.5"/><circle cx="7.5" cy="15.5" r="4.5"/><circle cx="16.5" cy="15.5" r="4.5"/></svg>Filters</button>
+            <button type="button" data-story-tool="adjustments"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M9 4v4M15 10v4M8 16v4"/></svg>Tune</button>
+            <button class="story-tools-open" type="button" aria-haspopup="dialog" aria-controls="story-tools-dialog"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>Tools</button>
+          </div>
           <button class="story-draw-done" type="button" hidden>Done positioning / drawing</button>
           <div class="story-preview-actions">
             <button type="button" class="story-preview-play" aria-label="Play video preview" hidden>▶</button>
@@ -425,7 +442,9 @@
           <input id="story-audience" type="hidden" value="all" />
           <!-- Retain captions from older drafts without offering a second text editor. -->
           <input id="story-caption" type="hidden" value="" />
-          <div class="story-editor-actions"><button type="button" class="story-save-draft" disabled><span class="story-editor-control-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3.5h9l4 4V20H6z"/><path d="M9 3.5v6h7v-4M9 20v-6h7v6"/></svg></span><span class="story-editor-action-label">Draft story</span></button><button type="button" class="story-publish-selected" disabled><span class="story-editor-control-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m3 11 18-8-7 18-3.5-7L3 11Z"/><path d="m10.5 14 5-5"/></svg></span><span class="story-editor-action-label">Share story</span></button></div>
+          <div class="story-editor-actions">
+            <button type="button" class="story-replace-media" aria-label="Replace story media" title="Replace story media"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m3.5 17 5-5 4 4 3.5-4 4.5 5"/></svg></button>
+            <button type="button" class="story-save-draft" disabled><span class="story-editor-control-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3.5h9l4 4V20H6z"/><path d="M9 3.5v6h7v-4M9 20v-6h7v6"/></svg></span><span class="story-editor-action-label">Draft story</span></button><button type="button" class="story-publish-selected" disabled><span class="story-editor-control-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m3 11 18-8-7 18-3.5-7L3 11Z"/><path d="m10.5 14 5-5"/></svg></span><span class="story-editor-action-label">Share story</span></button></div>
 
           </div>
           </div>
@@ -529,10 +548,13 @@
             </div>
             <div class="create-editor-fields" hidden>
               <button type="button" class="create-back-to-edit">← Back to editing</button>
-              <section class="create-reel-cover" aria-label="Reel thumbnail" hidden></section>
               <label class="create-caption-label" for="create-caption">Caption</label>
               <div class="create-caption-shell"><div class="create-caption-highlight" aria-hidden="true"></div><textarea id="create-caption" aria-autocomplete="list" aria-controls="caption-suggestions" aria-expanded="false" rows="3" maxlength="500" placeholder="Write a caption..."></textarea></div>
               <div id="caption-suggestions" class="create-caption-suggestions" role="listbox" aria-label="Caption suggestions" hidden></div>
+              <output id="create-caption-count" class="create-caption-count" for="create-caption" aria-hidden="true" hidden></output>
+              <section class="create-reel-cover" aria-label="Reel thumbnail" hidden></section>
+              <details class="create-publish-options" open>
+                <summary hidden>More options</summary>
               <button type="button" class="create-tag-people" aria-expanded="false">Tag people</button>
               <input id="create-tags" type="hidden" />
               <div class="create-tag-selected"></div>
@@ -546,6 +568,7 @@
               <div id="create-music-panel" class="create-detail-panel" hidden><p>Music catalog is not connected yet. Licensed music selection will be added later.</p></div>
               <button type="button" class="create-detail-toggle" data-create-detail="schedule" aria-expanded="false" aria-controls="create-schedule-panel"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-10 3v3h3"/></svg><span class="create-schedule-label">Schedule post</span></button>
               <div id="create-schedule-panel" class="create-detail-panel" hidden><label for="create-schedule">Date and time</label><input id="create-schedule" type="datetime-local" /><small class="create-schedule-note">Local preview: scheduled posts publish when this app is open, or the next time you open it.</small></div>
+              </details>
               <p class="create-upload-hint" role="status" hidden></p>
               <div class="create-editor-actions"><button class="primary-btn create-publish-button" type="button" disabled>Share post</button></div>
             </div>
@@ -717,7 +740,7 @@
     "./src/features/comments.js": "./src/features/comments.js?v=326",
     "./src/features/communities.js": "./src/features/communities.js?v=319",
     "./src/features/create.events.js": "./src/features/create.events.js?v=345",
-    "./src/features/create.js": "./src/features/create.js?v=339",
+    "./src/features/create.js": "./src/features/create.js?v=346",
     "./src/features/explore.events.js": "./src/features/explore.events.js?v=323",
     "./src/features/explore.js": "./src/features/explore.js?v=336",
     "./src/features/follows.events.js": "./src/features/follows.events.js?v=319",
@@ -739,19 +762,19 @@
     "./src/features/message-access.js": "./src/features/message-access.js?v=334",
     "./src/features/messages.events.js": "./src/features/messages.events.js?v=335",
     "./src/features/messages.js": "./src/features/messages.js?v=335",
-    "./src/features/notifications.js": "./src/features/notifications.js?v=323",
+    "./src/features/notifications.js": "./src/features/notifications.js?v=346",
     "./src/features/post-media.js": "./src/features/post-media.js?v=329",
     "./src/features/profile-scanner.js": "./src/features/profile-scanner.js?v=319",
     "./src/features/profile.events.js": "./src/features/profile.events.js?v=342",
     "./src/features/profile.js": "./src/features/profile.js?v=342",
-    "./src/features/reel-cover.js": "./src/features/reel-cover.js?v=319",
+    "./src/features/reel-cover.js": "./src/features/reel-cover.js?v=346",
     "./src/features/reels.js": "./src/features/reels.js?v=340",
     "./src/features/saved.events.js": "./src/features/saved.events.js?v=319",
     "./src/features/sharing.events.js": "./src/features/sharing.events.js?v=335",
     "./src/features/sharing.js": "./src/features/sharing.js?v=335",
     "./src/features/signup-validation.js": "./src/features/signup-validation.js?v=319",
     "./src/features/social-updates.js": "./src/features/social-updates.js?v=336",
-    "./src/features/stories.events.js": "./src/features/stories.events.js?v=336",
+    "./src/features/stories.events.js": "./src/features/stories.events.js?v=346",
     "./src/features/stories.js": "./src/features/stories.js?v=336",
     "./src/features/story-camera.js": "./src/features/story-camera.js?v=319",
     "./src/features/story-composition.js": "./src/features/story-composition.js?v=336",
@@ -761,7 +784,7 @@
     "./src/features/story-fonts.js": "./src/features/story-fonts.js?v=319",
     "./src/features/story-options.js": "./src/features/story-options.js?v=319",
     "./src/features/story-shortcuts.js": "./src/features/story-shortcuts.js?v=319",
-    "./src/features/story-tools.js": "./src/features/story-tools.js?v=336",
+    "./src/features/story-tools.js": "./src/features/story-tools.js?v=346",
     "./src/features/web-push.js": "./src/features/web-push.js?v=319",
     "./src/media/carousel.js": "./src/media/carousel.js?v=329",
     "./src/media/cover-canvas.js": "./src/media/cover-canvas.js?v=319",
@@ -794,6 +817,6 @@
   }
 }
     </script>
-    <script type="module" src="app.js?v=341"></script>
+    <script type="module" src="app.js?v=342"></script>
   </body>
 </html>

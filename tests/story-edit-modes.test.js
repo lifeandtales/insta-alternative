@@ -3,6 +3,39 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { loadApp } from './helpers/app-harness.js';
 
+test('Mention shortcut opens suggestions and restores focus when canceled', async () => {
+    const app = await loadApp();
+    const { state } = app.exportsOf('src/core/state.js');
+    state.pendingStoryMedia = { type: 'image', media: 'fixture.png' };
+    state.accountDirectory = [{ id: 'friend', name: 'Maya Rao', handle: '@maya.rao' }];
+    const editor = app.element('.story-inline-text');
+    const field = editor.querySelector('textarea');
+    field.value = '@';
+    let caret;
+    field.setSelectionRange = (start, end) => { caret = [start, end]; };
+    const button = app.element('.story-tool-rail [data-story-tool="mention"]');
+    button.dataset.storyTool = 'mention';
+    button.closest = selector => {
+        if (selector === '[data-story-tool]') return button;
+        if (selector === '.story-tool-rail') return app.element('.story-tool-rail');
+        return null;
+    };
+    let restored = false;
+    button.focus = () => { restored = true; };
+    const click = app.listeners.find(listener => listener.key === 'document' && listener.type === 'click' &&
+        listener.callback.toString().includes('toolForm(tool.dataset.storyTool)')).callback;
+    click({ target: button });
+
+    assert.equal(editor.hidden, false);
+    assert.match(editor.innerHTML, /aria-label="Mention someone">@<\/textarea>/);
+    assert.deepEqual(caret, [1, 1]);
+    assert.match(app.element('#story-mention-suggestions').innerHTML, /data-inline-mention="@maya\.rao"/);
+    click({ target: { closest: selector => selector === '[data-story-text-cancel]' ? {} : null } });
+    assert.equal(editor.hidden, true);
+    assert.equal(restored, true);
+    assert.equal(state.pendingStoryMedia.edits, undefined);
+});
+
 test('adjustments preview in a private session; discard preserves the baseline and Save creates one undo step',async()=>{
     const app=await loadApp();const {state}=app.exportsOf('src/core/state.js');
     state.pendingStoryMedia={type:'image',media:'fixture.png',edits:{filter:{brightness:1.2},layers:[{id:'text',type:'text',text:'Keep me'}]}};

@@ -43,15 +43,16 @@ test('a notification Story opens over the page and browser Back returns to the n
     notifications.closeNotifications();assert.equal(state.currentView,'home');
 });
 
-test('notification types share one newest-first list and missing times sort last',async()=>{
+test('New and Earlier sections preserve newest-first order and put missing times last',async()=>{
     const app=await loadApp(),{state}=app.exportsOf('src/core/state.js'),{currentUser,conversations}=app.exportsOf('src/data/sample-data.js');
     conversations.forEach(chat=>chat.unread=false);
     state.incomingFollowRequests=['@aribloom'];state.localApprovalNotices=[{recipient:currentUser.handle,createdAt:300}];
-    state.localStoryNotifications=[{recipient:currentUser.handle,actor:'@aribloom',storyId:'older',createdAt:100},{recipient:currentUser.handle,actor:'@noahvale',storyId:'latest',createdAt:500}];
+    state.localStoryNotifications=[{recipient:currentUser.handle,actor:'@aribloom',storyId:'older',createdAt:100},{recipient:currentUser.handle,actor:'@noahvale',storyId:'latest',createdAt:1792738800000-60000}];
     const notifications=app.exportsOf('src/features/notifications.js'),items=notifications.availableLocalNotifications();
     assert.equal(items[0].storyId,'latest');assert.equal(items[1].title,'Follow request approved');assert.equal(items[2].storyId,'older');
     notifications.openNotifications(app.element('.home-notifications'));
-    assert.match(app.element('.notifications-content').innerHTML, /data-story-notice="older"[\s\S]*Follow requests/);
+    assert.match(app.element('.notifications-content').innerHTML,
+        /<h2>New<\/h2>[\s\S]*data-story-notice="latest"[\s\S]*<h2>Earlier<\/h2>[\s\S]*data-story-notice="older"[\s\S]*Follow requests/);
 });
 
 test('notification ages switch from now to minutes, hours and days at the requested boundaries',async()=>{
@@ -61,12 +62,13 @@ test('notification ages switch from now to minutes, hours and days at the reques
     assert.equal(formatNotificationAge(0,now),'');assert.equal(formatNotificationAge(now+60000,now),'Just now');
 });
 
-test('Story notices show a relative time beside the title and a square media link without an extra View story line',async()=>{
+test('Story notices show the actor, inline relative time, and a trailing media link',async()=>{
     const app=await loadApp(),{state}=app.exportsOf('src/core/state.js'),{currentUser}=app.exportsOf('src/data/sample-data.js');
     state.localStoryNotifications=[{recipient:currentUser.handle,storyId:'ari-story-mention-demo',actor:'@aribloom',actorName:'Ari Bloom',kind:'story-mention',createdAt:1792738800000-120000,demo:true}];
     app.exportsOf('src/features/notifications.js').openNotifications(app.element('.home-notifications'));
     const html=app.element('.notifications-content').innerHTML;
-    assert.match(html,/<strong>Story mention<\/strong><time[^>]*>2 minutes ago<\/time>/);
+    assert.match(html,/<img class="notification-avatar"[^>]*alt=""/);
+    assert.match(html,/<strong>Ari Bloom<\/strong> mentioned you in their story\. <time[^>]*>2 minutes ago<\/time>/);
     assert.match(html,/data-story-notice="ari-story-mention-demo"[^>]*><img/);
     assert.doesNotMatch(html,/>View story<\/button>/);
 });
@@ -107,7 +109,7 @@ test('likes group by exact content and unique people while mentions always remai
     assert.equal(items.filter(item=>item.kind==='post-like').length,2);
     assert.equal(items.filter(item=>item.kind==='story-mention').length,3);
     notifications.updateNotificationBadge();assert.equal(app.element('.home-notifications .notification-badge').textContent,'7');
-    notifications.openNotifications(app.element('.home-notifications'));assert.match(app.element('.notifications-content').innerHTML,/Lena and 4 others liked your story/);
+    notifications.openNotifications(app.element('.home-notifications'));assert.match(app.element('.notifications-content').innerHTML,/<strong>Lena and 4 others<\/strong> liked your story/);
     assert.equal(app.element('.home-notifications .notification-badge').hidden,true);
 });
 

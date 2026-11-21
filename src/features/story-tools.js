@@ -9,6 +9,7 @@ import { storyFontStyles, getStoryFontStyle } from './story-fonts.js';
 
 const mediaPointers=new Map();
 let storyRef, history, selectedLayer, gesture, drawMode, toolSession, activeAdjustment='brightness', moveMode=false, stickerView=null, textDraft=null;
+let quickToolTrigger = null;
 export const storyColorSwatches=[
     ['Black','#000000'],['Charcoal','#262626'],['Dark gray','#4a4a4a'],['Gray','#6b7280'],['Slate gray','#9ca3af'],['Medium gray','#c5c5c5'],['Light gray','#e5e5e5'],['Pale gray','#f5f5f5'],['White','#ffffff'],
     ['Light red','#ff8a80'],['Red','#f44336'],['Dark red','#b71c1c'],['Light orange','#ffcc80'],['Orange','#ff9800'],['Dark orange','#e65100'],['Light yellow','#fff59d'],['Yellow','#ffeb3b'],['Dark yellow','#f9a825'],['Light green','#a5d6a7'],['Green','#4caf50'],['Dark green','#1b5e20'],['Light blue','#90caf9'],['Blue','#2196f3'],['Dark blue','#0d47a1'],['Light indigo','#9fa8da'],['Indigo','#3f51b5'],['Dark indigo','#1a237e'],['Light violet','#ce93d8'],['Violet','#9c27b0'],['Dark violet','#4a148c']
@@ -118,6 +119,7 @@ export function updateStoryEditorDrag(point=null,item=null){
 }
 function ensureHistory(){
     if(storyRef!==pending()){
+        quickToolTrigger = null;
         for(const pointerId of mediaPointers.keys()){if(preview().hasPointerCapture?.(pointerId))preview().releasePointerCapture(pointerId);}
         mediaPointers.clear();gesture=null;updateStoryEditorDrag();
         clearTimeout(canvasBoundaryTimer);document.querySelector('.story-create-dialog').classList.remove('story-canvas-boundary-flash');
@@ -207,7 +209,10 @@ export function finishStoryMode(save){
     if(!toolSession)return false;
     const result=toolSession.save();resetStoryMode();gesture=null;
     if(save)commitStoryEdit(result);else repaint();
-    document.querySelector('.story-tools-open').focus();return true;
+    const trigger = quickToolTrigger || document.querySelector('.story-tools-open');
+    quickToolTrigger = null;
+    trigger.focus();
+    return true;
 }
 export function storyTextColorPicker(color,{name='color',label='Text color',dataAttr='data-story-text-color',open=false}={}){
     const id=`story-color-chart-${name}`;
@@ -233,7 +238,7 @@ function finishInlineText(save){
     const form=document.querySelector('.story-inline-text form');
     if(save&&form&&textDraft){
         const field=form.querySelector('textarea')||form.querySelector('input[name="text"]'),text=String(field?.value||'').trim();
-        if(!text){field?.focus();return false;}
+        if(!text || (textDraft.mention && text==='@')){field?.focus();return false;}
         const type=textDraft.kind==='location'?'location':'text';
         const e=toolSession.current(),existing=e.layers.find(item=>item.id===selectedLayer&&item.type===type);
         const mentions=type==='text'?[...text.matchAll(/@[a-zA-Z0-9._]+/g)].map(match=>state.accountDirectory.find(a=>a.handle.toLowerCase()===match[0].toLowerCase()&&!state.blockedHandles.has(a.handle))).filter(Boolean).map(a=>({id:a.id,handle:a.handle})):[];
@@ -241,7 +246,7 @@ function finishInlineText(save){
         e.layers=existing?e.layers.map(item=>item.id===existing.id?layer:item):[...e.layers,layer];selectedLayer=layer.id;
         toolSession.history.commit(e);
     }
-    finishStoryMode(Boolean(save));document.querySelector('.story-tools-open').focus();return true;
+    return finishStoryMode(Boolean(save));
 }
 export function updateStoryAdjustment(key,value){
     if(toolSession?.kind!=='adjustments'||!storyAdjustments.some(item=>item.id===key))return false;
@@ -312,13 +317,29 @@ function openInlineText(layerId=null,kind='text'){
     const type=kind==='location'?'location':'text';
     const layer=storyComposition(pending().edits).layers.find(item=>item.id===layerId&&item.type===type);
     closeTools();closeInlineText();
-    toolSession=createStoryEditSession(type,pending().edits);textDraft={kind:type,font:layer?.font||'sans',color:/^#[\da-f]{6}$/i.test(layer?.color||'')?layer.color:'#ffffff',size:layer?.size||7};
+    const mention = kind === 'mention';
+    toolSession=createStoryEditSession(type,pending().edits);textDraft={kind:type,mention,font:layer?.font||'sans',color:/^#[\da-f]{6}$/i.test(layer?.color||'')?layer.color:'#ffffff',size:layer?.size||7};
     document.querySelector('.story-create-dialog').classList.add('story-mode-active');
     if(layer)preview().querySelector(`[data-layer-id="${layerId}"]`)?.classList.add('story-layer-selected');
     const box=document.querySelector('.story-inline-text');box.hidden=false;box.classList.add('story-text-mode');
     box.style.left=`${(layer?.x??.5)*100}%`;box.style.top=`${(layer?.y??.4)*100}%`;box.style.width=`${(layer?.width??.8)*100}%`;box.style.rotate=`${layer?.rotation||0}deg`;
-    box.innerHTML=`<form class="story-tool-form story-inline-form" data-tool="text"><textarea name="text" maxlength="500" placeholder="Write text or @mention" aria-label="Story text">${escapeHtml(layer?.text||'')}</textarea><div id="story-mention-suggestions" class="story-inline-mentions" role="listbox" aria-label="Mention suggestions"></div></form>`;
-    renderStoryTextControls();syncInlineTextStyle();box.querySelector('textarea').focus();
+    box.innerHTML=`<form class="story-tool-form story-inline-form" data-tool="text"><textarea name="text" maxlength="500" placeholder="Write text or @mention" aria-label="${mention ? 'Mention someone' : 'Story text'}">${escapeHtml(layer?.text ?? (mention ? '@' : ''))}</textarea><div id="story-mention-suggestions" class="story-inline-mentions" role="group" aria-label="Mention suggestions"></div></form>`;
+    renderStoryTextControls();syncInlineTextStyle();
+    const field = box.querySelector('textarea');
+    field.focus();
+    if (mention) {
+        field.setSelectionRange(1, 1);
+        renderMentionSuggestions(field.value);
+    }
+}
+function renderMentionSuggestions(value) {
+    const match = /@[a-zA-Z0-9._]*$/.exec(value);
+    const suggestions = document.getElementById('story-mention-suggestions');
+    suggestions.innerHTML = match ? state.accountDirectory
+        .filter(account => !state.blockedHandles.has(account.handle) && account.handle.toLowerCase().startsWith(match[0].toLowerCase()))
+        .slice(0, 8)
+        .map(account => `<button type="button" data-inline-mention="${escapeHtml(account.handle)}">${escapeHtml(account.name)} · ${escapeHtml(account.handle)}</button>`)
+        .join('') : '';
 }
 function hideDeleteTarget(){const target=document.querySelector('.story-delete-target');target.hidden=true;target.classList.remove('story-delete-ready');}
 export function isStoryDeleteDrop(rect,x,y){return x>=rect.left&&x<=rect.right&&y>=rect.top&&y<=rect.bottom;}
@@ -331,6 +352,7 @@ function toolForm(tool){
     if(['filters','adjustments','draw'].includes(tool)){beginStoryMode(tool);return;}
     if(tool==='labels'){openInlineLocation();return;}
     if(tool==='text'){openInlineText();return;}
+    if(tool==='mention'){openInlineText(null,'mention');return;}
     const popup=document.querySelector('.story-tools-backdrop');
     popup.classList.add('story-tool-active');
     popup.classList.toggle('story-tool-mini',tool==='labels');
@@ -445,7 +467,12 @@ export function registerStoryToolEvents(){
         if(stickerChoice){const choice=storyStickerChoices.find(item=>item.id===stickerChoice.dataset.storyStickerLabel);if(!choice)return;const e=storyComposition(pending().edits),layer={id:id(),type:'sticker',text:choice.text,background:choice.background,color:choice.color,x:.5,y:.4,size:8,rotation:0};e.layers.push(layer);selectedLayer=layer.id;commitStoryEdit(e);closeTools();return;}
         const sticker=target.closest('[data-story-sticker]');
         if(sticker){const e=storyComposition(pending().edits);const layer={id:id(),type:'emoji',text:sticker.dataset.storySticker,x:.5,y:.4,size:15};e.layers.push(layer);selectedLayer=layer.id;commitStoryEdit(e);closeTools();return;}
-        const tool=target.closest('[data-story-tool]');if(tool){toolForm(tool.dataset.storyTool);return;}
+        const tool=target.closest('[data-story-tool]');
+        if(tool){
+            toolForm(tool.dataset.storyTool);
+            if(toolSession && tool.closest('.story-tool-rail')) quickToolTrigger = tool;
+            return;
+        }
         if(target.closest('.story-draw-done')){drawMode=null;moveMode=false;repaint();return;}
         if(target.closest('[data-story-drag-media]')){moveMode=true;drawMode=null;closeTools();repaint();return;}
         const e=storyComposition(pending().edits);
@@ -459,8 +486,7 @@ export function registerStoryToolEvents(){
         const adjust=event.target.closest('[data-story-adjustment]');if(adjust){updateStoryAdjustment(adjust.dataset.storyAdjustment,adjust.value);document.querySelector('[data-story-adjust-value]').textContent=`${adjust.value}%`;return;}
         if(event.target.closest('[data-story-draw-width]')&&drawMode){const percent=clamp(Number(event.target.value),0,100);drawMode.width=storyDrawingWidthFromPercent(percent);event.target.setAttribute('aria-valuetext',`${Math.round(percent)}%`);const output=document.querySelector('[data-story-draw-size]');if(output)output.textContent=`${Math.round(percent)}%`;return;}
         const form=event.target.closest('.story-tool-form');if(form?.matches('.story-inline-form'))syncInlineTextStyle();if(!form || form.dataset.tool!=='text' || event.target.name!=='text')return;
-        const value=event.target.value, match=/@[a-zA-Z0-9._]*$/.exec(value);
-        document.getElementById('story-mention-suggestions').innerHTML=match?state.accountDirectory.filter(a=>!state.blockedHandles.has(a.handle)&&a.handle.toLowerCase().startsWith(match[0].toLowerCase())).slice(0,8).map(a=>`<button type="button" data-inline-mention="${escapeHtml(a.handle)}">${escapeHtml(a.name)} · ${escapeHtml(a.handle)}</button>`).join(''):'';
+        renderMentionSuggestions(event.target.value);
     });
     document.addEventListener('change',event=>{
         if(event.target.closest('.story-inline-form')){syncInlineTextStyle();return;}

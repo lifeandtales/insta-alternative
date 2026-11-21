@@ -401,6 +401,14 @@ export function handleStoryClick(event) {
         closeStoryCreator();
         return true;
     }
+    if (event.target.closest('.story-replace-media')) {
+        if (state.pendingStoryMedia && mayInteract()) {
+            const upload = document.getElementById('story-upload');
+            upload.value = '';
+            upload.click();
+        }
+        return true;
+    }
     const resumeDraft = event.target.closest('[data-story-draft], [data-resume-story-draft]');
     if (resumeDraft) {
         if (!mayInteract()) return true;
@@ -710,6 +718,11 @@ export function registerStoryUploadEvents() {
         if (!getSupportedStoryFileType(file)) {
             input.value = '';
             showShareFeedback("Choose a supported image or video file for your story.");
+            return;
+        }
+        if (state.pendingStoryMedia && !window.confirm('Replace this Story media and start fresh?')) {
+            input.value = '';
+            state.storyUploadSelection = null;
             return;
         }
         const type = getSupportedStoryFileType(file);

@@ -116,3 +116,173 @@
 :is(.welcome-field-feedback, .welcome-email-error)[data-state=invalid] { color: #a6284b; }
 :is(.welcome-field-feedback, .welcome-email-error):is([data-state=check], [data-state=unavailable]) { color: var(--muted); }
 .welcome-form input[aria-invalid=true] { border-color: #a6284b; }
+
+.welcome-auth-back, .welcome-login-hero, .welcome-signup-emblem { display: none; }
+
+#welcome-screen:is([data-entry-mode="login"], [data-entry-mode="signup"]) {
+  --auth-paper: #f8eee3;
+  --auth-ink: #281b1b;
+  --auth-burgundy: #650c20;
+  --auth-border: #a48e7e;
+  --auth-tint: #efe0d4;
+  padding: 0;
+  background: #efe3d6;
+  color: var(--auth-ink);
+}
+
+:is([data-entry-mode="login"], [data-entry-mode="signup"]) .welcome-shell {
+  width: min(100%, 440px);
+  min-height: 100dvh;
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--auth-paper);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+:is([data-entry-mode="login"], [data-entry-mode="signup"]) :is(.welcome-brand, .welcome-art, #welcome-entry-eyebrow, #welcome-entry-description) {
+  display: none;
+}
+:is([data-entry-mode="login"], [data-entry-mode="signup"]) .welcome-entry {
+  margin: 0;
+  padding-bottom: max(22px, env(safe-area-inset-bottom));
+}
+:is([data-entry-mode="login"], [data-entry-mode="signup"]) .welcome-auth-back {
+  position: absolute;
+  z-index: 1;
+  top: max(8px, env(safe-area-inset-top));
+  left: max(8px, env(safe-area-inset-left));
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--auth-burgundy);
+  background: var(--auth-paper);
+}
+.welcome-auth-back svg, .welcome-auth-field svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+[data-entry-mode="login"] .welcome-login-hero {
+  display: grid;
+  justify-items: center;
+  align-items: start;
+  height: clamp(200px, 37svh, 320px);
+  padding-top: max(54px, calc(26px + env(safe-area-inset-top)));
+  background: #ccb49c url("assets/login-arch.jpg") center / cover no-repeat;
+  clip-path: ellipse(130% 100% at 50% 0%);
+}
+.welcome-login-hero span {
+  color: var(--auth-burgundy);
+  font: 700 clamp(2.5rem, 9vw, 3.75rem)/1 Georgia, serif;
+  letter-spacing: -.05em;
+}
+[data-entry-mode="login"] #welcome-entry-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+[data-entry-mode="signup"] .welcome-signup-emblem {
+  display: block;
+  width: 174px;
+  height: 84px;
+  margin: 0 auto 8px;
+  background: url("assets/signup-pavilion.png") center / contain no-repeat;
+  clip-path: polygon(29% 0, 71% 0, 100% 42%, 100% 100%, 0 100%, 0 42%);
+}
+[data-entry-mode="signup"] .welcome-entry { padding-top: max(34px, calc(24px + env(safe-area-inset-top))); }
+[data-entry-mode="signup"] #welcome-entry-title {
+  padding-inline: 20px;
+  color: var(--auth-burgundy);
+  font: 700 clamp(2rem, 7vw, 2.625rem)/1.08 Georgia, serif;
+  letter-spacing: -.035em;
+  text-align: center;
+}
+[data-entry-mode="signup"] #welcome-entry-title:focus { outline: none; }
+:is([data-entry-mode="login"], [data-entry-mode="signup"]) #welcome-auth-status {
+  margin: 12px 20px 0;
+  color: var(--auth-burgundy);
+}
+:is(#login-form, #signup-form) {
+  margin: 10px 0 0;
+  padding-inline: max(20px, env(safe-area-inset-left)) max(20px, env(safe-area-inset-right));
+  gap: 6px;
+}
+:is(#login-form, #signup-form) > label { color: var(--auth-ink); }
+.welcome-auth-field { position: relative; min-width: 0; }
+.welcome-auth-field > :is(svg, span) {
+  position: absolute;
+  z-index: 1;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--auth-burgundy);
+  pointer-events: none;
+}
+.welcome-auth-field > input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px 8px 42px;
+  border: 1px solid var(--auth-border);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--auth-ink);
+  font-size: 1rem;
+}
+.welcome-auth-field.welcome-password-wrap input { padding-right: 68px; }
+.welcome-auth-field input[aria-invalid="true"] { border-color: #a6284b; }
+.welcome-auth-field input:focus {
+  outline: 2px solid var(--auth-burgundy);
+  outline-offset: 1px;
+  box-shadow: none;
+}
+.welcome-auth-field .welcome-password-toggle {
+  right: 3px;
+  min-height: 44px;
+  color: var(--auth-burgundy);
+}
+.welcome-auth-field .welcome-password-toggle:hover { background: var(--auth-tint); }
+:is(#login-form, #signup-form) .welcome-password-note { margin: 0; color: #634b43; }
+#signup-form .welcome-age-fieldset { margin: 4px 0 0; border-color: var(--auth-border); }
+#signup-form .welcome-age-fieldset label { min-height: 44px; background: var(--auth-tint); color: var(--auth-ink); }
+#signup-form .welcome-age-fieldset input { accent-color: var(--auth-burgundy); }
+:is(#login-form, #signup-form) .welcome-actions { display: grid; gap: 2px; margin-top: 12px; }
+:is(#login-form, #signup-form) .welcome-actions button { border-radius: 12px; }
+:is(#login-form, #signup-form) .welcome-actions button:hover { transform: none; }
+:is(#login-form, #signup-form) .welcome-primary { background: var(--auth-burgundy); box-shadow: none; }
+:is(#login-form, #signup-form) .welcome-secondary {
+  justify-self: center;
+  min-height: 48px;
+  border: 0;
+  background: transparent;
+  color: var(--auth-burgundy);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+:is([data-entry-mode="login"], [data-entry-mode="signup"]) button:focus-visible {
+  outline: 2px solid var(--auth-burgundy);
+  outline-offset: 2px;
+}
+@media (min-width: 560px) {
+  #welcome-screen:is([data-entry-mode="login"], [data-entry-mode="signup"]) { padding: 24px; }
+  :is([data-entry-mode="login"], [data-entry-mode="signup"]) .welcome-shell {
+    min-height: calc(100dvh - 48px);
+    overflow: hidden;
+    border-radius: 24px;
+  }
+}
+@media (max-width: 340px) {
+  #signup-form .welcome-age-fieldset { grid-template-columns: 1fr; }
+}

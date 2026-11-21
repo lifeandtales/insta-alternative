@@ -24,6 +24,29 @@ test('Story editor places Save Draft before Share while retaining each action bi
     assert.match(events,/event\.target\.closest\('\.story-publish-selected'\)/);
 });
 
+test('replacing media from the Story editor preserves the composition if declined', async () => {
+    const app = await loadApp();
+    const { state } = app.exportsOf('src/core/state.js');
+    const story = { type: 'image', media: 'original.png', edits: { layers: [{ id: 'text', text: 'Keep me' }] } };
+    state.pendingStoryMedia = story;
+    let opened = false;
+    const upload = app.element('#story-upload');
+    upload.click = () => { opened = true; };
+    upload.value = 'original.png';
+    const events = app.exportsOf('src/features/stories.events.js');
+    events.handleStoryClick({ target: { closest: selector => selector === '.story-replace-media' ? {} : null } });
+    assert.equal(opened, true);
+    assert.equal(upload.value, '');
+    assert.equal(state.pendingStoryMedia, story);
+
+    let prompted = false;
+    app.context.window.confirm = () => { prompted = true; return false; };
+    const change = app.listeners.find(listener => listener.key === '#story-upload' && listener.type === 'change').callback;
+    change({ target: { files: [{ name: 'new.png', type: 'image/png', size: 10 }], value: 'new.png' } });
+    assert.equal(prompted, true);
+    assert.equal(state.pendingStoryMedia, story);
+});
+
 test('normal startup keeps the app hidden until an account is verified', async () => {
     const app = await loadApp({ demoFixtures: false });
     assert.equal(app.element('.app-shell').hidden, true);

@@ -4,29 +4,6 @@
   display: none;
 }
 
-.app-shell.view-explore:not([hidden]) + .explore-community-button:not([hidden]) {
-  position: fixed;
-  display: grid;
-  place-items: center;
-  z-index: 25;
-  inset-inline-end: calc((100% - var(--app-frame-width)) / 2 + 76px);
-  bottom: calc(80px + env(safe-area-inset-bottom));
-  width: 76px;
-  height: 76px;
-  border-radius: 50%;
-  background: var(--primary);
-  color: white;
-  font-size: .68rem;
-  font-weight: 600;
-  box-shadow: 0 4px 14px #7134a833;
-  touch-action: manipulation;
-  user-select: none;
-}
-
-.app-shell.view-explore:has(+ .explore-community-button:not([hidden])) .main-area {
-  padding-bottom: calc(166px + env(safe-area-inset-bottom));
-}
-
 .media-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
