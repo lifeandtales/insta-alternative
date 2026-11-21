@@ -28,12 +28,45 @@ test('Home follows accounts chronologically; hashtag follows do not inject posts
     const ids = () => Array.from(getHomeFeedItems(), item => item.id);
     assert.deepEqual(ids(), [1, 2, 7, 8]);
     toggleSessionFollow('account', '@lenahart');
-    assert.deepEqual(ids(), [1, 2, 3, 7, 8, 101]);
+    assert.deepEqual(ids(), [1, 2, 3, 7, 8]);
     toggleSessionFollow('account', '@lenahart');
     assert.deepEqual(ids(), [1, 2, 7, 8]);
     toggleSessionFollow('hashtag', 'travel');
     assert.ok(!ids().includes(102));
     assert.ok(!ids().includes(6));
+});
+
+test('Home renders video posts while uploaded Reels only appear in the Reels feed', async () => {
+    const app = await loadApp();
+    const { setView } = app.exportsOf('src/core/navigation.js');
+    const { state } = app.exportsOf('src/core/state.js');
+    const { currentUser, posts, reels } = app.exportsOf('src/data/sample-data.js');
+    const { rememberCloudPerson } = app.exportsOf('src/features/cloud-people.js');
+    state.signedInAccountId = 'viewer';
+    state.cloudFollowingIds = new Set(['creator']);
+    currentUser.isPrivate = false;
+    rememberCloudPerson({ id: 'creator', username: 'creator', display_name: 'Public Creator', is_private: false });
+    const regularVideo = {
+        ...posts[0], id: 904, handle: '@creator', user: 'Public Creator',
+        cloudOwnerId: 'creator', mediaType: 'video', videoUrl: 'regular.mp4', caption: 'Regular video post',
+    };
+    const ownReel = {
+        ...reels[0], id: 905, handle: currentUser.handle, cloudOwnerId: 'viewer',
+        public: true, caption: 'My uploaded Reel',
+    };
+    const followedReel = {
+        ...ownReel, id: 906, handle: '@creator', cloudOwnerId: 'creator', caption: 'Followed creator Reel',
+    };
+    posts.push(regularVideo);
+    reels.push(ownReel, followedReel);
+
+    setView('home', { refresh: false });
+    assert.match(app.element('#feed').innerHTML, /Regular video post/);
+    assert.doesNotMatch(app.element('#feed').innerHTML, /My uploaded Reel|Followed creator Reel/);
+
+    setView('reels', { refresh: false });
+    assert.match(app.element('#reels-feed').innerHTML, /My uploaded Reel/);
+    assert.match(app.element('#reels-feed').innerHTML, /Followed creator Reel/);
 });
 
 test('saved IDs and joined communities round-trip through browser storage', async () => {

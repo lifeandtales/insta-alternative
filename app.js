@@ -1,4 +1,3 @@
-import { renderPostCards } from './src/components/post-card.js';
 import { syncCloudGroupInvitationPreference } from './src/features/cloud-chat.js';
 import { enableAndroidPush } from './src/features/android-push.js';
 import { registerSignupValidation, resetSignupFeedback, pauseSignupValidation } from './src/features/signup-validation.js';
@@ -11,8 +10,7 @@ import { subscribeToSocialUpdates } from './src/features/social-updates.js';
 import { readCloudAvatar } from './src/storage/cloud-avatars.js';
 import { loadCloudFollowing } from './src/features/cloud-people.js';
 import { loadCloudImagePosts } from './src/storage/image-posts.js';
-import { loadCloudReels } from './src/storage/cloud-reels.js';
-import { getHomeFeedItems, registerHomePullToRefresh } from './src/features/home.js';
+import { registerHomePullToRefresh } from './src/features/home.js';
 import { currentUser, demoContentEnabled } from './src/data/sample-data.js';
 import { DEFAULT_AVATAR } from './src/core/social.js';
 import { registerStoryShortcutEvents } from './src/features/story-shortcuts.js';
@@ -136,10 +134,6 @@ async function loadAccountContent() {
     const [sessionResult] = await local;
     if (demoContentEnabled && sessionResult.status === 'rejected') return;
     const owner = state.signedInAccountId;
-    let feedReady = false;
-    void loadCloudReels().then(() => {
-        if (feedReady && owner === state.signedInAccountId && state.currentView === 'home') renderPostCards(getHomeFeedItems());
-    }).catch(() => {});
     void loadCloudSavedKeys().then(() => {
         if (owner === state.signedInAccountId) syncVisibleSaveButtons();
     }).catch(() => {});
@@ -154,7 +148,6 @@ async function loadAccountContent() {
     syncIncomingStoryMentions();
     syncIncomingPostMentions();
     setView(state.currentView);
-    feedReady = true;
     updateNotificationBadge();
 }
 

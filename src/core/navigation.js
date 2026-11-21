@@ -251,11 +251,8 @@ async function refreshViewData(view, owner, handle, activeChat) {
         const drawPosts = () => { if (stillVisible()) renderPostCards(getHomeFeedItems()); };
         const drawStories = () => { if (stillVisible()) renderStories(); };
         void loadCloudSavedKeys().then(() => { if (stillVisible()) syncVisibleSaveButtons(); }).catch(() => {});
-        let feedReady = false;
-        void loadCloudReels().then(() => { if (feedReady) drawPosts(); }).catch(() => {});
         void Promise.allSettled([loadCloudStories(), loadLiveData()]).then(drawStories);
         await imagePosts;
         drawPosts();
-        feedReady = true;
     }
 }
