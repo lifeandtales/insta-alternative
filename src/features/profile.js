@@ -307,12 +307,15 @@ export function openMediaDeleteConfirmation(type, entity, { fromHome = false } =
     if (!mayInteract() || !canViewMedia(entity) || entity.handle!==currentUser.handle) return;
     state.activeMediaDelete = { type, id: entity.id, origin:fromHome?'home':'profile' };
     document.getElementById("media-delete-title").textContent = type === "reel" ? "Delete reel?" : "Delete post?";
-    document.getElementById("media-delete-message").textContent = "This can't be undone. The media will be removed from your profile, Home, and saved collection.";
+    document.getElementById("media-delete-message").textContent = type === "reel"
+        ? "This can't be undone. The Reel will be removed from your profile and the Reels feed."
+        : "This can't be undone. The media will be removed from your profile, Home, and saved collection.";
     mediaDeleteBackdrop.hidden = false;
     document.getElementById("media-delete-cancel").focus();
 }
 
 export function closeMediaDeleteConfirmation() {
+    if (document.querySelector(".media-delete-confirm").disabled) return;
     mediaDeleteBackdrop.hidden = true;
     state.activeMediaDelete = null;
 }
@@ -324,7 +327,7 @@ export function updateProfileMediaAfterEdit(type, id) {
     renderProfileViewerAt(type, id);
 }
 
-export function deleteProfileMedia(type, id, { fromHome = false } = {}) {
+export function deleteProfileMedia(type, id, { fromHome = false, feedback } = {}) {
     if (!mayInteract()) return false;
     const entity = findEntity(type, id);
     if (!entity || entity.handle !== currentUser.handle || (fromHome ? state.currentView!=='home' : state.profileHandle !== currentUser.handle))
@@ -335,21 +338,30 @@ export function deleteProfileMedia(type, id, { fromHome = false } = {}) {
     if (entityIndex < 0)
         return false;
     collection.splice(entityIndex, 1);
+    if (state.activeMediaViewerItems) {
+        state.activeMediaViewerItems = state.activeMediaViewerItems.filter(item => item.type !== type || item.entity.id !== id);
+    }
     state.savedItems.delete(getSavedItemKey(type, id));
     const persisted = persistSavedItems();
-    if(fromHome){setView('home');showShareFeedback(persisted?'Your post was deleted.':"Your post was deleted, but saved collection storage couldn't be updated.");return true;}
+    const deleted = fromHome ? 'Your post was deleted' : 'Your media was deleted';
+    const message = feedback || (persisted ? `${deleted}.` : `${deleted}, but saved collection storage couldn't be updated.`);
+    if (fromHome) {
+        setView('home');
+        showShareFeedback(message);
+        return true;
+    }
     renderProfile();
     const nextCollection = getProfileMediaCollection();
     if (!nextCollection.length) {
         state.activeProfileMediaTrigger = null;
         closeProfileMedia();
-        showShareFeedback(persisted ? "Your media was deleted." : "Your media was deleted, but saved collection storage couldn't be updated.");
+        showShareFeedback(message);
         return true;
     }
     const nextItem = nextCollection[Math.min(Math.max(previousIndex, 0), nextCollection.length - 1)];
     state.activeProfileMediaTrigger = document.querySelector(`#profile-view [data-profile-media-type="${nextItem.type}"][data-profile-media-id="${nextItem.entity.id}"]`);
     renderProfileViewerAt(nextItem.type, nextItem.entity.id);
-    showShareFeedback(persisted ? "Your media was deleted." : "Your media was deleted, but saved collection storage couldn't be updated.");
+    showShareFeedback(message);
     return true;
 }
 

@@ -213,25 +213,45 @@ export function registerProfileEditorEvents() {
         catch { showShareFeedback('The post updated in this preview, but local storage could not save the thumbnail.'); return; }
         showShareFeedback(`${type === "reel" ? "Reel" : "Post"} updated.`);
     });
-    document.querySelector(".media-delete-confirm").addEventListener("click", async () => {
-        if (!state.activeMediaDelete)
-            return;
-        const { type, id, origin } = state.activeMediaDelete;
+    const deleteButton = document.querySelector(".media-delete-confirm");
+    const deleteCancel = document.getElementById("media-delete-cancel");
+    deleteButton.addEventListener("click", async () => {
+        const deletion = state.activeMediaDelete;
+        if (!deletion || deleteButton.disabled) return;
+        const { type, id, origin } = deletion;
         const entity = findEntity(type, id);
-        if (entity?.cloudImagePaths && entity.handle === currentUser.handle) {
-            try { await deleteCloudImagePost(entity); }
-            catch { showShareFeedback('Could not delete the saved post. Try again.'); return; }
+        const owner = state.signedInAccountId;
+        const isCloudReel = entity?.reel && entity.cloudContentId && entity.handle === currentUser.handle;
+        let cleanupWarning;
+        deleteButton.disabled = deleteCancel.disabled = true;
+        const label = deleteButton.textContent;
+        deleteButton.textContent = 'Deleting…';
+        try {
+            if (entity?.cloudImagePaths && entity.handle === currentUser.handle) await deleteCloudImagePost(entity);
+            if (isCloudReel && !await deleteCloudReel(entity)) {
+                cleanupWarning = 'Reel removed. The video or thumbnail may still be in storage.';
+            }
+        } catch {
+            if (owner === state.signedInAccountId) showShareFeedback(isCloudReel
+                ? 'Could not delete the Reel. Try again.'
+                : 'Could not delete the saved post. Try again.');
+            return;
+        } finally {
+            deleteButton.disabled = deleteCancel.disabled = false;
+            deleteButton.textContent = label;
         }
-        if (entity?.reel && entity.cloudContentId && entity.handle === currentUser.handle) {
-            try { await deleteCloudReel(entity); }
-            catch { showShareFeedback('Could not delete the Reel. Try again.'); return; }
-        }
+        if (owner !== state.signedInAccountId) return;
         closeMediaDeleteConfirmation();
-        if (!deleteProfileMedia(type, id, {fromHome:origin==='home'})) {
-            showShareFeedback("This media is no longer available to delete.");return;
+        if (!deleteProfileMedia(type, id, { fromHome: origin === 'home', feedback: cleanupWarning })) {
+            showShareFeedback(cleanupWarning || 'This media is no longer available to delete.');
+            return;
         }
-        try {await persistSession();}
-        catch {showShareFeedback('Deleted in this preview, but saving failed. Keep this page open.');}
+        try { await persistSession(); }
+        catch {
+            if (!cleanupWarning && owner === state.signedInAccountId) {
+                showShareFeedback('Deleted in this preview, but saving failed. Keep this page open.');
+            }
+        }
     });
     document.querySelector(".media-edit-close").addEventListener("click", closeMediaEditor);
     document.querySelector(".media-edit-cancel").addEventListener("click", closeMediaEditor);

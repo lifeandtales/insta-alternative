@@ -60,12 +60,20 @@ export async function updateCloudReelCaption(reel, caption) {
 }
 
 export async function deleteCloudReel(reel) {
+    const owner = state.signedInAccountId;
+    if (!owner || owner !== reel.cloudOwnerId) throw new Error('This Reel is unavailable to delete.');
     const client = await getSupabaseClient();
+    if (owner !== state.signedInAccountId) throw new Error('Your account changed. Try again.');
     const { error } = await client.from('media_content').delete()
-        .eq('id', reel.cloudContentId).eq('owner_id', state.signedInAccountId);
+        .eq('id', reel.cloudContentId).eq('owner_id', owner);
     if (error) throw error;
-    if (reel.cloudVideoPaths?.length) {
-        await client.storage.from('app-media').remove(reel.cloudVideoPaths).catch(() => {});
+
+    if (!reel.cloudVideoPaths?.length || owner !== state.signedInAccountId) return false;
+    try {
+        const { error: cleanupError } = await client.storage.from('app-media').remove(reel.cloudVideoPaths);
+        return !cleanupError;
+    } catch {
+        return false;
     }
 }
 

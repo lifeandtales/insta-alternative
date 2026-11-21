@@ -72,3 +72,84 @@ test('a failed Reel video lookup shows a retry action instead of an empty feed',
     assert.match(feed.innerHTML, /Could not load Reels/);
     assert.match(feed.innerHTML, /data-reels-retry/);
 });
+
+test('Reel deletion reports whether the database record or storage cleanup failed', async () => {
+    for (const failure of ['record', 'storage response', 'storage network', null]) {
+        const app = await loadApp();
+        const { state } = app.exportsOf('src/core/state.js');
+        const { currentUser, reels } = app.exportsOf('src/data/sample-data.js');
+        const { openMediaDeleteConfirmation } = app.exportsOf('src/features/profile.js');
+        state.signedInAccountId = 'owner';
+        state.profileHandle = currentUser.handle;
+        state.activeProfileSection = 'reels';
+        const owned = {
+            ...reels[0], id: 942, handle: currentUser.handle, cloudOwnerId: 'owner',
+            cloudContentId: row.id, cloudVideoPaths: ['owner/reel/video', 'owner/reel/cover'],
+        };
+        reels.push(owned);
+        state.activeMediaViewerItems = [{ type: 'reel', entity: owned }];
+        const deleteCalls = [];
+        const createElement = app.document.createElement;
+        app.document.createElement = tag => Object.assign(createElement(tag), { remove() {} });
+        app.document.head = { append: script => script.onload() };
+        app.context.window.supabase = { createClient: () => ({
+            from(table) {
+                assert.equal(table, 'media_content');
+                return { delete() {
+                    deleteCalls.push('record');
+                    return {
+                        eq(column, value) {
+                            if (column === 'id') {
+                                assert.equal(value, row.id);
+                                return this;
+                            }
+                            assert.equal(column, 'owner_id');
+                            assert.equal(value, 'owner');
+                            return Promise.resolve(failure === 'record' ? { error: new Error('Delete rejected') } : {});
+                        },
+                    };
+                }};
+            },
+            storage: { from(bucket) {
+                assert.equal(bucket, 'app-media');
+                return { async remove(paths) {
+                    deleteCalls.push('storage');
+                    assert.deepEqual(paths, owned.cloudVideoPaths);
+                    if (failure === 'storage network') throw new Error('Connection lost');
+                    return failure === 'storage response' ? { error: new Error('Storage unavailable') } : {};
+                }};
+            }},
+        }) };
+        app.context.window.indexedDB = {
+            open() {
+                const request = { result: {
+                    close() {},
+                    transaction() {
+                        const tx = { objectStore: () => ({ put: () => queueMicrotask(() => tx.oncomplete()) }) };
+                        return tx;
+                    },
+                } };
+                queueMicrotask(() => request.onsuccess());
+                return request;
+            },
+        };
+
+        openMediaDeleteConfirmation('reel', owned);
+        const confirm = app.listeners.find(listener => listener.key === '.media-delete-confirm' && listener.type === 'click');
+        await confirm.callback();
+        assert.equal(app.element('.media-delete-confirm').disabled, false);
+        if (failure === 'record') {
+            assert.deepEqual(deleteCalls, ['record']);
+            assert.ok(reels.includes(owned));
+            assert.equal(app.element('.media-delete-backdrop').hidden, false);
+            assert.match(app.element('#share-feedback').textContent, /Could not delete the Reel/);
+        } else {
+            assert.deepEqual(deleteCalls, ['record', 'storage']);
+            assert.ok(!reels.includes(owned));
+            assert.equal(app.element('.media-delete-backdrop').hidden, true);
+            assert.equal(state.activeMediaViewerItems, null);
+            assert.match(app.element('#share-feedback').textContent,
+                failure ? /Reel removed.*may still be in storage/ : /Your media was deleted/);
+        }
+    }
+});
