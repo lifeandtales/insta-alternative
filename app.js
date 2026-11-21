@@ -133,7 +133,9 @@ function renderAccountIdentity() {
 }
 
 async function loadAccountContent() {
-    const local = Promise.allSettled([loadSession(), loadStoryHighlights()]);
+    const local = Promise.allSettled([loadSession()]);
+    // Local Story restoration must not hold up the first network request for posts.
+    void Promise.allSettled([loadStoryHighlights()]);
     const following = Promise.allSettled([loadCloudFollowing()]);
     const [sessionResult] = await local;
     if (demoContentEnabled && sessionResult.status === 'rejected') return;

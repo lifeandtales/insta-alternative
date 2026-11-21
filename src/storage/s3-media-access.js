@@ -17,19 +17,24 @@ export function installS3MediaStorage(client) {
         from(namespace) {
             const legacy = client.storage.from(namespace);
             async function signed(paths, expiresIn) {
-                const data = [];
                 const unique = [...new Set(paths)];
-                for (let start = 0; start < unique.length; start += 50) {
-                    const batch = unique.slice(start, start + 50);
-                    const result = await request({ action: 'read', namespace, paths: batch, expiresIn });
-                    data.push(...result.urls);
-                    if (result.legacy.length) {
-                        const old = await legacy.createSignedUrls(result.legacy, expiresIn);
-                        if (old.error) throw old.error;
-                        data.push(...old.data || []);
+                const results = [];
+                // Bound parallel signing so large feeds do not wait one network round trip per batch.
+                for (let start = 0; start < unique.length; start += 200) {
+                    const group = [];
+                    for (let offset = start; offset < Math.min(start + 200, unique.length); offset += 50) {
+                        const batch = unique.slice(offset, offset + 50);
+                        group.push((async () => {
+                            const result = await request({ action: 'read', namespace, paths: batch, expiresIn });
+                            if (!result.legacy.length) return result.urls;
+                            const old = await legacy.createSignedUrls(result.legacy, expiresIn);
+                            if (old.error) throw old.error;
+                            return [...result.urls, ...old.data || []];
+                        })());
                     }
+                    results.push(...await Promise.all(group));
                 }
-                return { data, error: null };
+                return { data: results.flat(), error: null };
             }
             return {
                 async upload(path, file, options = {}) {

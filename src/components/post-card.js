@@ -1,10 +1,11 @@
+import { observePostPrefetch } from '../media/post-prefetch.js';
 import { initializePostCarousels } from '../media/carousel.js';
 import { renderCaption } from './caption.js';
 import { renderEditedMedia } from '../features/post-media.js';
 import { feed, profilePostViewerContent } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { escapeHtml, formatCount } from '../core/utils.js';
-import { isFollowing, mediaNeedsWarning } from '../core/social.js';
+import { isFollowing, mediaNeedsWarning, canViewMedia } from '../core/social.js';
 import { currentUser } from '../data/sample-data.js';
 import { renderCommentSection } from '../features/comments.js';
 import { observePostVideos } from '../media/video.js';
@@ -98,4 +99,10 @@ export function renderPostCards(items, target = feed) {
   `).join("") : '<p class="feed-empty">You’re all caught up. New posts from people you follow will appear here.</p>';
     initializePostCarousels(target);
     observePostVideos(target);
+    const byId = new Map(items.map(post => [String(post.id), post]));
+    observePostPrefetch(target, card => {
+        const post = byId.get(card.dataset.id);
+        const type = post?.reel ? 'reel' : 'post';
+        return Boolean(post && canViewMedia(post) && (!mediaNeedsWarning(post) || state.revealedMediaKeys.has(`${type}:${post.id}`)));
+    });
 }

@@ -8,6 +8,7 @@ import { reels as reelItems } from '../data/sample-data.js';
 import { findEntity } from '../data/entities.js';
 import { canViewMedia, mediaNeedsWarning } from '../core/social.js';
 import { observeQualifiedVideoView } from './video-views.js';
+import { prepareNextReels } from './reel-prefetch.js';
 
 export function canPlayInlineVideo(video) {
     if (state.deletionRequestedAt || !video || video.closest('.reel-gated')) return false;
@@ -38,6 +39,7 @@ export function observePostVideos(container) {
             video.addEventListener('pause', updatePlaybackControl);
             video.addEventListener('playing', () => {
                 updatePlaybackControl(); lastMediaTime = video.currentTime;
+                if (canPlayInlineVideo(video)) prepareNextReels(video, canPlayInlineVideo);
                 document.querySelectorAll('.reel-card video').forEach(other => { if (other !== video) other.pause(); });
             });
             video.addEventListener('timeupdate', () => {
