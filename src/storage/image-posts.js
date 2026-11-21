@@ -1,3 +1,4 @@
+import { mediaBucket } from './s3-media-access.js';
 import { avatarLookup, rememberCloudPerson } from '../features/cloud-people.js';
 import { remoteMediaId } from './remote-media-id.js';
 import { state } from '../core/state.js';
@@ -25,7 +26,7 @@ async function signedImagePostUrls(client, paths, accountId, retry = false) {
     }
     const missing = paths.filter(path => retry || !signedMedia.has(path));
     if (missing.length) {
-        const { data, error } = await client.storage.from(bucketName).createSignedUrls(missing, 3600);
+        const { data, error } = await mediaBucket(client, bucketName).createSignedUrls(missing, 3600);
         if (error) throw error;
         if (accountId !== state.signedInAccountId) return new Map();
         for (const item of data || []) {
@@ -61,7 +62,7 @@ export async function publishImagePost(post, { retry = false } = {}) {
     const client = await getSupabaseClient();
     post.cloudOwnerId = ownerId;
     post.cloudClientId = post.id;
-    const bucket = client.storage.from(bucketName);
+    const bucket = mediaBucket(client, bucketName);
     if (retry) {
         const result = await client.from(tableName).select('items').eq('owner_id', ownerId).eq('client_id', post.id).maybeSingle();
         if (result.error) throw result.error;
@@ -207,5 +208,5 @@ export async function deleteCloudImagePost(post) {
     const { error } = await client.from(tableName).delete()
         .eq('owner_id', state.signedInAccountId).eq('client_id', post.id);
     if (error) throw error;
-    await client.storage.from(bucketName).remove(post.cloudImagePaths).catch(() => {});
+    await mediaBucket(client, bucketName).remove(post.cloudImagePaths).catch(() => {});
 }

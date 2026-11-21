@@ -1,3 +1,4 @@
+import { mediaBucket } from '../storage/s3-media-access.js';
 import { accountStorageKey } from '../storage/browser-storage.js';
 import { state } from '../core/state.js';
 import { DEFAULT_AVATAR } from '../core/social.js';
@@ -162,7 +163,7 @@ async function signAttachments(client, rows) {
         (!row.attachment_expires_at || Date.parse(row.attachment_expires_at) > now)).map(row => row.object_path))];
     const missing = paths.filter(path => (attachmentCache.get(path)?.until || 0) <= now);
     if (missing.length) {
-        const { data } = await client.storage.from('chat-attachments').createSignedUrls(missing, 300)
+        const { data } = await mediaBucket(client, 'chat-attachments').createSignedUrls(missing, 300)
             .catch(() => ({ data: [] }));
         for (const row of data || []) {
             if (row.signedUrl) attachmentCache.set(row.path, { url: row.signedUrl, until: now + 240000 });
@@ -342,7 +343,7 @@ export async function sendCloudText(chat, text, replyToId) {
 export async function sendCloudMedia(chat, message) {
     const owner = state.signedInAccountId;
     const client = await getSupabaseClient();
-    const bucket = client.storage.from('chat-attachments');
+    const bucket = mediaBucket(client, 'chat-attachments');
     const payload = { conversation_id: chat.cloudId, sender_id: owner, kind: message.type, metadata: {} };
     if (message.media) {
         const response = await fetch(message.media);

@@ -1,3 +1,4 @@
+import { mediaBucket } from './s3-media-access.js';
 import { state } from '../core/state.js';
 import { currentUser, posts } from '../data/sample-data.js';
 import { avatarLookup, rememberCloudPerson } from '../features/cloud-people.js';
@@ -76,7 +77,7 @@ export async function publishCloudStory(story, scheduledAt, importing) {
         if (existing.data) return owner === state.signedInAccountId;
     }
     const prefix = `${owner}/${id}/`;
-    const bucket = client.storage.from('app-media');
+    const bucket = mediaBucket(client, 'app-media');
     const paths = [];
     let mayHavePublished = false;
     try {
@@ -205,7 +206,7 @@ export async function hydrateCloudStories(client, data, owner, previous = new Ma
                 const urls = await signS3Reels(client, missing.map(path => path.split('/')[1]));
                 return urls.map(item => ({ ...item, bucket }));
             }
-            const result = missing.length ? await client.storage.from(bucket).createSignedUrls(missing, 300) : { data: [] };
+            const result = missing.length ? await mediaBucket(client, bucket).createSignedUrls(missing, 300) : { data: [] };
             if (result.error) throw result.error;
             return result.data.map(item => ({ ...item, bucket }));
         })),
@@ -260,8 +261,10 @@ export async function deleteCloudStory(story) {
         .eq('owner_id', state.signedInAccountId).eq('kind', 'story');
     if (error) throw error;
     ++feedRevision;
-    const paths = [story.objectPath, story.audioPath].filter(Boolean);
-    if (paths.length) await client.storage.from('app-media').remove(paths).catch(() => {});
+    // A shared Story points at the original media. Remove only this Story's own assets.
+    const prefix = `${state.signedInAccountId}/${story.cloudContentId}/`;
+    const paths = [story.objectPath, story.audioPath].filter(path => path?.startsWith(prefix));
+    if (paths.length) await mediaBucket(client, 'app-media').remove(paths).catch(() => {});
 }
 
 export async function loadCloudStoryAudience() {

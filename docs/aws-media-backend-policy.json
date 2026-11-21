@@ -1,0 +1,28 @@
+{
+  "Id": "IamPolicyAutopilot",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:DeleteObject",
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::reeldatatatata/incoming/*",
+        "arn:aws:s3:::reeldatatatata/reels/*",
+        "arn:aws:s3:::lifeandtales-post-photos-156275915028-ap-southeast-2-an/incoming/*",
+        "arn:aws:s3:::lifeandtales-post-photos-156275915028-ap-southeast-2-an/media/*",
+        "arn:aws:s3:::lifeandtales-post-videos-156275915028-ap-southeast-2-an/incoming/*",
+        "arn:aws:s3:::lifeandtales-post-videos-156275915028-ap-southeast-2-an/media/*",
+        "arn:aws:s3:::lifeandtales-stories-156275915028-ap-southeast-2-an/incoming/*",
+        "arn:aws:s3:::lifeandtales-stories-156275915028-ap-southeast-2-an/media/*",
+        "arn:aws:s3:::lifeandtales-profile-photos-156275915028-ap-southeast-2-an/incoming/*",
+        "arn:aws:s3:::lifeandtales-profile-photos-156275915028-ap-southeast-2-an/media/*",
+        "arn:aws:s3:::lifeandtales-messages-156275915028-ap-southeast-2-an/incoming/*",
+        "arn:aws:s3:::lifeandtales-messages-156275915028-ap-southeast-2-an/media/*"
+      ]
+    }
+  ]
+}

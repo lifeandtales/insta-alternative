@@ -1,3 +1,4 @@
+import { mediaBucket } from './s3-media-access.js';
 import { getSupabaseClient } from './supabase.js';
 
 const signedAvatars = new Map();
@@ -7,7 +8,7 @@ export async function cloudAvatarUrls(client, paths) {
     const now = Date.now();
     const missing = unique.filter(path => (signedAvatars.get(path)?.expires || 0) <= now);
     if (missing.length) {
-        const { data } = await client.storage.from('avatars').createSignedUrls(missing, 300);
+        const { data } = await mediaBucket(client, 'avatars').createSignedUrls(missing, 300);
         for (const item of data || []) {
             if (item.signedUrl) signedAvatars.set(item.path, { url: item.signedUrl, expires: now + 240000 });
         }
@@ -20,7 +21,7 @@ export async function cloudAvatarUrls(client, paths) {
 
 export async function saveCloudAvatar(ownerId, image) {
     const client = await getSupabaseClient();
-    const bucket = client.storage.from('avatars');
+    const bucket = mediaBucket(client, 'avatars');
     const { data: profile, error: lookupError } = await client.from('profiles').select('avatar_path')
         .eq('id', ownerId).single();
     if (lookupError) throw lookupError;

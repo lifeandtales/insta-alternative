@@ -1,3 +1,5 @@
+import { installS3MediaStorage } from './s3-media-access.js';
+
 // Supabase's public anon key is safe to ship with the browser client.
 // Access to account and chat data is enforced by database policies.
 export const supabaseProjectUrl = 'https://nbmxfsadqflsjlibxqor.supabase.co';
@@ -48,9 +50,9 @@ export function getSupabaseClient() {
         script.src = sdkUrl;
         script.onload = () => {
             try {
-                resolve(window.supabase.createClient(supabaseProjectUrl, anonKey, {
+                resolve(installS3MediaStorage(window.supabase.createClient(supabaseProjectUrl, anonKey, {
                     auth: { storageKey, storage: authStorage },
-                }));
+                })));
             } catch (error) {
                 reject(error);
             } finally {

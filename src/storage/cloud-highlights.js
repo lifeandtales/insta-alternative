@@ -1,3 +1,4 @@
+import { mediaBucket } from './s3-media-access.js';
 import { state } from '../core/state.js';
 import { hydrateCloudStories } from './cloud-stories.js';
 import { getSupabaseClient } from './supabase.js';
@@ -11,7 +12,7 @@ export async function loadCloudHighlights(profileOwner, handle) {
     const paths = data.map(highlight => highlight.cover_path).filter(Boolean);
     const [stories, covers] = await Promise.all([
         hydrateCloudStories(client, storyRows, owner),
-        paths.length ? client.storage.from('app-media').createSignedUrls(paths, 300) : { data: [] },
+        paths.length ? mediaBucket(client, 'app-media').createSignedUrls(paths, 300) : { data: [] },
     ]);
     if (owner !== state.signedInAccountId) return;
     const storyById = new Map(stories.map(story => [story.id, story]));
@@ -43,7 +44,7 @@ export async function saveCloudHighlight(highlight, coverFile) {
         throw new Error('Choose Stories that have synced to your account.');
     }
     const client = await getSupabaseClient();
-    const bucket = client.storage.from('app-media');
+    const bucket = mediaBucket(client, 'app-media');
     const id = highlight.cloudHighlightId || crypto.randomUUID();
     const oldCover = highlight.coverPath || null;
     let coverPath = oldCover;
@@ -84,7 +85,7 @@ export async function deleteCloudHighlight(highlight) {
     const { error } = await client.from('story_highlights').delete().eq('id', highlight.cloudHighlightId)
         .eq('owner_id', state.signedInAccountId);
     if (error) throw error;
-    if (highlight.coverPath) await client.storage.from('app-media').remove([highlight.coverPath]).catch(() => {});
+    if (highlight.coverPath) await mediaBucket(client, 'app-media').remove([highlight.coverPath]).catch(() => {});
 }
 
 export async function reorderCloudHighlights(highlights) {

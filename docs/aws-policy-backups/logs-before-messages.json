@@ -1,0 +1,42 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyInsecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::lifeandtales-storage-logs-156275915028-ap-southeast-2-an",
+        "arn:aws:s3:::lifeandtales-storage-logs-156275915028-ap-southeast-2-an/*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
+        }
+      }
+    },
+    {
+      "Sid": "ReceiveAppBucketAccessLogs",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "logging.s3.amazonaws.com"
+      },
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::lifeandtales-storage-logs-156275915028-ap-southeast-2-an/s3-access/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceAccount": "156275915028"
+        },
+        "ArnLike": {
+          "aws:SourceArn": [
+            "arn:aws:s3:::lifeandtales-post-photos-156275915028-ap-southeast-2-an",
+            "arn:aws:s3:::lifeandtales-post-videos-156275915028-ap-southeast-2-an",
+            "arn:aws:s3:::lifeandtales-stories-156275915028-ap-southeast-2-an",
+            "arn:aws:s3:::lifeandtales-profile-photos-156275915028-ap-southeast-2-an"
+          ]
+        }
+      }
+    }
+  ]
+}
