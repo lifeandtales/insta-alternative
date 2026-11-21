@@ -4,6 +4,7 @@ import { avatarLookup, rememberCloudPerson } from '../features/cloud-people.js';
 import { storyComposition } from '../features/story-composition.js';
 import { persistActiveStories } from './browser-storage.js';
 import { getSupabaseClient } from './supabase.js';
+import { isS3ReelAsset, signS3Reels } from './s3-reel-access.js';
 
 const maxStoryBytes = 50000000;
 let feedRevision = 0;
@@ -181,7 +182,12 @@ export async function hydrateCloudStories(client, data, owner, previous = new Ma
     }
     const now = Date.now();
     const assets = new Map();
-    const track = (bucket, path) => { if (path) assets.set(bucket + ':' + path, { bucket, path }); };
+    const assetBucket = (bucket, path) => path && isS3ReelAsset(path) ? 'reel-s3' : bucket;
+    const track = (bucket, path) => {
+        if (!path) return;
+        const source = assetBucket(bucket, path);
+        assets.set(source + ':' + path, { bucket: source, path });
+    };
     for (const row of data) {
         if (Date.parse(row.publish_at) > now) continue;
         track(row.media_bucket || 'app-media', row.object_path);
@@ -192,9 +198,13 @@ export async function hydrateCloudStories(client, data, owner, previous = new Ma
         if (entry.expiresAt <= now) signedMedia.delete(key);
     }
     const [signed, avatars] = await Promise.all([
-        Promise.all(['app-media', 'post-images'].map(async bucket => {
+        Promise.all(['app-media', 'post-images', 'reel-s3'].map(async bucket => {
             const missing = [...assets].filter(([key, item]) => item.bucket === bucket && !signedMedia.has(key))
                 .map(([,item]) => item.path);
+            if (bucket === 'reel-s3') {
+                const urls = await signS3Reels(client, missing.map(path => path.split('/')[1]));
+                return urls.map(item => ({ ...item, bucket }));
+            }
             const result = missing.length ? await client.storage.from(bucket).createSignedUrls(missing, 300) : { data: [] };
             if (result.error) throw result.error;
             return result.data.map(item => ({ ...item, bucket }));
@@ -206,7 +216,7 @@ export async function hydrateCloudStories(client, data, owner, previous = new Ma
         if (item.signedUrl) signedMedia.set(item.bucket + ':' + item.path, { url: item.signedUrl, expiresAt: now + 240000 });
     }
     return data.flatMap(row => {
-        const assetUrl = (bucket, path) => signedMedia.get(bucket + ':' + path)?.url;
+        const assetUrl = (bucket, path) => signedMedia.get(assetBucket(bucket, path) + ':' + path)?.url;
         const media = assetUrl(row.media_bucket || 'app-media', row.object_path);
         if (!media) return [];
         const author = rememberCloudPerson({ ...row, id: row.owner_id }, avatars);

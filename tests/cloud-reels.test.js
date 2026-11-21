@@ -153,3 +153,33 @@ test('Reel deletion reports whether the database record or storage cleanup faile
         }
     }
 });
+
+test('Reels fetch media from the storage provider recorded for each upload', async () => {
+    const app = await loadApp();
+    const { state } = app.exportsOf('src/core/state.js');
+    const { hydrateCloudReels } = app.exportsOf('src/storage/cloud-reels.js');
+    state.signedInAccountId = 'viewer';
+    const newId = 'a7f0b53a-5b92-4cc1-95ac-ed7ff8eb321a';
+    const newer = { ...row, id: newId, assets: row.assets.map(asset => ({
+        ...asset, object_path: `creator/${newId}/s3/upload/${asset.object_path.split('/').at(-1)}`,
+    })) };
+    const client = {
+        rpc: async () => ({ data: { reels: [] } }),
+        functions: { invoke: async (name, { body }) => {
+            assert.equal(name, 'reel-storage');
+            assert.equal(body.action, 'read');
+            assert.deepEqual(Array.from(body.ids), [newId]);
+            return { data: { urls: newer.assets.map(({ object_path: path }) => ({ path, signedUrl: 'https://s3.example.test/' + path })) } };
+        } },
+        storage: { from: bucket => ({
+            async createSignedUrls(paths) {
+                if (bucket === 'app-media') assert.deepEqual(Array.from(paths), row.assets.map(asset => asset.object_path));
+                return { data: paths.map(path => ({ path, signedUrl: 'https://supabase.example.test/' + path })) };
+            },
+        }) },
+    };
+    const [oldReel, newReel] = await hydrateCloudReels(client, [row, newer], 'viewer');
+    assert.match(oldReel.video, /^https:\/\/supabase\.example\.test\//);
+    assert.match(newReel.video, /^https:\/\/s3\.example\.test\//);
+    assert.match(newReel.cover, /^https:\/\/s3\.example\.test\//);
+});

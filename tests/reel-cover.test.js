@@ -31,20 +31,30 @@ test('Reel cover appears only after Next, requires confirmation, and keeps its s
 });
 
 
-function mockReelCloud(app, rpc) {
+function mockReelCloud(app, rpc, publish) {
     const uploads = [];
     const stored = [];
     const createElement = app.document.createElement;
     app.document.createElement = tag => Object.assign(createElement(tag), { remove() {} });
     app.document.head = { append: script => script.onload() };
     app.context.crypto = { randomUUID: () => 'e2540ba5-4595-44a1-bd16-0ca6fe7cdf75' };
-    app.context.fetch = fetch;
+    app.context.FormData = FormData;
+    app.context.fetch = async (url, options) => {
+        if (!url.startsWith('https://s3.example.test/')) return fetch(url, options);
+        uploads.push({ url, type: options.body.get('file').type });
+        return { ok: true };
+    };
     app.context.window.supabase = { createClient: () => ({
         rpc,
-        storage: { from: () => ({
-            upload: async (path, blob) => { uploads.push({ path, type: blob.type }); return {}; },
-            remove: async () => ({}),
-        }) },
+        functions: { invoke: async (name, { body }) => {
+            assert.equal(name, 'reel-storage');
+            if (body.action === 'prepare') return { data: {
+                ticket: 'upload-ticket',
+                uploads: ['video', 'cover'].map(role => ({ role, url: 'https://s3.example.test/' + role, fields: {} })),
+            } };
+            assert.equal(body.action, 'publish');
+            return publish(body);
+        } },
     }) };
     app.context.window.indexedDB = {
         open(name) {
@@ -77,10 +87,12 @@ test('Reel publishing retains the editor on missing backend and shares the selec
     let ready = false;
     let confirmPublish;
     const { uploads } = mockReelCloud(app, async (name, payload) => {
-        if (name === 'video_engagement') return ready ? {} : { error: { code: 'PGRST202' } };
-        assert.equal(name, 'publish_video_reel');
-        assert.equal(payload.video_mime, 'video/mp4');
-        assert.equal(payload.cover_mime, 'image/jpeg');
+        assert.equal(name, 'video_engagement');
+        return ready ? {} : { error: { code: 'PGRST202' } };
+    }, async payload => {
+        assert.equal(payload.ticket, 'upload-ticket');
+        assert.equal(payload.media.video.mime, 'video/mp4');
+        assert.equal(payload.media.cover.mime, 'image/jpeg');
         return new Promise(resolve => { confirmPublish = resolve; });
     });
     create.openCreateUpload('reel');
@@ -105,7 +117,7 @@ test('Reel publishing retains the editor on missing backend and shares the selec
     assert.match(app.element('.create-publish-button').textContent, /Uploading Reel/);
     assert.equal(reels.length, previousCount);
     assert.deepEqual(uploads.map(upload => upload.type), ['video/mp4', 'image/jpeg']);
-    confirmPublish({});
+    confirmPublish({ data: { paths: ['owner/reel/s3/version/video', 'owner/reel/s3/version/cover'] } });
     await publishing;
     assert.equal(reels[0].cloudOwnerId, 'owner');
     assert.equal(reels[0].cover, cover);
@@ -120,10 +132,10 @@ test('stored Reels remain retryable, keep their cloud ID and publish only for th
     const { reels, currentUser } = app.exportsOf('src/data/sample-data.js');
     const { getStoredReels, publishStoredReels } = app.exportsOf('src/features/create.js');
     const targets = [];
-    const { stored } = mockReelCloud(app, async (name, payload) => {
-        if (name === 'video_engagement') return {};
+    const { stored } = mockReelCloud(app, async () => ({}), async payload => {
         targets.push(payload);
-        return targets.length === 1 ? { error: { message: 'Request interrupted' } } : {};
+        return targets.length === 1 ? { error: { message: 'Request interrupted' } }
+            : { data: { paths: ['owner/reel/s3/version/video', 'owner/reel/s3/version/cover'] } };
     });
     state.signedInAccountId = 'owner';
     currentUser.isPrivate = true;
@@ -138,13 +150,13 @@ test('stored Reels remain retryable, keep their cloud ID and publish only for th
     assert.equal(interrupted.failed, 1);
     assert.ok(!reel.cloudOwnerId);
     assert.equal(stored[0].name, 'insta-browser-data:owner');
-    assert.equal(stored[0].value.reels.find(item => item.id === 201).pendingCloudId, targets[0].target);
+    assert.equal(stored[0].value.reels.find(item => item.id === 201).pendingCloudId, targets[0].id);
 
     const retry = await publishStoredReels();
     assert.equal(retry.published, 1);
     assert.equal(reel.cloudOwnerId, 'owner');
-    assert.equal(targets[1].target, targets[0].target);
-    assert.equal(targets[1].reel_audience, 'followers');
+    assert.equal(targets[1].id, targets[0].id);
+    assert.equal(targets[1].audience, 'followers');
     assert.equal(getStoredReels().length, 0);
 });
 

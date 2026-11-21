@@ -6,50 +6,53 @@ import { remoteMediaId } from './remote-media-id.js';
 import { mediaEdits } from '../features/post-media.js';
 import { cloudMediaCommentCounts } from './cloud-comments.js';
 import { loadVideoEngagement } from './video-engagement.js';
+import { isS3ReelAsset, requestReelStorage, signS3Reels } from './s3-reel-access.js';
 
 export const cloudReelProjection = 'id,owner_id,caption,audience,publish_at,metadata,author:profiles!media_content_owner_id_fkey!inner(username,display_name,avatar_path,is_private),assets:media_assets(object_path,mime_type,position),' + cloudMediaCommentCounts;
+
+async function readReelFile(url, kind, limit) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Could not read the selected media.');
+    const blob = await response.blob();
+    if (!blob.type.startsWith(kind + '/') || !blob.size) throw new Error('Select supported media.');
+    if (blob.size > limit) throw new Error(kind === 'video'
+        ? 'This Reel exceeds the 50 MB upload limit.' : 'This thumbnail exceeds the 10 MB upload limit.');
+    return blob;
+}
 
 export async function publishCloudReel(reel, id) {
     const owner = state.signedInAccountId;
     if (!owner) throw new Error('Sign in to publish your Reel online.');
     const client = await getSupabaseClient();
+    const [video, cover] = await Promise.all([
+        readReelFile(reel.video, 'video', 50_000_000),
+        readReelFile(reel.cover, 'image', 10_000_000),
+    ]);
     if (owner !== state.signedInAccountId) throw new Error('Your account changed. Try again.');
-    const bucket = client.storage.from('app-media');
-    const prefix = `${owner}/${id}/`;
-    const paths = [];
-    let uncertain = false;
-    try {
-        const upload = async (name, url, kind) => {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error('Could not read the selected media.');
-            const blob = await response.blob();
-            if (!blob.type.startsWith(kind + '/')) throw new Error('Select supported media.');
-            if (kind === 'video' && blob.size > 50_000_000) throw new Error('This Reel exceeds the 50 MB upload limit.');
-            const path = prefix + name;
-            const { error } = await bucket.upload(path, blob, { contentType: blob.type });
-            if (error && String(error.statusCode || error.status) !== '409') throw error;
-            if (!error) paths.push(path);
-            return blob.type;
-        };
-        const videoMime = await upload('video', reel.video, 'video');
-        const coverMime = await upload('cover', reel.cover, 'image');
+    const files = { video, cover };
+    const media = { video: { size: video.size, mime: video.type }, cover: { size: cover.size, mime: cover.type } };
+    const prepared = await requestReelStorage(client, { action: 'prepare', id, media });
+    let paths = prepared.paths;
+    if (!paths) {
+        for (const upload of prepared.uploads) {
+            if (owner !== state.signedInAccountId) throw new Error('Your account changed. Try again.');
+            const form = new FormData();
+            for (const [name, value] of Object.entries(upload.fields)) form.append(name, value);
+            form.append('file', files[upload.role]);
+            const response = await fetch(upload.url, { method: 'POST', body: form });
+            if (!response.ok) throw new Error('Could not upload the Reel to storage. Try again.');
+        }
         if (owner !== state.signedInAccountId) throw new Error('Your account changed. Try again.');
         const item = reel.mediaItems[0];
-        const { error } = await client.rpc('publish_video_reel', {
-            target: id, caption_text: reel.caption, reel_audience: reel.public ? 'public' : 'followers',
+        ({ paths } = await requestReelStorage(client, {
+            action: 'publish', id, ticket: prepared.ticket, media, caption: reel.caption || '',
+            audience: reel.public ? 'public' : 'followers',
             details: { client_id: reel.id, tags: reel.taggedUsers,
                 edits: mediaEdits(item), naturalRatio: item.naturalRatio, x: item.x, y: item.y, fit: item.fit },
-            video_mime: videoMime, cover_mime: coverMime, duration_seconds: item.duration ?? null,
-        });
-        if (error) {
-            uncertain = !error.code || error.code.startsWith('PGRST0');
-            throw error;
-        }
-    } catch (error) {
-        if (!uncertain && paths.length && owner === state.signedInAccountId) await bucket.remove(paths).catch(() => {});
-        throw error;
+            duration: item.duration ?? null,
+        }));
     }
-    Object.assign(reel, { cloudContentId: id, cloudOwnerId: owner, cloudVideoPaths: [prefix + 'video', prefix + 'cover'] });
+    Object.assign(reel, { cloudContentId: id, cloudOwnerId: owner, cloudVideoPaths: paths });
 }
 
 export async function updateCloudReelCaption(reel, caption) {
@@ -64,6 +67,10 @@ export async function deleteCloudReel(reel) {
     if (!owner || owner !== reel.cloudOwnerId) throw new Error('This Reel is unavailable to delete.');
     const client = await getSupabaseClient();
     if (owner !== state.signedInAccountId) throw new Error('Your account changed. Try again.');
+    if (reel.cloudVideoPaths?.some(isS3ReelAsset)) {
+        const { filesRemoved } = await requestReelStorage(client, { action: 'delete', id: reel.cloudContentId });
+        return filesRemoved;
+    }
     const { error } = await client.from('media_content').delete()
         .eq('id', reel.cloudContentId).eq('owner_id', owner);
     if (error) throw error;
@@ -99,15 +106,18 @@ export async function loadCloudReels(targetId = null) {
 
 export async function hydrateCloudReels(client, data, accountId) {
     const videos = data.map(row => ({ row, video: row.assets.find(asset => asset.mime_type?.startsWith('video/')) })).filter(item => item.video);
-    const paths = videos.flatMap(item => item.row.assets.map(asset => asset.object_path));
-    const [signed, engagement, avatars] = await Promise.all([
-        paths.length ? client.storage.from('app-media').createSignedUrls(paths, 3600) : { data: [] },
+    const paths = videos.flatMap(item => item.row.assets.map(asset => asset.object_path)).filter(path => !isS3ReelAsset(path));
+    const s3Ids = videos.filter(({ row }) => row.assets.some(asset => isS3ReelAsset(asset.object_path))).map(({ row }) => row.id);
+    const legacyUrls = async () => paths.length
+        ? (await client.storage.from('app-media').createSignedUrls(paths, 3600)).data || [] : [];
+    const [legacy, s3, engagement, avatars] = await Promise.all([
+        legacyUrls().catch(() => []),
+        signS3Reels(client, s3Ids),
         loadVideoEngagement(client, { reels: videos.map(({ row }) => row.id) }).catch(() => null),
         avatarLookup(client, videos.map(({ row }) => row.author)).catch(() => undefined),
     ]);
-    if (signed.error) throw signed.error;
     if (state.signedInAccountId !== accountId) return [];
-    const urls = new Map((signed.data || []).map(item => [item.path, item.signedUrl]));
+    const urls = new Map([...legacy, ...s3].map(item => [item.path, item.signedUrl]));
     if (videos.length && !videos.some(({ video }) => urls.get(video.object_path))) {
         throw new Error('The Reel videos could not be loaded.');
     }
