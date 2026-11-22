@@ -181,6 +181,33 @@
 .reel-gated .reel-play-state, .reel-gated .video-sound-toggle { display: none; }
 .reel-play-state:focus-visible { opacity: 1; }
 
+.reel-loading, .reel-video-error {
+  position: absolute;
+  z-index: 2;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  max-width: min(300px, 85%);
+  border-radius: 16px;
+  padding: 14px 18px;
+  color: #fff;
+  background: rgba(18, 15, 24, .9);
+  text-align: center;
+}
+.reel-loading { display: flex; align-items: center; gap: 10px; pointer-events: none; white-space: nowrap; }
+.reel-loading span {
+  width: 20px; height: 20px; flex: 0 0 20px;
+  border: 2px solid rgba(255, 255, 255, .3); border-top-color: #fff;
+  border-radius: 50%; animation: reel-loading-spin .8s linear infinite;
+}
+.reel-video-error p { margin: 0 0 12px; line-height: 1.5; }
+.reel-video-error button { min-height: 44px; border: 0; border-radius: 12px; padding: 10px 18px; background: #fff; color: #21142e; font: inherit; font-weight: 700; }
+.reel-video-error button + button { margin-top: 8px; }
+.reel-loading[hidden], .reel-video-error[hidden],
+.reel-gated .reel-loading, .reel-gated .reel-video-error { display: none; }
+.reel-card:is([data-playback="loading"], [data-playback="error"]) .reel-play-state { opacity: 0; visibility: hidden; pointer-events: none; }
+@keyframes reel-loading-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .reel-loading span { animation: none; } }
+
 .reel-caption {
   position: absolute;
   right: 0;

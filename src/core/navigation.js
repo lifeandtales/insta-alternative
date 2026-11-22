@@ -23,6 +23,7 @@ import { renderStories } from '../features/stories.js';
 import { syncDeletionLock } from './account-lock.js';
 import { findEntity } from '../data/entities.js';
 import { canViewMedia } from './social.js';
+import { suspendReelPlayback } from '../media/video.js';
 
 const currentAppHistory = () => window.history.state && typeof window.history.state === 'object'
     ? window.history.state : {};
@@ -111,6 +112,7 @@ export function setView(view, { fromHistory = false, refresh = true } = {}) {
         else if (!currentAppHistory().instaApp) writeAppHistory(view, state.activeConversationHandle, true);
     }
     if (previousView !== view) {
+        if (previousView === 'reels') suspendReelPlayback();
         document.querySelectorAll('video').forEach(video => video.pause());
         if (state.pendingVideoTap) { clearTimeout(state.pendingVideoTap.timer); state.pendingVideoTap = null; }
         if (view !== 'messages') {

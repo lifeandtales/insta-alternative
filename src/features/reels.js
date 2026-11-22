@@ -7,7 +7,7 @@ import { escapeHtml, formatCount } from '../core/utils.js';
 import { state } from '../core/state.js';
 import { reels } from '../data/sample-data.js';
 import { accountIsPublic, canViewMedia, getAccount } from '../core/social.js';
-import { observePostVideos } from '../media/video.js';
+import { observePostVideos, releaseReelPlayback } from '../media/video.js';
 
 function preferenceKey(reel) {
   return accountStorageKey('insta-reel-interest:' + (reel.cloudContentId || reel.id));
@@ -63,6 +63,7 @@ function warningNeeded(reel) {
 }
 
 export function renderReelsStatus(status) {
+  releaseReelPlayback();
   const message = status === 'loading' ? 'Loading Reels…' : status === 'error'
     ? 'Could not load Reels.' : 'No Reels to show yet.';
   document.getElementById('reels-feed').innerHTML = `<div class="reels-status"><p role="status">${message}</p>
@@ -70,6 +71,7 @@ export function renderReelsStatus(status) {
 }
 
 export function renderReels({ status = 'ready' } = {}) {
+  releaseReelPlayback();
   const feed = document.getElementById('reels-feed');
   const recommended = rankRecommendedReels();
   const personal = reels.filter(reel => !publicReel(reel) && authorizedReel(reel) && canViewMedia(reel))
@@ -91,6 +93,8 @@ export function renderReels({ status = 'ready' } = {}) {
         <video class="reel-video" tabindex="0" playsinline preload="none" loop poster="${escapeHtml(reel.poster)}" ${muted ? 'muted' : ''} ${reel.originalAudioMuted ? 'data-original-audio-muted="true"' : ''}>
           <source src="${escapeHtml(reel.video)}" />Your browser does not support video playback.
         </video>
+        <div class="reel-loading" data-reel-loading role="status" hidden><span aria-hidden="true"></span>Loading video…</div>
+        <div class="reel-video-error" data-reel-error hidden><p role="status">Video could not load. Check your connection and try again.</p><button type="button" data-reel-video-retry>Try again</button><button type="button" data-reels-retry>Refresh Reels</button></div>
         ${gated ? `<div class="reel-content-warning"><strong>Sensitive content</strong><p>${blockedForMinor ? 'This content is not available for under-18 accounts.' : 'This Reel may contain sensitive content.'}</p>${blockedForMinor ? '' : `<button type="button" data-reel-reveal="${reel.id}">View content</button>`}</div>` : ''}
         <button class="reel-play-state" type="button" data-reel-play aria-label="Pause reel">Ⅱ</button>
         <span class="double-like-heart" aria-hidden="true">♥</span>

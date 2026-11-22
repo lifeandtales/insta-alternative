@@ -7,6 +7,7 @@ import {
     startVideoHold,
     updateSoundButton,
     canPlayInlineVideo,
+    refreshReelPlayback,
 } from './video.js';
 import { state } from '../core/state.js';
 import { findEntity } from '../data/entities.js';
@@ -43,7 +44,7 @@ export function handleVideoClick(event) {
         const card = reveal.closest('.reel-card');
         card.classList.remove('reel-gated');
         card.querySelector('.reel-content-warning')?.remove();
-        card.querySelector('video')?.play().catch(() => {});
+        refreshReelPlayback();
         return true;
     }
     const playButton = event.target.closest('[data-reel-play]');

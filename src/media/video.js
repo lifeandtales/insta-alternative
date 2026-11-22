@@ -8,7 +8,22 @@ import { reels as reelItems } from '../data/sample-data.js';
 import { findEntity } from '../data/entities.js';
 import { canViewMedia, mediaNeedsWarning } from '../core/social.js';
 import { observeQualifiedVideoView } from './video-views.js';
-import { prepareNextReels } from './reel-prefetch.js';
+import { createReelPlayback } from './reel-playback.js';
+
+let reelPlayback = null;
+
+export function suspendReelPlayback() {
+    reelPlayback?.suspend();
+}
+
+export function refreshReelPlayback() {
+    reelPlayback?.refresh();
+}
+
+export function releaseReelPlayback() {
+    reelPlayback?.destroy();
+    reelPlayback = null;
+}
 
 export function canPlayInlineVideo(video) {
     if (state.deletionRequestedAt || !video || video.closest('.reel-gated')) return false;
@@ -20,6 +35,15 @@ export function canPlayInlineVideo(video) {
 }
 
 export function observePostVideos(container) {
+    if (container.querySelectorAll('.reel-card video').length) {
+        releaseReelPlayback();
+        reelPlayback = createReelPlayback(container,
+            video => state.currentView === 'reels' && canPlayInlineVideo(video),
+            video => {
+                const sound = video.closest('.reel-card').querySelector('[data-video-sound]');
+                if (sound) updateSoundButton(sound, true, 'video');
+            });
+    }
     container.querySelectorAll(".likeable-media video").forEach((video) => {
         observeQualifiedVideoView(video, canPlayInlineVideo);
         if (video.dataset.originalAudioMuted === 'true' && !video.dataset.originalMuteBound) {
@@ -39,8 +63,6 @@ export function observePostVideos(container) {
             video.addEventListener('pause', updatePlaybackControl);
             video.addEventListener('playing', () => {
                 updatePlaybackControl(); lastMediaTime = video.currentTime;
-                if (canPlayInlineVideo(video)) prepareNextReels(video, canPlayInlineVideo);
-                document.querySelectorAll('.reel-card video').forEach(other => { if (other !== video) other.pause(); });
             });
             video.addEventListener('timeupdate', () => {
                 const elapsed = video.currentTime - lastMediaTime; lastMediaTime = video.currentTime;
@@ -51,7 +73,7 @@ export function observePostVideos(container) {
                 }
             });
         }
-        postVideoObserver?.observe(video);
+        if (!card) postVideoObserver?.observe(video);
     });
 }
 
@@ -178,6 +200,7 @@ export function handleVideoTap(video) {
 
 export function toggleInlinePlayback(video) {
     if (!canPlayInlineVideo(video)) return;
+    if (video.closest('.reel-card') && reelPlayback?.toggle(video)) return;
     if (video.paused) video.play().catch(() => showShareFeedback('Tap the play button to start this Reel on your device.'));
     else video.pause();
 }
@@ -224,6 +247,8 @@ export function initializeVideoObserver() {
         ? new IntersectionObserver((entries) => {
             entries.forEach((entry) => {
                 const video = entry.target;
+                if (video.closest('.reel-card')) return;
+                if (document.hidden) { video.pause(); return; }
                 if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
                     if (!canPlayInlineVideo(video)) { video.pause(); return; }
                     if (!video.closest('.reel-card')) video.muted = true;

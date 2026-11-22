@@ -1,6 +1,11 @@
 let prepared = new Set();
 const requested = new WeakSet();
 
+export function resetReelPrefetch() {
+    for (const video of prepared) video.preload = 'none';
+    prepared.clear();
+}
+
 // Warm the next five cards without playing them or recording views.
 export function prepareNextReels(current, canPlay, environment = globalThis) {
     const connection = environment.navigator?.connection;
