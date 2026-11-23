@@ -168,3 +168,24 @@ test('destroy cancels loading and guards a pending play promise from a replaced 
     await flush();
     assert.equal(video.paused, true);
 });
+
+test('appending another page preserves the current player, pause choice and pending work', async () => {
+    const f = fixture(2);
+    f.visible(1);
+    await flush();
+    f.controller.toggle(f.videos[0]);
+    const more = fixture(1);
+    more.controller.destroy();
+    const video = more.videos[0];
+    f.cards[1].nextElementSibling = more.cards[0];
+    f.controller.add([video]);
+    assert.equal(f.videos[0].paused, true);
+    assert.equal(f.videos[0].plays, 1);
+    assert.equal(video.plays, 0);
+    f.visible(1);
+    assert.equal(f.videos[0].plays, 1);
+    f.controller.toggle(f.videos[0]);
+    await flush();
+    assert.equal(f.videos[0].paused, false);
+    f.controller.destroy();
+});

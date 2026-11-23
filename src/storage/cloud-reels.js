@@ -84,23 +84,78 @@ export async function deleteCloudReel(reel) {
     }
 }
 
-export async function loadCloudReels(targetId = null) {
+const REEL_PAGE_SIZE = 50;
+const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+
+function reelCursor(rows) {
+    const last = rows[rows.length - 1];
+    if (!last || !uuid.test(last.id) || !/^[0-9TtZz:.+ -]+$/.test(last.publish_at)
+        || !Number.isFinite(Date.parse(last.publish_at))) return null;
+    return { time: last.publish_at, id: last.id };
+}
+
+async function readReelPage(client, { targetId, excluded, cutoff, cursor }) {
+    let query = client.from('media_content').select(cloudReelProjection)
+        .eq('kind', 'reel').lte('publish_at', cutoff);
+    if (targetId) query = query.eq('owner_id', targetId);
+    if (!targetId && excluded.length) query = query.not('id', 'in', `(${excluded.join(',')})`);
+    if (cursor) query = query.or(`publish_at.lt.${cursor.time},and(publish_at.eq.${cursor.time},id.lt.${cursor.id})`);
+    const { data, error } = await query.order('publish_at', { ascending: false })
+        .order('id', { ascending: false }).limit(REEL_PAGE_SIZE);
+    if (error) throw error;
+    return data;
+}
+
+export async function loadCloudReels(targetId = null, { excludeIds = [], include = () => true } = {}) {
     const accountId = state.signedInAccountId;
     if (!accountId) return;
     const client = await getSupabaseClient();
-    const query = client.from('media_content')
-        .select(cloudReelProjection)
-        .eq('kind', 'reel').lte('publish_at', new Date().toISOString());
-    const { data, error } = await (targetId ? query.eq('owner_id', targetId) : query)
-        .order('publish_at', { ascending: false }).limit(50);
-    if (error) throw error;
-    const fresh = await hydrateCloudReels(client, data, accountId);
+    // IDs are admitted UUIDs before entering PostgREST's raw `in` syntax.
+    const excluded = [...new Set(excludeIds)].filter(id => uuid.test(id));
+    const cutoff = new Date().toISOString();
+    const data = await readReelPage(client, { targetId, excluded, cutoff });
+    const fresh = (await hydrateCloudReels(client, data, accountId)).filter(include);
     if (state.signedInAccountId !== accountId) return;
+    if (excluded.length && !fresh.length) return { changed: false };
     const publishedIds = new Set(fresh.map(reel => reel.cloudContentId));
+    const selection = state.reelFeedSelection;
+    const activeFeedIds = new Set(selection?.owner === accountId ? selection.ids : []);
     const retained = reels.filter(reel => reel.cloudOwnerId
-        ? targetId && reel.cloudOwnerId !== targetId
+        ? targetId && !publishedIds.has(reel.cloudContentId)
+            && (reel.cloudOwnerId !== targetId || activeFeedIds.has(reel.cloudContentId))
         : !publishedIds.has(reel.pendingCloudId));
     reels.splice(0, reels.length, ...retained, ...fresh);
+    if (!targetId) {
+        const cursor = reelCursor(data);
+        state.reelFeedSelection = { owner: accountId, ids: fresh.map(reel => reel.cloudContentId) };
+        state.reelPaging = { owner: accountId, excluded, cutoff, cursor,
+            hasMore: data.length === REEL_PAGE_SIZE && Boolean(cursor), pending: null };
+    }
+    return { changed: true };
+}
+
+export function loadMoreCloudReels(include = () => true) {
+    const page = state.reelPaging;
+    if (!page || page.owner !== state.signedInAccountId || !page.hasMore) return Promise.resolve({ items: [] });
+    if (page.pending) return page.pending;
+    page.pending = (async () => {
+        const client = await getSupabaseClient();
+        const data = await readReelPage(client, { ...page, targetId: null });
+        const fresh = (await hydrateCloudReels(client, data, page.owner)).filter(include);
+        if (page.owner !== state.signedInAccountId || page !== state.reelPaging) return { items: [] };
+        const cursor = reelCursor(data);
+        const progressed = cursor && (cursor.id !== page.cursor.id || cursor.time !== page.cursor.time);
+        page.hasMore = data.length === REEL_PAGE_SIZE && Boolean(progressed);
+        page.cursor = cursor;
+        const loaded = new Set(state.reelFeedSelection.ids);
+        const items = fresh.filter(reel => !loaded.has(reel.cloudContentId));
+        const updated = new Set(fresh.map(reel => reel.cloudContentId));
+        const retained = reels.filter(reel => !updated.has(reel.cloudContentId));
+        reels.splice(0, reels.length, ...retained, ...fresh);
+        state.reelFeedSelection.ids.push(...items.map(reel => reel.cloudContentId));
+        return { items };
+    })().finally(() => { page.pending = null; });
+    return page.pending;
 }
 
 

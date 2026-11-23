@@ -139,7 +139,7 @@ export function createReelPlayback(container, canPlay, onAutoplayMuted, environm
         return true;
     }
 
-    for (const video of videos) {
+    function bindVideo(video) {
         listen(video, 'playing', () => {
             if (!isActive(video)) { video.pause(); return; }
             clearLoading();
@@ -159,6 +159,7 @@ export function createReelPlayback(container, canPlay, onAutoplayMuted, environm
             requestPlay(video);
         });
     }
+    videos.forEach(bindVideo);
 
     const observer = environment.IntersectionObserver
         ? new environment.IntersectionObserver(entries => {
@@ -194,6 +195,16 @@ export function createReelPlayback(container, canPlay, onAutoplayMuted, environm
         toggle,
         suspend,
         refresh: selectVisible,
+        add(incoming) {
+            if (disposed) return;
+            for (const video of incoming) {
+                if (videos.includes(video)) continue;
+                videos.push(video);
+                bindVideo(video);
+                observer?.observe(video);
+            }
+            if (active) prepareNextReels(active, canPlay, environment);
+        },
         destroy() {
             disposed = true;
             observer?.disconnect();

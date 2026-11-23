@@ -1,5 +1,6 @@
 let prepared = new Set();
 const requested = new WeakSet();
+export const REEL_PREFETCH_COUNT = 5;
 
 export function resetReelPrefetch() {
     for (const video of prepared) video.preload = 'none';
@@ -13,7 +14,7 @@ export function prepareNextReels(current, canPlay, environment = globalThis) {
     const candidates = new Set();
     let card = current.closest('.reel-card');
     if (!environment.document?.hidden && !constrained) {
-        for (let i = 0; i < 5 && (card = card?.nextElementSibling); i++) {
+        for (let i = 0; i < REEL_PREFETCH_COUNT && (card = card?.nextElementSibling); i++) {
             const video = card.querySelector('video');
             if (video && canPlay(video)) candidates.add(video);
         }

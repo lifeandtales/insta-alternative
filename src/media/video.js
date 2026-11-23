@@ -11,6 +11,7 @@ import { observeQualifiedVideoView } from './video-views.js';
 import { createReelPlayback } from './reel-playback.js';
 
 let reelPlayback = null;
+let reelPlaybackContainer = null;
 
 export function suspendReelPlayback() {
     reelPlayback?.suspend();
@@ -23,6 +24,7 @@ export function refreshReelPlayback() {
 export function releaseReelPlayback() {
     reelPlayback?.destroy();
     reelPlayback = null;
+    reelPlaybackContainer = null;
 }
 
 export function canPlayInlineVideo(video) {
@@ -36,13 +38,18 @@ export function canPlayInlineVideo(video) {
 
 export function observePostVideos(container) {
     if (container.querySelectorAll('.reel-card video').length) {
-        releaseReelPlayback();
-        reelPlayback = createReelPlayback(container,
-            video => state.currentView === 'reels' && canPlayInlineVideo(video),
-            video => {
-                const sound = video.closest('.reel-card').querySelector('[data-video-sound]');
-                if (sound) updateSoundButton(sound, true, 'video');
-            });
+        if (reelPlayback && reelPlaybackContainer === container) {
+            reelPlayback.add(container.querySelectorAll('.reel-card video'));
+        } else {
+            releaseReelPlayback();
+            reelPlaybackContainer = container;
+            reelPlayback = createReelPlayback(container,
+                video => state.currentView === 'reels' && canPlayInlineVideo(video),
+                video => {
+                    const sound = video.closest('.reel-card').querySelector('[data-video-sound]');
+                    if (sound) updateSoundButton(sound, true, 'video');
+                });
+        }
     }
     container.querySelectorAll(".likeable-media video").forEach((video) => {
         observeQualifiedVideoView(video, canPlayInlineVideo);

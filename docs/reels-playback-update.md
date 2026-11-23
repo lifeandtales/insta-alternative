@@ -6,13 +6,27 @@ The next five accessible Reels begin preparing as soon as the current card becom
 
 A loading indicator appears after 250 milliseconds of waiting. A wait lasting ten seconds offers Try again and Refresh Reels. Try again reloads the current video. Refresh Reels uses the existing feed refresh to fetch current media links. Returning to playback clears the loading or error message. Replacing the feed clears old observers, listeners and timers.
 
+## Refresh and continuous loading
+
+Pulling down from the first Reel requests a fresh batch. The current Reel and the next five prepared Reels are excluded from that batch and its continuation pages. A pull on later Reels or a sideways gesture does not refresh. The independent Reels scroller can refresh even if another outer container has an old scroll position.
+
+If fresh videos are unavailable, a message explains this and keeps the current playable feed. A failed refresh also keeps the existing videos and their interaction data. Loading a creator profile preserves data needed by the active Reels feed.
+
+Scrolling near the end loads another page and inserts its cards after the existing ones. The current video element, playback state and scroll position are preserved. Duplicate page requests share one operation. A failed next-page request offers Try again and retries from the same position. The end of available content shows You’re caught up.
+
+The existing ordering function is reused for newly appended items. Visible cards keep their positions when the next page arrives. Recommendation changes remain deferred until the rest of the application is ready, as requested.
+
+Continuation uses the existing `publish_at` and `id` columns with a stable cursor and a fixed publication cutoff. This avoids offset shifts when newer videos are inserted. Requests use the existing Supabase Data API. [Supabase filters](https://supabase.com/docs/reference/javascript/or)
+
 ## Updating the app
 
-1. Install `outputs/insta-alternative-smooth-reels-debug.apk` over the existing Android app.
+1. Install `outputs/insta-alternative-reels-refresh-scroll-debug.apk` over the existing Android app.
 2. Open Reels and swipe between several videos. Only the visible Reel should play.
 3. Pause a Reel, swipe away, then return. It should stay paused until you press play.
 4. Switch away from the app and return. Check that a manually paused video stays paused.
-5. If a video fails to load, try Try again. Use Refresh Reels if a fresh video link is needed.
+5. Pull down from the first Reel. Its current and next-five videos should be absent from the refreshed batch.
+6. Keep scrolling toward the end. Further pages should appear while the current Reel keeps playing. If loading fails, use Try again at the end.
+7. If a video itself fails to load, try Try again. Use Refresh Reels if a fresh video link is needed.
 
 Is update ke liye Supabase mein SQL migration chalane ki zarurat nahi hai. Badlav client ke video player mein hain. Database ke tables, columns aur functions ke liye is release mein migration nahi hai.
 
@@ -33,9 +47,11 @@ The Instagram findings come from static code inspection. The package was not run
 
 ## Validation
 
-All 271 workspace tests pass. Six focused playback regression tests cover late play completion, manual pause, delayed loading and timeout, muted autoplay fallback, access and visibility checks, and cleanup after replacing a feed.
+The extended update passes all 282 workspace tests. Playback tests cover late play completion, manual pause, delayed loading and timeout, muted autoplay fallback, access and visibility checks, feed cleanup, and adding a new page without replacing the current player. Refresh and continuation tests cover queue exclusion, no-new-content feedback, error retention, concurrent requests, account changes, profile-cache interaction, gesture boundaries, pagination deduplication and late responses after refresh.
 
-A separate Chrome session used generated sample video through the app's Reels screen. It verified first-video playback, swipe handoff, manual pause after returning, error feedback and retry recovery. Browser JavaScript errors were absent. The screenshots and machine-readable results are retained in `outputs/reels-playback-validation/`.
+A separate Chrome session used generated sample video through the app's Reels screen. It verified playback, swipe handoff, pause, error recovery, likes, double-tap likes, save and unsave, sound, comments, sharing, menu dismissal and first-Reel refresh. A simulated authenticated data source supplied 125 Reels to exercise 50-to-100-to-125 continuation, a failed next-page load and retry. Existing video-node identity and scroll position were preserved, all 125 rendered IDs were unique, and browser JavaScript errors were absent. Current results are retained in `outputs/reels-audit-validation/`.
+
+A read-only production probe with the public anonymous role was denied by existing table privileges. Authenticated production continuation still needs device verification. No database access grants or schema changes were applied.
 
 Four old workspace test failures were corrected. The Home test expected an older layout. The recovery helper tests tried to access a module through the app bootstrap even though that module is excluded from the active UI. They now import the helper directly and keep their validation assertions.
 

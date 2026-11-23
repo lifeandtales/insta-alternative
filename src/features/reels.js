@@ -8,6 +8,28 @@ import { state } from '../core/state.js';
 import { reels } from '../data/sample-data.js';
 import { accountIsPublic, canViewMedia, getAccount } from '../core/social.js';
 import { observePostVideos, releaseReelPlayback } from '../media/video.js';
+import { REEL_PREFETCH_COUNT } from '../media/reel-prefetch.js';
+import { loadMoreCloudReels } from '../storage/cloud-reels.js';
+
+let renderedQueue = { owner: null, ids: [] };
+let releasePagination = () => {};
+
+export function getReelQueueIds() {
+  return renderedQueue.owner === state.signedInAccountId ? [...renderedQueue.ids] : [];
+}
+
+export function getReelRefreshExclusions() {
+  const ids = getReelQueueIds();
+  const feed = document.getElementById('reels-feed');
+  const bounds = feed.getBoundingClientRect();
+  const middle = bounds.top + bounds.height / 2;
+  const cards = [...feed.querySelectorAll('.reel-card')];
+  const index = Math.max(0, cards.findIndex(card => {
+    const rect = card.getBoundingClientRect();
+    return rect.top <= middle && rect.bottom > middle;
+  }));
+  return ids.slice(index, index + REEL_PREFETCH_COUNT + 1);
+}
 
 function preferenceKey(reel) {
   return accountStorageKey('insta-reel-interest:' + (reel.cloudContentId || reel.id));
@@ -39,6 +61,11 @@ function authorizedReel(reel) {
   return state.cloudFollowingIds?.has(reel.cloudOwnerId) ?? (cloudPerson(reel.handle)?.followStatus === 'accepted');
 }
 
+export function canShowReelInFeed(reel) {
+  return (!state.signedInAccountId || reel.cloudOwnerId) && canViewMedia(reel)
+    && (publicReel(reel) || authorizedReel(reel));
+}
+
 // Trending has 70% influence; recency has 30%. Scores normalize views,
 // watch-time per view, and likes against the current public Reel set.
 export function rankRecommendedReels(items = reels, now = Date.now()) {
@@ -63,25 +90,106 @@ function warningNeeded(reel) {
 }
 
 export function renderReelsStatus(status) {
+  releasePagination();
   releaseReelPlayback();
+  renderedQueue = { owner: state.signedInAccountId, ids: [] };
   const message = status === 'loading' ? 'Loading Reels…' : status === 'error'
     ? 'Could not load Reels.' : 'No Reels to show yet.';
   document.getElementById('reels-feed').innerHTML = `<div class="reels-status"><p role="status">${message}</p>
     ${status === 'error' ? '<button type="button" data-reels-retry>Try again</button>' : ''}</div>`;
 }
 
-export function renderReels({ status = 'ready' } = {}) {
-  releaseReelPlayback();
+export function renderReels({ status = 'ready', excludeIds = null, preserveOnEmpty = false } = {}) {
   const feed = document.getElementById('reels-feed');
-  const recommended = rankRecommendedReels();
-  const personal = reels.filter(reel => !publicReel(reel) && authorizedReel(reel) && canViewMedia(reel))
+  const selection = state.reelFeedSelection;
+  const excluded = excludeIds && new Set(excludeIds);
+  const selected = selection && selection.owner === state.signedInAccountId ? new Set(selection.ids) : null;
+  const items = reels.filter(reel => {
+    const id = reel.cloudContentId || String(reel.id);
+    return excluded ? !excluded.has(id) : !selected || selected.has(id);
+  });
+  const recommended = rankRecommendedReels(items);
+  const personal = items.filter(reel => !publicReel(reel) && authorizedReel(reel) && canViewMedia(reel))
     .sort((left, right) => (right.createdAt || 0) - (left.createdAt || 0));
   const visible = [...recommended, ...personal];
   if (!visible.length) {
+    if (preserveOnEmpty) return false;
     renderReelsStatus(status);
-    return;
+    return false;
   }
-  feed.innerHTML = visible.map(reel => {
+  releaseReelPlayback();
+  renderedQueue = { owner: state.signedInAccountId, ids: visible.map(reel => reel.cloudContentId || String(reel.id)) };
+  if (excluded) state.reelFeedSelection = { owner: renderedQueue.owner, ids: [...renderedQueue.ids] };
+  feed.scrollTop = 0;
+  releasePagination();
+  feed.innerHTML = renderReelCards(visible) + '<div class="reel-pagination" data-reel-pagination role="status" aria-live="polite"></div>';
+  observePostVideos(feed);
+  observeReelPagination(feed);
+  return true;
+}
+
+function observeReelPagination(feed) {
+  const owner = state.signedInAccountId;
+  const footer = feed.querySelector('[data-reel-pagination]');
+  if (!footer) return;
+  let released = false;
+  let loading = false;
+  let failed = false;
+  const currentPage = () => state.reelPaging?.owner === owner && state.signedInAccountId === owner;
+  const showFooter = () => {
+    footer.hidden = !owner || !currentPage();
+    footer.innerHTML = loading ? 'Loading more Reels…' : failed
+      ? '<span>Could not load more Reels.</span><button type="button" data-reel-load-more>Try again</button>'
+      : state.reelPaging?.hasMore ? '' : 'You’re caught up.';
+  };
+  const load = async () => {
+    if (released || loading || document.hidden || !currentPage() || !state.reelPaging?.hasMore || state.currentView !== 'reels') return;
+    loading = true;
+    failed = false;
+    showFooter();
+    try {
+      const { items } = await loadMoreCloudReels(canShowReelInFeed);
+      if (released || !currentPage() || state.currentView !== 'reels') return;
+      const existing = new Set(renderedQueue.ids);
+      const incoming = items.filter(reel => !existing.has(reel.cloudContentId) && canShowReelInFeed(reel));
+      const ordered = [...rankRecommendedReels(incoming), ...incoming.filter(reel => !publicReel(reel))];
+      if (ordered.length) {
+        const scrollTop = feed.scrollTop;
+        footer.insertAdjacentHTML('beforebegin', renderReelCards(ordered));
+        feed.scrollTop = scrollTop;
+        renderedQueue.ids.push(...ordered.map(reel => reel.cloudContentId));
+        observePostVideos(feed);
+      }
+    } catch {
+      failed = true;
+    } finally {
+      loading = false;
+      if (!released) {
+        showFooter();
+        if (!failed) window.setTimeout(checkPosition, 0);
+      }
+    }
+  };
+  const checkPosition = () => {
+    if (failed || !feed.clientHeight) return;
+    if (feed.scrollHeight - feed.scrollTop - feed.clientHeight < feed.clientHeight * 5) void load();
+  };
+  const retry = event => { if (event.target.closest('[data-reel-load-more]')) void load(); };
+  feed.addEventListener('scroll', checkPosition, { passive: true });
+  document.addEventListener('visibilitychange', checkPosition);
+  footer.addEventListener('click', retry);
+  releasePagination = () => {
+    released = true;
+    feed.removeEventListener?.('scroll', checkPosition);
+    document.removeEventListener?.('visibilitychange', checkPosition);
+    footer.removeEventListener?.('click', retry);
+  };
+  showFooter();
+  checkPosition();
+}
+
+function renderReelCards(items) {
+  return items.map(reel => {
     const gated = warningNeeded(reel) && !state.revealedMediaKeys.has(`reel:${reel.id}`);
     const blockedForMinor = gated && state.viewerAgeBand === 'minor';
     const muted = state.reelMuted || reel.originalAudioMuted;
@@ -128,5 +236,4 @@ export function renderReels({ status = 'ready' } = {}) {
       <button class="video-sound-toggle reel-sound-toggle" type="button" ${reel.originalAudioMuted ? 'disabled' : ''} data-video-sound aria-label="${reel.originalAudioMuted ? 'Original audio is disabled' : `Turn video sound ${muted ? 'on' : 'off'}`}" aria-pressed="${!muted}">${actionIcon(muted ? 'sound-off' : 'sound-on')}</button>
     </article>`;
   }).join('');
-  observePostVideos(feed);
 }

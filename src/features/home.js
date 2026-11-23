@@ -57,13 +57,13 @@ export function registerHomePullToRefresh(
         releaseAnimation?.cancel();
         releaseAnimation = null;
         const target = refreshTarget(event.target);
-        if (!target || target.scrollTop > 0 || shell.scrollTop > 0 || event.touches.length !== 1) return;
+        if (!target || target.scrollTop > 0 || event.touches.length !== 1) return;
         const touch = event.touches[0];
         start = { x: touch.clientX, y: touch.clientY, target, content: pullContent(target), view: state.currentView };
     }, { passive: true });
     shell.addEventListener('touchmove', event => {
         if (!start) return;
-        if (event.touches.length !== 1 || state.currentView !== start.view || start.target.scrollTop > 0 || shell.scrollTop > 0) { reset(); return; }
+        if (event.touches.length !== 1 || state.currentView !== start.view || start.target.scrollTop > 0) { reset(); return; }
         const touch = event.touches[0];
         distance = touch.clientY - start.y;
         if (distance < -8 || Math.abs(touch.clientX - start.x) > Math.max(12, distance)) { reset(); return; }

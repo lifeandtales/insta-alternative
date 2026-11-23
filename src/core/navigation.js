@@ -18,12 +18,13 @@ import { renderExplore } from '../features/explore.js';
 import { getHomeFeedItems } from '../features/home.js';
 import { refreshReadReceiptLabel, renderMessages } from '../features/messages.js';
 import { renderProfile } from '../features/profile.js';
-import { renderReels, renderReelsStatus } from '../features/reels.js';
+import { canShowReelInFeed, getReelQueueIds, getReelRefreshExclusions, renderReels, renderReelsStatus } from '../features/reels.js';
 import { renderStories } from '../features/stories.js';
 import { syncDeletionLock } from './account-lock.js';
 import { findEntity } from '../data/entities.js';
 import { canViewMedia } from './social.js';
 import { suspendReelPlayback } from '../media/video.js';
+import { showShareFeedback } from '../components/feedback.js';
 
 const currentAppHistory = () => window.history.state && typeof window.history.state === 'object'
     ? window.history.state : {};
@@ -174,20 +175,34 @@ export function setView(view, { fromHistory = false, refresh = true } = {}) {
 
 const connectedLoads = new Map();
 
-export function refreshConnectedView(view = state.currentView) {
+export function refreshReelsFeed() {
+    if (!state.signedInAccountId) {
+        const changed = renderReels({ excludeIds: getReelRefreshExclusions(), preserveOnEmpty: true });
+        if (!changed) showShareFeedback('No new Reels right now. Your current feed is still available.');
+        return Promise.resolve();
+    }
+    return refreshConnectedView('reels', { freshReels: true });
+}
+
+export function refreshConnectedView(view = state.currentView, { freshReels = false } = {}) {
     const owner = state.signedInAccountId;
     if (!owner) return Promise.resolve();
     const handle = state.profileHandle;
     const activeChat = state.activeConversationHandle;
-    const key = [owner, view, view === 'profile' ? handle : view === 'messages' ? activeChat : ''].join(':');
+    const baseKey = [owner, view, view === 'profile' ? handle : view === 'messages' ? activeChat : ''].join(':');
+    const key = freshReels ? baseKey + ':fresh' : baseKey;
     if (connectedLoads.has(key)) return connectedLoads.get(key);
-    const pending = refreshViewData(view, owner, handle, activeChat)
+    if (!freshReels && connectedLoads.has(baseKey + ':fresh')) return connectedLoads.get(baseKey + ':fresh');
+    const previous = freshReels && connectedLoads.get(baseKey);
+    const load = () => refreshViewData(view, owner, handle, activeChat, freshReels);
+    const pending = (previous ? previous.then(load) : load())
         .finally(() => connectedLoads.delete(key));
     connectedLoads.set(key, pending);
     return pending;
 }
 
-async function refreshViewData(view, owner, handle, activeChat) {
+async function refreshViewData(view, owner, handle, activeChat, freshReels) {
+    if (state.signedInAccountId !== owner) return;
     const stillVisible = () => state.currentView === view && state.signedInAccountId === owner;
     if (view === 'profile') {
         const target = handle === currentUser.handle ? owner : cloudPerson(handle)?.id;
@@ -238,10 +253,23 @@ async function refreshViewData(view, owner, handle, activeChat) {
         if (stillVisible() && !document.querySelector('#reels-feed .reel-card')) renderReelsStatus('loading');
         void loadCloudSavedKeys().then(() => { if (stillVisible()) syncVisibleSaveButtons(); }).catch(() => {});
         try {
-            await Promise.all([loadCloudReels(), loadCloudFollowing().catch(() => {})]);
-            if (stillVisible()) renderReels();
+            const excludeIds = freshReels ? getReelRefreshExclusions() : [];
+            const following = loadCloudFollowing().catch(() => {});
+            if (freshReels) await following;
+            if (state.signedInAccountId !== owner) return;
+            const [result] = await Promise.all([
+                loadCloudReels(null, { excludeIds, include: freshReels ? canShowReelInFeed : undefined }),
+                following,
+            ]);
+            if (stillVisible()) {
+                if (result?.changed === false) showShareFeedback('No new Reels right now. Your current feed is still available.');
+                else renderReels();
+            }
         } catch {
-            if (stillVisible()) renderReelsStatus('error');
+            if (stillVisible()) {
+                if (getReelQueueIds().length) showShareFeedback('Could not refresh Reels. Check your connection and try again.');
+                else renderReelsStatus('error');
+            }
         }
     } else if (view === 'home' || view === 'explore') {
         const imagePosts = loadCloudFollowing().then(() => loadCloudImagePosts());

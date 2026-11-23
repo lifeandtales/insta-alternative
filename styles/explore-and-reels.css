@@ -136,6 +136,10 @@
   background: #08070b;
 }
 
+.reel-pagination { flex: 0 0 auto; width: 100%; padding: 24px 16px; color: #fff; text-align: center; scroll-snap-align: end; overflow-anchor: none; }
+.reel-pagination[hidden] { display: none; }
+.reel-pagination button { display: block; min-height: 44px; margin: 12px auto 0; padding: 10px 18px; border: 0; border-radius: 12px; font: inherit; }
+
 .reel-card {
   position: relative;
   flex: 0 0 100%;

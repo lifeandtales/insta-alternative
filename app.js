@@ -24,7 +24,7 @@ import { state } from './src/core/state.js';
 import { loadSavedItems, loadJoinedCommunities, loadStoryHighlights } from './src/storage/browser-storage.js';
 import { registerPostPhotoEvents } from './src/media/post-photos.js';
 import { initializeVideoObserver } from './src/media/video.js';
-import { refreshConnectedView, setView } from './src/core/navigation.js';
+import { refreshConnectedView, refreshReelsFeed, setView } from './src/core/navigation.js';
 import { showShareFeedback } from './src/components/feedback.js';
 import {
     handleVideoExitClick,
@@ -403,6 +403,7 @@ registerMediaLikeEvents();
 const refreshShell = document.querySelector('.app-shell');
 registerHomePullToRefresh(refreshShell, document.getElementById('home-refresh-status'), async view => {
     try {
+        if (view === 'reels') { await refreshReelsFeed(); return; }
         if (view === 'home') {
             await loadSession();
             processScheduledPosts();
@@ -416,7 +417,7 @@ registerHomePullToRefresh(refreshShell, document.getElementById('home-refresh-st
 }, target => {
     if (target?.closest?.('input, textarea, select, dialog')) return null;
     switch (state.currentView) {
-        case 'reels': return document.getElementById('reels-feed');
+        case 'reels': return target?.closest?.('.reels-feed') || null;
         case 'messages':
             if (state.activeGroupProfileHandle) return null;
             return state.activeConversationHandle

@@ -1,6 +1,6 @@
 import { openAccountSettings } from '../features/account-settings.js';
 import { openNotifications } from '../features/notifications.js';
-import { refreshConnectedView, setView } from './navigation.js';
+import { refreshReelsFeed, setView } from './navigation.js';
 import { state } from './state.js';
 import { currentUser } from '../data/sample-data.js';
 
@@ -20,7 +20,7 @@ export function registerMobileNavigationGestures(nav) {
 
 export function handleNavigationClick(event) {
     if (event.target.closest('[data-reels-retry]')) {
-        void refreshConnectedView('reels');
+        void refreshReelsFeed();
         return true;
     }
     const viewButton = event.target.closest("[data-view]");
