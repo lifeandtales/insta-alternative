@@ -50,32 +50,6 @@ async function start() {
     });
   }
 
-  function renderReport(report) {
-    const row = element('li', '');
-    const actions = element('div', '');
-    actions.className = 'actions';
-    for (const [label, decision] of [['Resolve', 'resolved'], ['Dismiss', 'dismissed']]) {
-      const button = element('button', label);
-      button.type = 'button';
-      button.addEventListener('click', async () => {
-        for (const control of actions.children) control.disabled = true;
-        try {
-          const { data, error } = await client.rpc('admin_review_report', { report: report.id, decision });
-          if (error) throw error;
-          await load(data ? 'Report marked ' + decision + '.' : 'This report was already reviewed.');
-        } catch {
-          status.textContent = 'Could not review the report. Refresh and try again.';
-        } finally {
-          for (const control of actions.children) control.disabled = false;
-        }
-      });
-      actions.append(button);
-    }
-    row.append(element('strong', report.target_kind + ' · ' + report.target_ref),
-      dateElement(report.created_at), element('p', report.reason), actions);
-    return row;
-  }
-
   let request = 0;
   async function load(successMessage = '') {
     const current = ++request;
@@ -102,7 +76,6 @@ async function start() {
         row.append(dateElement(event.created_at));
         return row;
       }, 'No activity yet.');
-      renderList('#reports', data.reports, renderReport, 'No reports awaiting review.');
       dashboard.hidden = false;
       refresh.hidden = false;
       status.textContent = successMessage;

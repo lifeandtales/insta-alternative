@@ -116,6 +116,11 @@ function describeSocialNotification(notice) {
 
 function describeCloudNotification(row) {
     const payload = row.payload || {};
+    if (row.kind === 'moderation') return {
+        id: row.id, kind: 'moderation', title: 'Admin decision',
+        text: String(payload.message || 'An admin reviewed reported content on your account.'),
+        createdAt: Date.parse(row.created_at), read: Boolean(row.read),
+    };
     const entityType = payload.content_kind === 'reel' ? 'reel' : 'post';
     const collection = entityType === 'reel' ? reels : posts;
     const entity = payload.content_id

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Insta Alternative Admin</title>
   <link rel="stylesheet" href="./styles/admin-dashboard.css">
-  <script type="module" src="./src/features/admin-dashboard.js?v=346"></script>
+  <script type="module" src="./src/features/admin-dashboard.js?v=351"></script>
 </head>
 <body>
   <main>
@@ -39,7 +39,7 @@
         <button type="button" data-section="users">Users</button>
         <button type="button" data-section="deletions">Deletion requests</button>
         <button type="button" data-section="activity-panel">Activity</button>
-        <button type="button" data-section="reports-panel">Reports</button>
+        <a href="./admin-reports.html">Reported content</a>
       </nav>
       <section id="overview" class="dashboard-panel" aria-labelledby="totals-title">
         <h2 id="totals-title">Platform overview</h2>
@@ -73,10 +73,7 @@
         <p>Shows synced events. Private message text and file contents stay private.</p>
         <ul id="activity"></ul>
       </section>
-      <section id="reports-panel" class="dashboard-panel" aria-labelledby="reports-title" hidden>
-        <h2 id="reports-title">Reports awaiting review</h2>
-        <ul id="reports"></ul>
-      </section>
+
     </div>
   </main>
 </body>

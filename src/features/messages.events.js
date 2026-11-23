@@ -1202,9 +1202,9 @@ export function handleMessageClick(event) {
     }
     if (event.target.closest('[data-chat-report]')) {
         const chat = activeConversation();
-        if (chat && !chat.isGroup) {
+        if (chat) {
             closeChatOptions();
-            openReportPanel({ id: chat.peerId || chat.handle, cloud: Boolean(chat.cloudId) }, 'profile');
+            openReportPanel(chat, 'conversation');
         }
         return true;
     }

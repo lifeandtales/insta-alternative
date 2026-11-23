@@ -405,7 +405,7 @@ export async function runProfileOption(action, handle) {
         if (handles.has(handle)) handles.delete(handle); else handles.add(handle);
         persistPreferences(); openProfileOptions(); return;
     }
-    if (action === 'report') { openReportPanel({id:handle}, 'profile'); return; }
+    if (action === 'report') { openReportPanel({ id: handle, cloudProfileId: cloudPerson(handle)?.id }, 'profile'); return; }
     if (action === 'qr') {
         showHomePanel('Profile QR code', `<div class="profile-qr">${profileQrSvg(handle)}<strong>${escapeHtml(handle)}</strong><p>Scan to open this profile.</p></div>`);return;
     }

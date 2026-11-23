@@ -1,3 +1,5 @@
+import { REPORT_REASONS, reportTarget } from '../core/reporting.js';
+import { submitContentReport } from '../storage/cloud-reports.js';
 import { loadCloudStoryAudience, setCloudStoryFriend } from '../storage/cloud-stories.js';
 import { getSupabaseClient } from '../storage/supabase.js';
 import { state } from '../core/state.js';
@@ -59,8 +61,10 @@ function renderMuted(handles, type) {
     return [...handles].map(handle => `<p>${escapeHtml(handle)} <button type="button" data-unmute="${type}" data-handle="${escapeHtml(handle)}">Unmute</button></p>`).join('') || '<p>None</p>';
 }
 export function openReportPanel(post, type) {
-    state.reportingMedia = { type, id: post.id, ...(post.cloud ? { cloud: true } : {}) };
-    showHomePanel(type === 'profile' ? 'Report profile' : type === 'story' ? 'Report story' : 'Report post', `${post.cloud ? '<p>Choose a reason to submit your report.</p>' : '<p>Choose a reason. This report is saved on this device.</p>'}<form class="local-report-form"><label>Reason<select name="reason" required><option value="">Choose a reason</option><option>Spam</option><option>Harassment</option><option>Unsafe content</option><option>Impersonation</option><option>Other</option></select></label><label>Details (optional)<textarea name="details" maxlength="500"></textarea></label><button type="submit">${post.cloud ? 'Submit report' : 'Save local report'}</button></form>`);
+    const messages = type === 'conversation' ? (post.messages || []).filter(message => message.from !== 'me' && message.id).slice(-20) : [];
+    state.reportingMedia = type === 'conversation' ? { type, messages, cloud: Boolean(post.cloudId) } : { ...reportTarget(post, type), type };
+    const cloud = state.reportingMedia.cloud;
+    showHomePanel(`Report ${type === 'conversation' ? 'chat' : type}`, `<p>${cloud ? 'Choose a reason. An admin will review your complaint before taking action.' : 'This is demo content. Its report is saved only on this device.'}</p>${type === 'conversation' ? '<p>Choose the message you want an admin to review. Only that message and its attachment will be shared for review.</p>' : ''}<form class="local-report-form">${type === 'conversation' ? `<label>Reported message<select name="message" required><option value="">Choose a message</option>${messages.map(message => `<option value="${escapeHtml(String(message.id))}">${escapeHtml((message.text || message.fileName || message.type || 'Message').slice(0, 100))}</option>`).join('')}</select></label>${messages.length ? '' : '<p>No received messages are loaded. Open the chat history first.</p>'}` : ''}<fieldset class="report-reasons"><legend>Why are you reporting this?</legend>${REPORT_REASONS.map(([code, label]) => `<label><input type="radio" name="reason" value="${code}" required> ${escapeHtml(label)}</label>`).join('')}</fieldset><label>Details (optional)<textarea name="details" maxlength="500"></textarea></label><p data-report-error role="status"></p><button type="submit">${cloud ? 'Submit report' : 'Save local report'}</button></form>`);
 }
 export function registerHomeControlEvents() {
     document.querySelector('.home-panel-close').addEventListener('click', closeHomePanel);
@@ -101,26 +105,30 @@ export function registerHomeControlEvents() {
         if (!mayInteract()) return;
         const reason = event.target.elements.reason.value;
         if (!reason) return;
-        const report = state.reportingMedia;
+        let report = state.reportingMedia;
+        if (report?.type === 'conversation') {
+            const message = report.messages.find(item => String(item.id) === event.target.elements.message.value);
+            if (!message) return;
+            report = reportTarget({ ...message, cloud: report.cloud }, 'message');
+        }
         if (report?.cloud) {
             const form = event.target;
             const button = form.querySelector('button[type="submit"]');
             if (button.disabled) return;
             button.disabled = true;
             const details = form.elements.details.value.trim();
-            void getSupabaseClient().then(client => client.from('content_reports').insert({
-                target_kind: report.type, target_ref: report.id,
-                reason: (details ? reason + ': ' + details : reason).slice(0, 500),
-            })).then(({ error }) => {
-                if (error) throw error;
+            const errorLabel = form.querySelector('[data-report-error]');
+            errorLabel.textContent = '';
+            void submitContentReport(report, reason, details).then(() => {
                 if (form.isConnected) closeHomePanel();
-                showShareFeedback('Report submitted.');
-            }).catch(() => showShareFeedback('Could not submit the report.'))
-                .finally(() => { button.disabled = false; });
+                showShareFeedback('Report submitted. Track its outcome in Settings → Reported activities.');
+            }).catch(() => {
+                if (form.isConnected) errorLabel.textContent = 'Could not submit your report. Please try again.';
+            }).finally(() => { button.disabled = false; });
             return;
         }
         state.localReports = state.localReports || [];
-        state.localReports.push({ ...state.reportingMedia, reason, details: event.target.elements.details.value.trim(), createdAt: Date.now() });
+        state.localReports.push({ type: report.kind || report.type, id: report.ref, reason, details: event.target.elements.details.value.trim(), createdAt: Date.now() });
         persistSession().then(() => {
             document.querySelector('.home-controls-backdrop').hidden = true;
             showShareFeedback('Local report saved.');

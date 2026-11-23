@@ -364,3 +364,12 @@
   color: #402c58;
   font-weight: 650;
 }
+
+.report-reasons { border: 0; margin: 1rem 0; padding: 0; }
+.report-reasons legend { font-weight: 600; margin-bottom: .5rem; }
+.report-reasons label { display: flex; align-items: center; gap: .75rem; min-height: 44px; padding: .55rem 0; border-bottom: 1px solid var(--border, #e5e0e5); }
+.report-reasons input[type="radio"] { flex: 0 0 auto; width: 18px; height: 18px; margin: 0; }
+.report-history-item { padding: 1rem 0; border-bottom: 1px solid var(--border, #e5e0e5); }
+.report-history-item h3 { font-size: 1rem; margin: 0 0 .5rem; }
+.report-history-item p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.report-history-item time { font-size: .85rem; opacity: .8; }

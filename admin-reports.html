@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Reported content · Insta Alternative Admin</title>
+  <link rel="stylesheet" href="./styles/admin-dashboard.css?v=351">
+  <script type="module" src="./src/features/admin-reports.js?v=351"></script>
+</head>
+<body><main>
+  <header><div><a href="./admin.html">Admin dashboard</a><h1>Reported content</h1><p>Review the complaint, examine the evidence, then record an action.</p></div>
+    <div class="actions"><button id="reports-refresh" type="button" hidden>Refresh</button><button id="reports-sign-out" type="button" hidden>Sign out</button></div></header>
+  <p id="reports-status" role="status">Connecting…</p>
+  <form id="reports-sign-in" hidden><h2>Admin sign-in</h2><label>Email<input name="email" type="email" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button type="submit">Sign in</button></form>
+  <section id="reports-workspace" hidden>
+    <label>Show reports<select id="reports-filter"><option value="pending">Waiting for review</option><option value="reviewing">Under review</option><option value="resolved">Action taken</option><option value="dismissed">No violation found</option><option value="all">All reports</option></select></label>
+    <div class="report-layout"><div><ul id="reports-queue" aria-label="Reports"></ul><div class="actions pagination"><button id="reports-prev" type="button" disabled>Previous</button><button id="reports-next" type="button" disabled>Next</button></div></div>
+      <article id="report-detail" aria-label="Report details" aria-live="polite"><p>Choose a report to see its evidence.</p></article></div>
+  </section>
+</main></body></html>
