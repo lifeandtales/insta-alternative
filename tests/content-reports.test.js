@@ -54,3 +54,33 @@ test('signed-out visitors cannot submit reports and have no history request', as
     assert.deepEqual(JSON.parse(JSON.stringify(await api.loadMyReports())), []);
     assert.equal(calls.length, 0);
 });
+
+test('cloud comment and reply reports preserve their server IDs and kind', () => {
+    for (const kind of ['image_comment', 'media_comment', 'comment_reply']) {
+        assert.deepEqual(reportTarget({ id: 'comment-uuid', cloudAuthorId: 'author' }, kind), { kind, ref: 'comment-uuid', cloud: true });
+    }
+});
+
+test('comment and reply report buttons open the shared cloud report flow for the selected text', async () => {
+    const app = await loadApp();
+    const state = app.exportsOf('src/core/state.js').state;
+    const entity = app.exportsOf('src/data/sample-data.js').posts[0];
+    entity.cloudOwnerId = 'creator'; entity.cloudClientId = 50; entity.cloudCommentRepliesAvailable = true;
+    entity.commentItems = [{ id: 'comment-uuid', cloudAuthorId: 'creator', handle: '@aribloom', text: 'Comment under review',
+        replies: [{ id: 'reply-uuid', cloudAuthorId: 'creator', handle: '@aribloom', text: 'Reply under review' }] }];
+    state.activeCommentEntity = { type: 'post', id: entity.id };
+    app.exportsOf('src/features/comments.js').renderCommentsDialog(entity);
+    const markup = app.element('.comments-dialog-list').innerHTML;
+    assert.match(markup, /data-comment-report="0"/);
+    assert.match(markup, /data-report-reply-index="0"/);
+    const button = { dataset: { commentReport: '0' } };
+    app.exportsOf('src/features/comments.events.js').handleCommentClick({ target: { closest: selector => selector === '[data-comment-report]' ? button : null } });
+    assert.equal(state.reportingMedia.kind, 'image_comment');
+    assert.equal(state.reportingMedia.ref, 'comment-uuid');
+    assert.equal(state.reportingMedia.cloud, true);
+    state.activeCommentEntity = { type: 'post', id: entity.id };
+    button.dataset.reportReplyIndex = '0';
+    app.exportsOf('src/features/comments.events.js').handleCommentClick({ target: { closest: selector => selector === '[data-comment-report]' ? button : null } });
+    assert.equal(state.reportingMedia.kind, 'comment_reply');
+    assert.equal(state.reportingMedia.ref, 'reply-uuid');
+});

@@ -1,7 +1,6 @@
+import { createAdminContentReview } from './admin-review-content.js?v=352';
 import { getSupabaseClient } from '../storage/supabase.js';
-import { mediaBucket } from '../storage/s3-media-access.js';
-import { requestReelStorage, isS3ReelAsset } from '../storage/s3-reel-access.js';
-import { REPORT_REASONS, REPORT_ACTIONS, reportStatus } from '../core/reporting.js';
+import { REPORT_REASONS, REPORT_ACTIONS, reportStatus, reportKindLabel } from '../core/reporting.js?v=352';
 
 const $ = selector => document.querySelector(selector);
 const status = $('#reports-status');
@@ -42,7 +41,7 @@ async function start() {
             queue.replaceChildren(...rows.map(report => {
                 const row = node('li'), button = node('button');
                 button.type = 'button'; button.className = 'report-queue-item';
-                button.append(node('strong', report.target_kind.replace('_', ' ')), node('span', REPORT_REASONS.find(([code]) => code === report.reason_code)?.[1] || report.reason), node('small', `${reportStatus(report)} · ${date(report.created_at)}`));
+                button.append(node('strong', reportKindLabel(report.target_kind)), node('span', REPORT_REASONS.find(([code]) => code === report.reason_code)?.[1] || report.reason), node('small', `${reportStatus(report)} · ${date(report.created_at)}`));
                 button.addEventListener('click', () => { void showReport(report.id); });
                 row.append(button); return row;
             }));
@@ -58,35 +57,18 @@ async function start() {
             if (version === listVersion && session === sessionVersion) refresh.disabled = false;
         }
     }
-    async function preview(assets, report, version, host) {
-        for (const asset of assets.slice(0, 20)) {
+    async function showAccount(target) {
+        clearDetail();
+        const version = detailVersion;
+        detail.replaceChildren(node('p', 'Loading account profile…'));
+        try {
+            const profile = await rpc('admin_profile_review', { target });
             if (version !== detailVersion) return;
-            try {
-                let url;
-                if (asset.namespace === 'reels' && isS3ReelAsset(asset.path)) {
-                    const response = await requestReelStorage(client, { action: 'read', ids: [report.target_ref] });
-                    url = response.urls.find(item => item.path === asset.path)?.signedUrl;
-                } else {
-                    const result = await mediaBucket(client, asset.namespace === 'reels' ? 'app-media' : asset.namespace).createSignedUrl(asset.path, 300);
-                    if (result.error) throw result.error;
-                    url = result.data?.signedUrl;
-                }
-                if (version !== detailVersion) return;
-                if (!url || !['https:', 'http:'].includes(new URL(url).protocol)) throw new Error('Preview unavailable');
-                const type = asset.mime?.split('/')[0];
-                if (['image', 'video', 'audio'].includes(type)) {
-                    const media = document.createElement(type === 'image' ? 'img' : type);
-                    if (type === 'image') media.alt = 'Reported content evidence';
-                    else { media.controls = true; media.preload = 'metadata'; }
-                    media.src = url;
-                    media.addEventListener('error', () => { if (version === detailVersion) media.replaceWith(node('p', 'The attachment is no longer available.')); }, { once: true });
-                    host.append(media);
-                } else {
-                    const link = node('a', 'Open reported attachment'); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; host.append(link);
-                }
-            } catch {
-                if (version === detailVersion) host.append(node('p', 'Could not load this attachment. It may have expired or been deleted. Reopen the report to retry.'));
-            }
+            const content = createAdminContentReview(client, { isActive: () => version === detailVersion, openProfile: showAccount });
+            detail.replaceChildren();
+            await content.renderProfile(profile, detail);
+        } catch {
+            if (version === detailVersion) detail.replaceChildren(node('p', 'Could not open this account. Check admin access and try again.'));
         }
     }
     async function showReport(id) {
@@ -94,18 +76,45 @@ async function start() {
         const version = detailVersion;
         detail.replaceChildren(node('p', 'Loading complaint and evidence…'));
         try {
-            const data = await rpc('admin_report_detail', { report_id: id });
+            const [data, context] = await Promise.all([
+                rpc('admin_report_detail', { report_id: id }),
+                rpc('admin_report_context', { report_id: id }),
+            ]);
             if (version !== detailVersion) return;
             const { report, evidence, history } = data;
-            detail.replaceChildren(node('h2', `Reported ${report.target_kind.replace('_', ' ')}`), node('p', report.reason), node('p', `${reportStatus(report)} · ${date(report.created_at)}`));
+            detail.replaceChildren(node('h2', `Reported ${reportKindLabel(report.target_kind)}`), node('p', report.reason), node('p', `${reportStatus(report)} · ${date(report.created_at)}`));
+            const profileHost = node('section'); profileHost.className = 'admin-profile-review'; profileHost.hidden = true;
+            let profileRequest = 0;
+            const reviewContent = createAdminContentReview(client, {
+                isActive: () => version === detailVersion,
+                openProfile: async target => {
+                    const request = ++profileRequest;
+                    profileHost.hidden = false;
+                    reviewContent.stopMedia(profileHost); profileHost.replaceChildren(node('p', 'Loading profile…'));
+                    try {
+                        const profile = target === context.profile?.id ? context.profile : await rpc('admin_profile_review', { target });
+                        if (version !== detailVersion || request !== profileRequest) return;
+                        await reviewContent.renderProfile(profile, profileHost);
+                    } catch {
+                        if (version === detailVersion && request === profileRequest) profileHost.replaceChildren(node('p', 'Could not load this profile. Open it again to retry.'));
+                    }
+                },
+            });
             if (evidence) {
-                detail.append(node('h3', 'Evidence saved when the report was submitted'));
-                if (evidence.username || evidence.author) detail.append(node('strong', '@' + (evidence.username || evidence.author)));
-                if (evidence.display_name) detail.append(node('p', evidence.display_name));
-                detail.append(node('p', evidence.caption || evidence.bio || 'No text attached.'));
-                const media = node('div'); media.className = 'report-evidence'; detail.append(media);
-                void preview(evidence.assets || [], report, version, media);
+                const presented = { ...context.item, ...evidence, kind: report.target_kind, ref: report.target_ref };
+                reviewContent.renderItem(presented, detail, 'Reported content · saved when submitted');
+                if (context.target_deleted) detail.append(node('p', 'The original item is no longer available. Saved report evidence is shown above.'));
+                if (context.item?.caption && evidence.caption && context.item.caption !== evidence.caption) detail.append(node('p', 'Current text: ' + context.item.caption));
+                const parent = evidence.parent_item || context.parent_item;
+                if (parent) reviewContent.renderItem(parent, detail, 'Post linked to the reported comment');
+                if (context.profile) {
+                    const visit = node('button', 'View @' + context.profile.username + ' profile and content'); visit.type = 'button';
+                    visit.addEventListener('click', () => { void reviewContent.renderProfile(context.profile, profileHost); profileHost.hidden = false; });
+                    detail.append(visit);
+                }
             } else detail.append(node('p', 'This older report has no verified saved evidence. It cannot be used to hide content, issue warnings or restrict an account.'));
+            detail.append(profileHost);
+            if (report.target_kind === 'profile' && context.profile) { profileHost.hidden = false; void reviewContent.renderProfile(context.profile, profileHost); }
             if (report.public_note) detail.append(node('p', 'Latest response: ' + report.public_note));
             if (history.length) {
                 const list = node('ul');
@@ -152,7 +161,10 @@ async function start() {
         sessionVersion++; listVersion++; clearDetail(); offset = 0;
         workspace.hidden = true; queue.replaceChildren();
         form.hidden = Boolean(session); refresh.hidden = signOut.hidden = !session; status.textContent = '';
-        if (session) void load();
+        if (session) void load().then(() => {
+            const target = new URL(window.location.href).searchParams.get('profile');
+            if (target && !workspace.hidden) return showAccount(target);
+        });
     }
     client.auth.onAuthStateChange((event, session) => {
         if (['INITIAL_SESSION', 'SIGNED_IN', 'SIGNED_OUT'].includes(event)) setTimeout(() => sessionChanged(session), 0);

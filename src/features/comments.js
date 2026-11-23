@@ -43,6 +43,7 @@ function renderComment(comment, interactive, commentIndex, canDelete, canReply) 
         <p><strong>${escapeHtml(comment.handle)}</strong> ${escapeHtml(comment.text)}</p>
         <div class="comment-meta">
           <span class="comment-age">Just now</span>
+          ${comment.cloudAuthorId ? `<button type="button" class="comment-reply-button" data-comment-report="${commentIndex}">Report</button>` : ''}
           ${canReply ? `<button type="button" class="comment-reply-button" data-comment-reply="${escapeHtml(commentKey(comment, commentIndex))}">Reply</button>` : ''}
         </div>
       </div>
@@ -50,6 +51,12 @@ function renderComment(comment, interactive, commentIndex, canDelete, canReply) 
       ${interactive ? renderCommentLike(comment, commentIndex) : ''}
     </article>
   `;
+}
+
+function commentListLabel(count, compact) {
+    return compact && count > 0
+        ? `View all ${count.toLocaleString()} comments`
+        : `View comments (${count})`;
 }
 
 export function renderCommentSection(post, previewLimit = 2) {
@@ -66,7 +73,7 @@ export function renderCommentSection(post, previewLimit = 2) {
           <span class="comment-content"><strong>${escapeHtml(comment.handle)}</strong> ${escapeHtml(comment.text)}</span>
         </button>`).join("")}
       <button class="view-comments-btn" type="button" data-action="comments" data-entity-type="${entityType}" data-entity-id="${post.id}" aria-label="View ${post.comments} comments" aria-expanded="false">
-        View comments (${post.comments})
+        ${commentListLabel(post.comments, previewLimit === 0)}
       </button>
     </div>
   `;
@@ -84,6 +91,7 @@ export function renderCommentsDialog(entity) {
             <div class="comment-reply">
               <img class="comment-avatar" src="${escapeHtml(reply.avatar || currentUser.avatar)}" alt="" />
               <p><strong>${escapeHtml(reply.handle)}</strong> ${escapeHtml(reply.text)}</p>
+              ${reply.cloudAuthorId ? `<button type="button" class="comment-reply-button" data-comment-report="${index}" data-report-reply-index="${replyIndex}">Report reply</button>` : ''}
               ${interactive ? renderCommentLike(reply, index, replyIndex) : ''}
             </div>`).join('');
         return `<div class="comment-thread">${renderComment(comment, interactive, index, canDelete, allowReply)}
@@ -147,7 +155,7 @@ function jumpToComment(target) {
 export function refreshEntityComments(type, entity) {
     const active = state.activeCommentEntity?.type === type && state.activeCommentEntity?.id === entity.id;
     document.querySelectorAll(`.post-card[data-entity-type="${type}"][data-id="${entity.id}"] .post-comments-preview`).forEach(preview => {
-        preview.outerHTML = renderCommentSection(entity);
+        preview.outerHTML = renderCommentSection(entity, preview.closest('#feed') ? 0 : 2);
     });
     const buttons = document.querySelectorAll(`[data-action="comments"][data-entity-type="${type}"][data-entity-id="${entity.id}"]`);
     if (active && !state.activeCommentsTrigger?.isConnected && state.activeCommentEntity.target) {
@@ -160,7 +168,7 @@ export function refreshEntityComments(type, entity) {
     }
     buttons.forEach(button => {
         const count = button.querySelector('.post-comment-count');
-        if (button.matches('.view-comments-btn')) button.textContent = `View comments (${entity.comments})`;
+        if (button.matches('.view-comments-btn')) button.textContent = commentListLabel(entity.comments, Boolean(button.closest('#feed')));
         else if (count) count.textContent = formatCount(entity.comments);
         else button.textContent = `💬 ${entity.comments}`;
         button.setAttribute('aria-label', `View ${entity.comments} comments`);

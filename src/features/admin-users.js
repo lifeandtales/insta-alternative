@@ -73,6 +73,9 @@ export function setupAdminUsers(client) {
       }, 'account-fields');
       const actions = node('div', '');
       actions.className = 'actions';
+      const contentLink = node('a', 'View profile and content');
+      contentLink.href = './admin-reports.html?profile=' + encodeURIComponent(account.id);
+      actions.append(contentLink);
       if (account.is_admin) {
         actions.append(node('p', 'Admin account protected.'));
       } else {

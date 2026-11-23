@@ -1,3 +1,4 @@
+import { openReportPanel } from './home-controls.js';
 import { showShareFeedback } from '../components/feedback.js';
 import {
     commentsBackdrop,
@@ -14,6 +15,19 @@ import { closeLikers } from './likes.js';
 import { canViewMedia } from '../core/social.js';
 
 export function handleCommentClick(event) {
+    const report = event.target.closest('[data-comment-report]');
+    if (report) {
+        const active = state.activeCommentEntity;
+        const entity = active && findEntity(active.type, active.id);
+        const parent = entity?.commentItems?.[Number(report.dataset.commentReport)];
+        const replyIndex = report.dataset.reportReplyIndex;
+        const comment = replyIndex === undefined ? parent : parent?.replies?.[Number(replyIndex)];
+        if (comment?.cloudAuthorId && canViewMedia(entity)) {
+            closeComments();
+            openReportPanel(comment, replyIndex === undefined ? (entity.reel ? 'media_comment' : 'image_comment') : 'comment_reply');
+        }
+        return true;
+    }
     const reply = event.target.closest('[data-comment-reply]');
     if (reply) { startCommentReply(reply.dataset.commentReply); return true; }
     if (event.target.closest('[data-cancel-comment-reply]')) { cancelCommentReply(); return true; }

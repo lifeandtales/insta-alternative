@@ -15,6 +15,7 @@ export const REPORT_ACTIONS = {
 // Image posts have a composite key. Local display IDs must never reach the backend.
 export function reportTarget(item, kind) {
     if (kind === 'profile') return { kind, ref: String(item.cloudProfileId || item.id), cloud: Boolean(item.cloudProfileId || item.cloud) };
+    if (['image_comment','media_comment','comment_reply'].includes(kind)) return { kind, ref: String(item.id), cloud: Boolean(item.cloudAuthorId || item.cloud) };
     if (kind === 'message') return { kind, ref: String(item.id), cloud: Boolean(item.cloud) };
     if (item.cloudContentId) return { kind, ref: String(item.cloudContentId), cloud: true };
     if (item.cloudOwnerId && item.cloudClientId != null) return { kind: 'image_post', ref: `${item.cloudOwnerId}:${item.cloudClientId}`, cloud: true };
@@ -23,4 +24,9 @@ export function reportTarget(item, kind) {
 
 export function reportStatus(report) {
     return REPORT_ACTIONS[report.action] || (report.status === 'reviewing' ? 'Under review' : report.status === 'resolved' ? 'Reviewed' : 'Waiting for review');
+}
+
+export function reportKindLabel(kind) {
+    return { image_post: 'Post', post: 'Post', reel: 'Reel', story: 'Story', profile: 'Profile',
+        message: 'Chat message', image_comment: 'Comment', media_comment: 'Comment', comment_reply: 'Comment reply' }[kind] || 'Content';
 }
