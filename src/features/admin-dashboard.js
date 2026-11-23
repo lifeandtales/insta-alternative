@@ -1,6 +1,6 @@
 import { setupAdminDeletions } from './admin-deletions.js';
 import { setupAdminPassword } from './admin-password.js';
-import { setupAdminUsers } from './admin-users.js?v=352';
+import { setupAdminUsers } from './admin-users.js?v=353';
 import { getSupabaseClient } from '../storage/supabase.js';
 
 const status = document.querySelector('#status');
@@ -10,6 +10,7 @@ const refresh = document.querySelector('#refresh');
 const signOut = document.querySelector('#sign-out');
 const formatDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const formatCount = new Intl.NumberFormat();
+const hiddenOverviewTotals = new Set(['Messages', 'Views', 'Stories', 'Chat attachments', 'Notifications', 'Direct chats']);
 
 function element(tag, text) {
   const node = document.createElement(tag);
@@ -66,7 +67,7 @@ async function start() {
           : 'Could not load admin activity. Check that the admin migration has been applied.';
         return;
       }
-      document.querySelector('#totals').replaceChildren(...Object.entries(data.totals).map(([label, count]) => {
+      document.querySelector('#totals').replaceChildren(...Object.entries(data.totals).filter(([label]) => !hiddenOverviewTotals.has(label)).map(([label, count]) => {
         const card = element('div', '');
         card.append(element('dt', label), element('dd', formatCount.format(count)));
         return card;

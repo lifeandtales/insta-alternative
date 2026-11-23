@@ -1,4 +1,5 @@
 const pageSize = 25;
+const hiddenAccountTotals = new Set(['Messages sent', 'Attachments sent', 'Stories']);
 
 function node(tag, text) {
   const element = document.createElement(tag);
@@ -92,7 +93,7 @@ export function setupAdminUsers(client) {
       for (const event of activity) timeline.append(node('li', event.category + ' · ' + date(event.created_at)));
       if (!activity.length) timeline.append(node('li', 'No synced events yet.'));
       detail.replaceChildren(node('h3', name(account)), fields, actions,
-        node('h3', 'Activity totals'), fieldList(totals, ''), node('h3', 'Recent activity'), timeline);
+        node('h3', 'Activity totals'), fieldList(Object.fromEntries(Object.entries(totals).filter(([label]) => !hiddenAccountTotals.has(label))), ''), node('h3', 'Recent activity'), timeline);
     } catch {
       if (request === detailRequest) detail.textContent = 'Could not load this account.';
     }
