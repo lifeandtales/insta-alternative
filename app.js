@@ -1,3 +1,4 @@
+import { checkDeletionAfterLogin, deletionWaitingMessage } from './src/features/account-deletion-request.js';
 import { loadCloudInbox } from './src/features/cloud-chat.js';
 import { syncCloudGroupInvitationPreference } from './src/features/cloud-chat.js';
 import { enableAndroidPush } from './src/features/android-push.js';
@@ -194,6 +195,15 @@ async function enterAccount(user, profile) {
 }
 
 async function continueWithUser(client, user, details) {
+    const deletion = await checkDeletionAfterLogin(client);
+    if (deletion.status === 'pending' || deletion.status === 'deleting') {
+        await client.auth.signOut({ scope: 'local' });
+        welcomeScreen.hidden = false;
+        showWelcomeForm('login', deletion.status === 'pending'
+            ? deletionWaitingMessage(deletion.delete_after) : 'The waiting period has ended. Account deletion is in progress.');
+        return;
+    }
+
     const profile = await ensureSupabaseProfile(client, user, details);
     if (profile) {
         await enterAccount(user, profile);
@@ -240,6 +250,18 @@ document.addEventListener('click', event => {
     else if (action === 'back') showWelcomeForm();
     else if (action === 'remember-yes' || action === 'remember-no') void finishLogin(action === 'remember-yes');
     else if (action === 'signout') void signOutAccount().catch(() => showWelcomeForm('profile', 'Could not log out. Try again.'));
+});
+
+document.addEventListener('account-deletion-requested', async event => {
+    const client = await getSupabaseClient();
+    state.signedInAccountId = null;
+    document.querySelector('.app-shell').hidden = true;
+    document.querySelector('.mobile-nav').hidden = true;
+    document.querySelector('.home-controls-backdrop').hidden = true;
+    document.body.classList.remove('story-overlay-open');
+    await client.auth.signOut({ scope: 'local' });
+    welcomeScreen.hidden = false;
+    showWelcomeForm('login', deletionWaitingMessage(event.detail.delete_after));
 });
 
 document.addEventListener('submit', async event => {

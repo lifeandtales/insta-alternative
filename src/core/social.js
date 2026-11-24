@@ -77,6 +77,7 @@ export function isFollowing(handle, viewerHandle = currentUser.handle) {
 }
 
 export function canViewAccount(handle, viewerHandle = currentUser.handle) {
+    if (handle !== viewerHandle && cloudPerson(handle)?.deletionState) return false;
     if (handle === viewerHandle) return true;
     if (viewerHandle === currentUser.handle && state.blockedHandles.has(handle)) return false;
     if (handle === currentUser.handle && state.blockedHandles.has(viewerHandle)) return false;

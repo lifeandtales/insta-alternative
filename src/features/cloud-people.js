@@ -82,11 +82,13 @@ export function rememberCloudPerson(row, urls) {
     const person = people.get(handle) || { id: row.id, handle, avatar: DEFAULT_AVATAR };
     person.id = row.id;
     person.name = row.display_name;
+    if ('deletion_state' in row) person.deletionState = row.deletion_state === true;
     if (urls && 'avatar_path' in row) person.avatar = urls.get(row.avatar_path) || DEFAULT_AVATAR;
     if ('bio' in row) person.bio = row.bio;
     if ('is_private' in row) person.isPrivate = row.is_private;
     if ('follow_status' in row) person.followStatus = row.follow_status;
     if ('mutual' in row) person.mutual = row.mutual;
+    if (person.deletionState) person.avatar = DEFAULT_AVATAR;
     people.set(handle, person);
     return person;
 }
@@ -96,7 +98,7 @@ export async function fetchSocialProfile(id) {
     const { data, error } = await client.rpc('social_profile', { target: id });
     if (error) throw error;
     if (!data) return null;
-    const person = rememberCloudPerson(data, await avatarLookup(client, [data]));
+    const person = rememberCloudPerson({ ...data, deletion_state: data.deletion_state === true }, await avatarLookup(client, [data]));
     person.postCount = data.post_count;
     person.followers = data.followers;
     person.following = data.following;

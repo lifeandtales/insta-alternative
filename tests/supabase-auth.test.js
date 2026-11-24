@@ -8,6 +8,7 @@ for (const remember of [true, false]) test(`login uses ${remember ? 'device' : '
     const profile = { id: user.id, username: 'realaccount', display_name: 'Real Account', bio: '' };
     let storageKey;
     app.context.window.supabase = { createClient: (url, key, { auth: options }) => ({
+        rpc: async name => { assert.equal(name, 'cancel_account_deletion_after_login'); return { data: { status: 'none' } }; },
         auth: { signInWithPassword: async ({ email }) => {
             assert.equal(email, 'person@example.com');
             storageKey = options.storageKey;

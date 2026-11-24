@@ -26,7 +26,9 @@ async function endpoint({admin=true,protectedAccount=false,cleanupFails=false}={
         DeleteObjectsCommand:class {constructor(input){this.input=input;}},
         Deno:{env:{get:name=>({SUPABASE_URL:'https://example.test',SUPABASE_ANON_KEY:'public',SUPABASE_SERVICE_ROLE_KEY:'service',REEL_S3_ACCESS_KEY_ID:'test',REEL_S3_SECRET_ACCESS_KEY:'test'}[name])},serve:fn=>handler=fn}};
     const code=(await readFile(new URL('../supabase/functions/admin-users/index.ts',import.meta.url),'utf8')).replace(/^import .*;\n/gm,'');
-    vm.runInNewContext(stripTypeScriptTypes(code,{mode:'transform'}),context);
+    const shared = (await readFile(new URL('../supabase/functions/_shared/delete-account.ts', import.meta.url), 'utf8'))
+        .replace(/^import .*;\n/gm, '').replace('export async function', 'async function');
+    vm.runInNewContext(stripTypeScriptTypes(shared + '\n' + code,{mode:'transform'}),context);
     return {calls,async send(body){const response=await handler(new Request('https://example.test',{method:'POST',headers:{Authorization:'Bearer test','Content-Type':'application/json'},body:JSON.stringify(body)}));return {status:response.status,data:await response.json()};}};
 }
 

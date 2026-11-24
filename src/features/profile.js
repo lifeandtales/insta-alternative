@@ -162,6 +162,15 @@ export function getProfileUser(handle) {
 export function renderProfile() {
     const person = cloudPerson(state.profileHandle);
     const user = getProfileUser(state.profileHandle);
+    if (person?.deletionState && state.profileHandle !== currentUser.handle) {
+        document.getElementById('profile-view').innerHTML = `
+            <div class="profile-topbar"><button class="profile-back" type="button"
+              data-profile-back aria-label="Back to previous screen">←</button></div>
+            <section class="profile-deleted-state" role="status">
+              <h2>Account deleted</h2><p>This profile is unavailable.</p>
+            </section>`;
+        return;
+    }
     const accessible = person
         ? !state.blockedHandles.has(state.profileHandle) && (!person.isPrivate || person.followStatus === 'accepted' || state.profileHandle === currentUser.handle)
         : canViewAccount(state.profileHandle);

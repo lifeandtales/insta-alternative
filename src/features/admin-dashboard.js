@@ -1,6 +1,6 @@
-import { setupAdminDeletions } from './admin-deletions.js';
+import { setupAdminDeletions } from './admin-deletions.js?v=357';
 import { setupAdminPassword } from './admin-password.js';
-import { setupAdminUsers } from './admin-users.js?v=353';
+import { setupAdminUsers } from './admin-users.js?v=357';
 import { getSupabaseClient } from '../storage/supabase.js';
 
 const status = document.querySelector('#status');

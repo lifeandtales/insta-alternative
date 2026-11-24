@@ -106,7 +106,7 @@ export function setupAdminUsers(client) {
     const request = detailRequest;
     for (const control of actions.children) control.disabled = true;
     try {
-      const { data, error } = await client.functions.invoke('admin-users', { body: { action, target: account.id, confirmation } });
+      const { data, error } = await client.functions.invoke('admin-user', { body: { action, target: account.id, confirmation } });
       if (error) {
         const result = await error.context?.json?.().catch(() => null);
         throw new Error(result?.message || 'Account action unavailable. Check that the admin function is deployed.');

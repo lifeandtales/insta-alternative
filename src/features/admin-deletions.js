@@ -17,13 +17,21 @@ export function setupAdminDeletions(client) {
                 const reason = document.createElement('p');
                 reason.textContent = entry.reason || 'No reason supplied.';
                 row.append(heading, reason);
+                if (entry.status === 'pending' && entry.delete_after) {
+                    const countdown = document.createElement('p');
+                    const days = Math.max(0, Math.ceil((Date.parse(entry.delete_after) - Date.now()) / 86400000));
+                    countdown.textContent = days > 0
+                        ? `${days} ${days === 1 ? 'day' : 'days'} left · deletes ${new Date(entry.delete_after).toLocaleString()}`
+                        : 'Waiting period ended · automatic deletion queued';
+                    row.append(countdown);
+                }
                 if (entry.last_error) {
                     const failure = document.createElement('p'); failure.textContent = entry.last_error; row.append(failure);
                 }
                 for (const action of entry.status === 'pending' ? ['approve', 'reject'] : entry.status === 'processing' ? ['approve'] : []) {
                     const button = document.createElement('button');
                     button.type = 'button';
-                    button.textContent = action === 'reject' ? 'Reject request' : entry.status === 'processing' ? 'Retry deletion' : 'Approve and delete account';
+                    button.textContent = action === 'reject' ? 'Reject request' : entry.status === 'processing' ? 'Retry deletion' : 'Delete instantly';
                     button.addEventListener('click', async () => {
                         let confirmation = '';
                         if (action === 'approve') {
@@ -34,7 +42,7 @@ export function setupAdminDeletions(client) {
                         if (note === null) return;
                         button.disabled = true;
                         try {
-                            const result = await client.functions.invoke('admin-users', { body: {
+                            const result = await client.functions.invoke('admin-user', { body: {
                                 action: action === 'approve' ? 'approve_deletion' : 'reject_deletion',
                                 request_id: entry.id, confirmation, note,
                             } });
