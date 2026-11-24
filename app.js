@@ -1,3 +1,4 @@
+import { loadCloudInbox } from './src/features/cloud-chat.js';
 import { syncCloudGroupInvitationPreference } from './src/features/cloud-chat.js';
 import { enableAndroidPush } from './src/features/android-push.js';
 import { registerSignupValidation, resetSignupFeedback, pauseSignupValidation } from './src/features/signup-validation.js';
@@ -436,9 +437,17 @@ document.addEventListener('visibilitychange', () => {
     if (state.signedInAccountId && !document.hidden) void refreshSavedState().catch(() => {});
 });
 if (typeof window.setInterval === 'function') {
-    window.setInterval(() => {
-        if (state.signedInAccountId && state.currentView === 'messages' && !document.hidden) {
-            void refreshConnectedView('messages').catch(() => {});
+    let refreshingFooter = false;
+    window.setInterval(async () => {
+        if (!state.signedInAccountId || document.hidden || refreshingFooter) return;
+        refreshingFooter = true;
+        try {
+            await Promise.allSettled([
+                state.currentView === 'messages' ? refreshConnectedView('messages') : loadCloudInbox(),
+                refreshHomeNotifications(),
+            ]);
+        } finally {
+            refreshingFooter = false;
         }
     }, 8000);
 }

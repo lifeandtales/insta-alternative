@@ -20,10 +20,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
-    <link rel="stylesheet" href="styles.css?v=351" />
+    <link rel="stylesheet" href="styles.css?v=354" />
     <link rel="stylesheet" href="styles/android-interface.css?v=328" />
     <link rel="stylesheet" href="styles/creation-studio.css?v=346" />
-    <link rel="stylesheet" href="styles/home-notifications.css?v=346" />
+    <link rel="stylesheet" href="styles/home-notifications.css?v=354" />
   </head>
   <body>
     <main id="deletion-lock" class="welcome-screen" hidden aria-labelledby="deletion-lock-title">
@@ -225,11 +225,11 @@
     </div>
 
     <nav class="mobile-nav" aria-label="Main navigation" hidden>
-      <button class="mobile-nav-item active" type="button" data-view="home" aria-label="Home" aria-current="page">
+      <button class="mobile-nav-item active" type="button" data-view="home" aria-label="Home" aria-current="page"><span class="mobile-home-dot" aria-hidden="true" hidden></span>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" /></svg>
         <span>Home</span>
       </button>
-      <button class="mobile-nav-item" type="button" data-view="messages" aria-label="Messages">
+      <button class="mobile-nav-item" type="button" data-view="messages" aria-label="Messages"><span class="mobile-message-badge" aria-hidden="true" hidden></span>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l-2 2v-7.5A7.5 7.5 0 1 1 20 11.5Z" /><path d="M8 11h.01M12 11h.01M16 11h.01" /></svg>
         <span>Messages</span>
       </button>
@@ -721,7 +721,7 @@
     "./src/core/local-preview.js": "./src/core/local-preview.js?v=319",
     "./src/core/media-links.js": "./src/core/media-links.js?v=335",
     "./src/core/navigation.events.js": "./src/core/navigation.events.js?v=350",
-    "./src/core/navigation.js": "./src/core/navigation.js?v=350",
+    "./src/core/navigation.js": "./src/core/navigation.js?v=354",
     "./src/core/profile-links.js": "./src/core/profile-links.js?v=319",
     "./src/core/social.js": "./src/core/social.js?v=336",
     "./src/core/state.js": "./src/core/state.js?v=320",
@@ -740,7 +740,7 @@
     "./src/features/chat-attachment-expiry.js": "./src/features/chat-attachment-expiry.js?v=319",
     "./src/features/chat-wallpaper.js": "./src/features/chat-wallpaper.js?v=319",
     "./src/features/chat-search.js": "./src/features/chat-search.js?v=332",
-    "./src/features/cloud-chat.js": "./src/features/cloud-chat.js?v=344",
+    "./src/features/cloud-chat.js": "./src/features/cloud-chat.js?v=354",
     "./src/features/cloud-people.js": "./src/features/cloud-people.js?v=323",
     "./src/features/comments.events.js": "./src/features/comments.events.js?v=352",
     "./src/features/comments.js": "./src/features/comments.js?v=352",
@@ -768,8 +768,8 @@
     "./src/features/media-options.js": "./src/features/media-options.js?v=335",
     "./src/features/message-access.js": "./src/features/message-access.js?v=334",
     "./src/features/messages.events.js": "./src/features/messages.events.js?v=351",
-    "./src/features/messages.js": "./src/features/messages.js?v=335",
-    "./src/features/notifications.js": "./src/features/notifications.js?v=351",
+    "./src/features/messages.js": "./src/features/messages.js?v=354",
+    "./src/features/notifications.js": "./src/features/notifications.js?v=354",
     "./src/features/post-media.js": "./src/features/post-media.js?v=329",
     "./src/features/profile-scanner.js": "./src/features/profile-scanner.js?v=319",
     "./src/features/profile.events.js": "./src/features/profile.events.js?v=351",
@@ -826,6 +826,6 @@
   }
 }
     </script>
-    <script type="module" src="app.js?v=350"></script>
+    <script type="module" src="app.js?v=354"></script>
   </body>
 </html>

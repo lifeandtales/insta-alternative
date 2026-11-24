@@ -74,6 +74,7 @@ export function getUnreadMessageCount(conversation) {
 export function markInboxChatRead(chat) {
     chat.unread = false;
     chat.unreadCount = 0;
+    updateMessageFooterBadge();
 }
 
 function inboxMessageTime(conversation) {
@@ -149,6 +150,17 @@ export function getInboxConversations() {
         .sort((left, right) => Number(right.pinned) - Number(left.pinned) || inboxMessageTime(right) - inboxMessageTime(left));
 }
 
+export function updateMessageFooterBadge() {
+    const count = getInboxConversations()
+        .filter(chat => chat.membershipStatus !== 'pending' && !state.blockedHandles.has(chat.handle))
+        .reduce((total, chat) => total + getUnreadMessageCount(chat), 0);
+    const badge = document.querySelector('.mobile-message-badge');
+    badge.hidden = count === 0 || Boolean(state.deletionRequestedAt);
+    badge.textContent = count > 9 ? '9+' : count ? String(count) : '';
+    document.querySelector('.mobile-nav-item[data-view="messages"]').setAttribute(
+        'aria-label', count ? `Messages, ${count} unread messages` : 'Messages');
+}
+
 export function renderInboxConversation(item) {
     const unreadCount = getUnreadMessageCount(item);
     const timestamp = inboxMessageTime(item);
@@ -219,6 +231,7 @@ export function renderMessages(options) {
     const list = document.getElementById('messages-list');
     const previous = list.dataset.messageScreen;
     renderMessagesView(options);
+    updateMessageFooterBadge();
     const screen = state.activeGroupProfileHandle ? 'profile' : state.activeConversationHandle ? 'chat' : 'inbox';
     list.dataset.messageScreen = screen;
     if (!previous || previous === screen || state.currentView !== 'messages' || document.hidden ||

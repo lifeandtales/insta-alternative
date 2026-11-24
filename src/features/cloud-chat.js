@@ -1,3 +1,4 @@
+import { updateMessageFooterBadge } from './messages.js';
 import { mediaBucket } from '../storage/s3-media-access.js';
 import { accountStorageKey } from '../storage/browser-storage.js';
 import { state } from '../core/state.js';
@@ -153,6 +154,7 @@ export async function loadCloudInbox() {
             conversations.splice(index, 1);
         }
     }
+    updateMessageFooterBadge();
 }
 
 const attachmentCache = new Map();
@@ -277,6 +279,7 @@ export async function loadCloudChat(chat) {
             chat.cloudLastReadAt = latest.created_at;
             chat.unread = false;
             chat.unreadCount = 0;
+            updateMessageFooterBadge();
         }
     }
     return changed || sendChanged || wallpaperChanged || receiptChanged;
@@ -452,6 +455,7 @@ export async function setCloudChatPreference(chat, action, enabled = true) {
         chat.unreadCount = 0;
         chat.cloudHasMessages = false;
     }
+    updateMessageFooterBadge();
 }
 
 export async function setCloudMessageReaction(message, emoji) {

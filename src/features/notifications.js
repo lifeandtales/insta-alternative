@@ -1,7 +1,7 @@
 import { liveNotifications, loadLiveData, markLiveNoticesRead } from '../storage/live-broadcasts.js';
 import { reviewCloudFollowRequest } from './cloud-people.js';
 import { followNotificationActor, markHomeNotificationsRead, readHomeNotificationPage } from '../storage/cloud-home-notifications.js';
-import { getUnreadMessageCount } from './messages.js';
+import { getUnreadMessageCount, updateMessageFooterBadge } from './messages.js';
 import { captionMentions } from '../components/caption.js';
 import { actionIcon } from '../components/action-icons.js';
 import { openProfileMedia } from './profile.js';
@@ -19,6 +19,9 @@ import { persistSession } from '../storage/local-session.js';
 import { showShareFeedback } from '../components/feedback.js';
 
 let trigger;
+let footerOwner;
+let seenHomeActivity = new Set();
+
 const cloudNotificationIcons = {
     post_like: 'like', story_like: 'like', post_comment: 'comment', content_mention: 'mention', content_tag: 'mention',
     follow_request: 'follow', follow_accepted: 'follow', new_follower: 'follow',
@@ -373,6 +376,22 @@ export function updateNotificationBadge() {
     badge.hidden = count === 0;
     badge.textContent = count ? (count > 9 ? '9+' : String(count)) : '';
     document.querySelector('.home-notifications')?.setAttribute('aria-label', count ? `Notifications, ${count} unread` : 'Notifications');
+    updateMessageFooterBadge();
+    const owner = state.signedInAccountId || currentUser.handle;
+    if (footerOwner !== owner) { footerOwner = owner; seenHomeActivity = new Set(); }
+    const activity = notificationItems().filter(item => item.read === false || item.pending)
+        .map(item => JSON.stringify([item.id, item.kind, item.actor, item.createdAt, item.otherCount,
+            item.storyId, item.postId, item.pending?.map(request => request.id)]));
+    activity.push(...liveNotifications().filter(item => !item.read_at)
+        .map(item => JSON.stringify(['live', item.broadcast_id, item.created_at])));
+    if (state.currentView === 'home' || state.currentView === 'notifications') {
+        activity.forEach(key => seenHomeActivity.add(key));
+    }
+    const unseen = !state.deletionRequestedAt && activity.some(key => !seenHomeActivity.has(key));
+    document.querySelector('.mobile-home-dot').hidden = !unseen;
+    document.querySelector('.mobile-nav-item[data-view="home"]').setAttribute(
+        'aria-label', unseen ? 'Home, new activity' : 'Home');
+
 }
 
 export function restoreNotificationFocus(){

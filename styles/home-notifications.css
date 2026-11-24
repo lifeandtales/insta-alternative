@@ -258,3 +258,27 @@ body:has(.app-shell:is(.view-home, .view-explore):not([hidden])) .mobile-nav {
 }
 body:has(.app-shell:is(.view-home, .view-explore):not([hidden])) .mobile-nav-item { color: #19221e; }
 body:has(.app-shell:is(.view-home, .view-explore):not([hidden])) .mobile-nav-item.active { color: #205b4b; background: transparent; }
+
+.mobile-nav-item { position: relative; }
+.mobile-message-badge, .mobile-home-dot {
+  position: absolute;
+  top: 0;
+  left: calc(50% + 5px);
+  border: 2px solid var(--surface, #fffdfa);
+  border-radius: 999px;
+  background: #b32340;
+  color: #fff;
+  pointer-events: none;
+}
+.mobile-message-badge {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding-inline: 4px;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 700;
+}
+.mobile-home-dot { width: 10px; height: 10px; }
+.mobile-message-badge[hidden], .mobile-home-dot[hidden] { display: none; }

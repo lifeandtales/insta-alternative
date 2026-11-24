@@ -10,7 +10,7 @@ import { loadCloudReels } from '../storage/cloud-reels.js';
 import { loadCloudHighlights, loadCloudStoryArchive } from '../storage/cloud-highlights.js';
 import { loadInboxStories, loadCloudStories } from '../storage/cloud-stories.js';
 import { conversations, currentUser } from '../data/sample-data.js';
-import { renderNotificationsPage, restoreNotificationFocus } from '../features/notifications.js';
+import { renderNotificationsPage, restoreNotificationFocus, updateNotificationBadge } from '../features/notifications.js';
 import { renderPostCards } from '../components/post-card.js';
 import { appShell, viewHeading, viewSections } from './dom.js';
 import { state } from './state.js';
@@ -122,6 +122,7 @@ export function setView(view, { fromHistory = false, refresh = true } = {}) {
         }
     }
     state.currentView = view;
+    updateNotificationBadge();
     document.body.classList.toggle('notifications-open',view==='notifications');
     if(previousView==='notifications'&&view!=='notifications')restoreNotificationFocus();
     const accessNotice = document.getElementById('account-access-notice');
